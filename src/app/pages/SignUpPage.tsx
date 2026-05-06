@@ -1,0 +1,187 @@
+import { Link, useNavigate } from "react-router-dom";
+import { motion } from "motion/react";
+import { Recycle, Mail, Lock, User, Leaf } from "lucide-react";
+import { useState } from "react";
+
+export function SignUpPage() {
+  const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    role: "user",
+    terms: false
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    navigate("/dashboard");
+  };
+
+  const updateField = (field: string, value: string | boolean) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#f5f5f0] to-[#e8ebe4] flex items-center justify-center p-6">
+      <div className="w-full max-w-5xl grid md:grid-cols-2 gap-0 bg-white rounded-3xl shadow-2xl overflow-hidden">
+        {/* Left side - Image */}
+        <motion.div
+          initial={{ opacity: 0, x: -50 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="hidden md:flex relative bg-gradient-to-br from-[#a8c9a8] to-[#6b8e6b] items-center justify-center p-12"
+        >
+          <div className="absolute inset-0 opacity-10">
+            <Leaf className="absolute top-10 left-10 w-32 h-32" />
+            <Leaf className="absolute bottom-20 right-10 w-40 h-40" />
+          </div>
+          <div className="relative z-10 text-center text-white">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+              className="mx-auto mb-6"
+            >
+              <Recycle className="w-24 h-24" />
+            </motion.div>
+            <h2 className="text-3xl mb-4">Join ClothCycle PH</h2>
+            <p className="text-white/90">Start making a difference today with sustainable textile solutions</p>
+          </div>
+        </motion.div>
+
+        {/* Right side - Form */}
+        <motion.div
+          initial={{ opacity: 0, x: 50 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="p-12 overflow-y-auto max-h-screen"
+        >
+          <Link to="/" className="flex items-center gap-2 mb-8">
+            <Recycle className="w-6 h-6 text-[#6b8e6b]" />
+            <span className="text-xl text-[#2d4a2d]">ClothCycle PH</span>
+          </Link>
+
+          <h1 className="text-3xl mb-2 text-[#2d4a2d]">Sign Up</h1>
+          <p className="text-[#5a6f5a] mb-8">Create your account to get started</p>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="block text-sm mb-2 text-[#2d4a2d]">Full Name</label>
+              <div className="relative">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5a6f5a]" />
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => updateField("name", e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 border-2 border-[#d4d8d0] rounded-xl focus:border-[#6b8e6b] focus:outline-none transition-colors bg-white"
+                  placeholder="Juan Dela Cruz"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm mb-2 text-[#2d4a2d]">Email Address</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5a6f5a]" />
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => updateField("email", e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 border-2 border-[#d4d8d0] rounded-xl focus:border-[#6b8e6b] focus:outline-none transition-colors bg-white"
+                  placeholder="you@example.com"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm mb-2 text-[#2d4a2d]">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5a6f5a]" />
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => updateField("password", e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 border-2 border-[#d4d8d0] rounded-xl focus:border-[#6b8e6b] focus:outline-none transition-colors bg-white"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm mb-2 text-[#2d4a2d]">Confirm Password</label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5a6f5a]" />
+                <input
+                  type="password"
+                  value={formData.confirmPassword}
+                  onChange={(e) => updateField("confirmPassword", e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 border-2 border-[#d4d8d0] rounded-xl focus:border-[#6b8e6b] focus:outline-none transition-colors bg-white"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm mb-2 text-[#2d4a2d]">I am a...</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => updateField("role", "user")}
+                  className={`py-3 px-4 rounded-xl border-2 transition-all ${
+                    formData.role === "user"
+                      ? "border-[#6b8e6b] bg-[#6b8e6b]/10 text-[#2d4a2d]"
+                      : "border-[#d4d8d0] text-[#5a6f5a] hover:border-[#6b8e6b]"
+                  }`}
+                >
+                  User
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateField("role", "partner")}
+                  className={`py-3 px-4 rounded-xl border-2 transition-all ${
+                    formData.role === "partner"
+                      ? "border-[#6b8e6b] bg-[#6b8e6b]/10 text-[#2d4a2d]"
+                      : "border-[#d4d8d0] text-[#5a6f5a] hover:border-[#6b8e6b]"
+                  }`}
+                >
+                  Partner
+                </button>
+              </div>
+            </div>
+
+            <label className="flex items-start gap-3 text-sm text-[#5a6f5a] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.terms}
+                onChange={(e) => updateField("terms", e.target.checked)}
+                className="w-4 h-4 mt-1 rounded border-[#d4d8d0] text-[#6b8e6b]"
+                required
+              />
+              <span>
+                I agree to the <a href="#" className="text-[#6b8e6b] hover:underline">Terms & Conditions</a> and{" "}
+                <a href="#" className="text-[#6b8e6b] hover:underline">Privacy Policy</a>
+              </span>
+            </label>
+
+            <button
+              type="submit"
+              className="w-full py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg"
+            >
+              Create Account
+            </button>
+          </form>
+
+          <div className="mt-6 text-center text-sm text-[#5a6f5a]">
+            Already have an account?{" "}
+            <Link to="/login" className="text-[#6b8e6b] hover:underline">
+              Log In
+            </Link>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
