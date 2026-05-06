@@ -1,0 +1,10 @@
+.submission-page {
+  min-height: 100vh;
+}
+.submission-page .submission-panel {
+  max-width: 900px;
+}
+.submission-page textarea:focus,
+.submission-page input:focus {
+  outline: none;
+}

@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { Recycle, User, Mail, Lock, Bell, Shield, Trash2, Save, ArrowLeft } from "lucide-react";
 import { useState } from "react";
+import "./SettingsPage.css";
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -24,7 +25,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f5f5f0] to-[#e8ebe4]">
+    <div className="settings-page min-h-screen bg-gradient-to-br from-[#f5f5f0] to-[#e8ebe4]">
       {/* Top Navigation */}
       <nav className="bg-white border-b border-[#d4d8d0] px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
@@ -209,14 +210,14 @@ export function SettingsPage() {
                         <div className="text-sm text-[#5a6f5a]">{item.description}</div>
                       </div>
                       <button
-                        onClick={() => setNotifications({ ...notifications, [item.key]: !notifications[item.key as keyof typeof notifications] })}
+                        onClick={() => setNotifications({ ...notifications, [item.key]: !notifications[item.key] })}
                         className={`w-12 h-6 rounded-full transition-all ${
-                          notifications[item.key as keyof typeof notifications] ? "bg-[#6b8e6b]" : "bg-[#d4d8d0]"
+                          notifications[item.key] ? "bg-[#6b8e6b]" : "bg-[#d4d8d0]"
                         }`}
                       >
                         <div
                           className={`w-5 h-5 bg-white rounded-full transition-all ${
-                            notifications[item.key as keyof typeof notifications] ? "translate-x-6" : "translate-x-1"
+                            notifications[item.key] ? "translate-x-6" : "translate-x-1"
                           }`}
                         />
                       </button>

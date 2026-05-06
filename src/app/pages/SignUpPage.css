@@ -1,0 +1,10 @@
+.signup-page {
+  min-height: 100vh;
+}
+.signup-page__card {
+  max-width: 1100px;
+}
+.signup-page input:focus,
+.signup-page textarea:focus {
+  outline: none;
+}

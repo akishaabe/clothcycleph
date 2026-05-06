@@ -1,0 +1,9 @@
+.settings-page {
+  min-height: 100vh;
+}
+.settings-page .settings-panel {
+  max-width: 900px;
+}
+.settings-page input:focus {
+  outline: none;
+}

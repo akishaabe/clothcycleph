@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { Recycle, Heart, Sparkles, Users, Package, TrendingUp, Leaf, Facebook, Twitter, Instagram } from "lucide-react";
+import "./LandingPage.css";
 
 export function LandingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f5f5f0] to-[#e8ebe4]">
+    <div className="landing-page min-h-screen bg-gradient-to-br from-[#f5f5f0] to-[#e8ebe4]">
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-[#d4d8d0]">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">

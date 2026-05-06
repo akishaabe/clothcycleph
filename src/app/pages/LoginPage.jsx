@@ -2,20 +2,21 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { Recycle, Mail, Lock, Leaf } from "lucide-react";
 import { useState } from "react";
+import "./LoginPage.css";
 
 export function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     navigate("/dashboard");
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f5f5f0] to-[#e8ebe4] flex items-center justify-center p-6">
-      <div className="w-full max-w-5xl grid md:grid-cols-2 gap-0 bg-white rounded-3xl shadow-2xl overflow-hidden">
+    <div className="login-page min-h-screen bg-gradient-to-br from-[#f5f5f0] to-[#e8ebe4] flex items-center justify-center p-6">
+      <div className="login-page__card w-full max-w-5xl grid md:grid-cols-2 gap-0 bg-white rounded-3xl shadow-2xl overflow-hidden">
         {/* Left side - Image */}
         <motion.div
           initial={{ opacity: 0, x: -50 }}

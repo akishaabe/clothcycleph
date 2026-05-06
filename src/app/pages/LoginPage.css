@@ -1,0 +1,9 @@
+.login-page {
+  min-height: 100vh;
+}
+.login-page__card {
+  max-width: 1100px;
+}
+.login-page input:focus {
+  outline: none;
+}
