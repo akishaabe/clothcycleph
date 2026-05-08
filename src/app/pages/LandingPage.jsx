@@ -462,7 +462,7 @@ export function LandingPage() {
           </div>
 
           <div className="border-t border-[#e7ebe6] dark:border-white/10 pt-8 text-center text-[#5f6f67] dark:text-zinc-500">
-            <p className="font-gloock">
+            <p className="font-inter">
               &copy; 2026 ClothCycle PH. All rights reserved.
             </p>
           </div>

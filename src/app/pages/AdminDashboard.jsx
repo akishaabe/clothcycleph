@@ -24,7 +24,7 @@ export function AdminDashboard() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f3f5f2] to-[#e7ebe6]">
+    <div className="app-darkable-page min-h-screen bg-gradient-to-br from-[#f3f5f2] to-[#e7ebe6]">
       {/* Top Navigation */}
       <nav className="bg-white border-b border-[#e7ebe6] px-6 py-4">
         <div className="flex items-center justify-between">

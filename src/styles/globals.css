@@ -94,3 +94,113 @@ html {
 
   padding: 14px 18px;
 }
+
+html.dark .app-darkable-page {
+  background:
+    radial-gradient(circle at top left, #1d2330, transparent 32%),
+    linear-gradient(135deg, #0f1115, #12161f, #0d1016) !important;
+  color: #f5f5f5;
+}
+
+html.dark .app-darkable-page nav,
+html.dark .app-darkable-page [class*="bg-white"],
+html.dark .app-darkable-page [class*="bg-[#f3f5f2]"],
+html.dark .app-darkable-page [class*="bg-[#f5f5f0]"],
+html.dark .app-darkable-page [class*="bg-[#f8faf6]"],
+html.dark .app-darkable-page [class*="bg-[#f8fbf6]"],
+html.dark .app-darkable-page [class*="bg-[#eff6ec]"],
+html.dark .app-darkable-page [class*="bg-[#e7ebe6]"],
+html.dark .app-darkable-page [class*="bg-[#e8ebe4]"] {
+  background: rgba(22, 26, 34, 0.92) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #f5f5f5 !important;
+}
+
+html.dark .app-darkable-page [class*="from-[#f3f5f2]"],
+html.dark .app-darkable-page [class*="from-[#f5f5f0]"],
+html.dark .app-darkable-page [class*="from-[#f8faf6]"],
+html.dark .app-darkable-page [class*="from-[#f8fbf6]"] {
+  --tw-gradient-from: #12161f var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgb(18 22 31 / 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+html.dark .app-darkable-page [class*="to-[#e7ebe6]"],
+html.dark .app-darkable-page [class*="to-[#e8ebe4]"],
+html.dark .app-darkable-page [class*="to-[#cfd9d1]"],
+html.dark .app-darkable-page [class*="to-white"] {
+  --tw-gradient-to: #0d1016 var(--tw-gradient-to-position) !important;
+}
+
+html.dark .app-darkable-page [class*="via-[#e7ebe6]"],
+html.dark .app-darkable-page [class*="via-[#eff6ec]"] {
+  --tw-gradient-via: #161a22 var(--tw-gradient-via-position) !important;
+  --tw-gradient-stops:
+    var(--tw-gradient-from),
+    var(--tw-gradient-via),
+    var(--tw-gradient-to) !important;
+}
+
+html.dark .app-darkable-page [class*="text-[#19221d]"],
+html.dark .app-darkable-page [class*="text-[#2d4a2d]"] {
+  color: #f5f5f5 !important;
+}
+
+html.dark .app-darkable-page [class*="text-[#5f6f67]"],
+html.dark .app-darkable-page [class*="text-[#5a6f5a]"],
+html.dark .app-darkable-page [class*="text-[#8a9a8a]"] {
+  color: #b8c3bd !important;
+}
+
+html.dark .app-darkable-page input,
+html.dark .app-darkable-page textarea,
+html.dark .app-darkable-page select {
+  background: rgba(15, 17, 21, 0.88) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  color: #f5f5f5 !important;
+}
+
+html.dark .app-darkable-page input::placeholder,
+html.dark .app-darkable-page textarea::placeholder {
+  color: #8e9a94;
+}
+
+html.dark .app-darkable-page table tr,
+html.dark .app-darkable-page [class*="border-[#e7ebe6]"],
+html.dark .app-darkable-page [class*="border-[#e1e7df]"],
+html.dark .app-darkable-page [class*="border-[#dce4da]"],
+html.dark .app-darkable-page [class*="border-[#d4d8d0]"] {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+html.dark .app-darkable-page [class*="shadow-lg"],
+html.dark .app-darkable-page [class*="shadow-2xl"],
+html.dark .app-darkable-page [class*="shadow-["] {
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.36) !important;
+}
+
+html.dark .app-darkable-page .dashboard-service-section {
+  background: linear-gradient(135deg, #151a22, #111720) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38) !important;
+}
+
+html.dark .app-darkable-page .dashboard-service-heading,
+html.dark .app-darkable-page .dashboard-service-title {
+  color: #f5f5f5 !important;
+}
+
+html.dark .app-darkable-page .dashboard-service-card {
+  background: #1b222c !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32) !important;
+}
+
+html.dark .app-darkable-page .dashboard-service-card:hover {
+  background: #202936 !important;
+}
+
+html.dark .app-darkable-page .dashboard-service-icon {
+  background: #0f141c !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+}

@@ -87,7 +87,7 @@ export function UserDashboard() {
   const greeting = isNewSignup ? "Welcome to ClothCycle PH" : "Welcome Back";
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#e7ebe6,_transparent_28%),linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)] text-[#19221d]">
+    <div className="app-darkable-page min-h-screen bg-[radial-gradient(circle_at_top_left,_#e7ebe6,_transparent_28%),linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)] text-[#19221d]">
       <nav className="sticky top-0 z-20 bg-white/85 backdrop-blur-xl border-b border-[#e1e7df] px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
@@ -161,9 +161,9 @@ export function UserDashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="mb-8 rounded-[28px] border border-[#dce7d9] bg-[linear-gradient(135deg,#f8fbf6,#eff6ec,#f7faf5)] p-6 shadow-[0_14px_42px_rgba(51,97,88,0.09)] md:p-8"
+          className="dashboard-service-section mb-8 rounded-[28px] border border-[#dce7d9] bg-[linear-gradient(135deg,#f8fbf6,#eff6ec,#f7faf5)] p-6 shadow-[0_14px_42px_rgba(51,97,88,0.09)] md:p-8"
         >
-          <h2 className="mb-6 text-center font-sans text-xl font-bold text-[#19221d]">
+          <h2 className="dashboard-service-heading mb-6 text-center font-sans text-xl font-bold text-[#19221d]">
             Select a service
           </h2>
 
@@ -176,7 +176,7 @@ export function UserDashboard() {
                 transition={{ delay: 0.15 + index * 0.08 }}
                 whileHover={{ y: -4 }}
                 onClick={() => navigate("/submit")}
-                className={`rounded-2xl border border-[#dce4da] p-6 text-center shadow-[0_10px_24px_rgba(25,34,29,0.07)] transition-all hover:brightness-[1.02] hover:shadow-[0_16px_36px_rgba(25,34,29,0.12)] ${
+                className={`dashboard-service-card rounded-2xl border border-[#dce4da] p-6 text-center shadow-[0_10px_24px_rgba(25,34,29,0.07)] transition-all hover:brightness-[1.02] hover:shadow-[0_16px_36px_rgba(25,34,29,0.12)] ${
                   service.wide
                     ? "md:col-span-3 flex items-center justify-center gap-5 py-4"
                     : ""
@@ -187,7 +187,7 @@ export function UserDashboard() {
                 }}
               >
                 <div
-                  className={`flex shrink-0 items-center justify-center rounded-full bg-white/85 shadow-inner ${
+                  className={`dashboard-service-icon flex shrink-0 items-center justify-center rounded-full bg-white/85 shadow-inner ${
                     service.wide ? "h-16 w-16" : "mx-auto mb-4 h-24 w-24"
                   }`}
                 >
@@ -197,7 +197,7 @@ export function UserDashboard() {
                   />
                 </div>
                 <span
-                  className={`text-[#19221d] ${
+                  className={`dashboard-service-title text-[#19221d] ${
                     service.wide ? "text-lg font-semibold" : "text-xl"
                   }`}
                 >

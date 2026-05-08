@@ -28,7 +28,7 @@ export function SubmissionFormPage() {
   };
 
   return (
-    <div className="submission-page min-h-screen bg-gradient-to-br from-[#f5f5f0] to-[#e8ebe4]">
+    <div className="submission-page app-darkable-page min-h-screen bg-gradient-to-br from-[#f5f5f0] to-[#e8ebe4]">
       {/* Top Navigation */}
       <nav className="bg-white border-b border-[#d4d8d0] px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">

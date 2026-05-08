@@ -21,7 +21,7 @@ const managementItems = [
 
 export function SuperAdminDashboard() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f5f5f0] to-[#e8ebe4]">
+    <div className="app-darkable-page min-h-screen bg-gradient-to-br from-[#f5f5f0] to-[#e8ebe4]">
       {/* Top Navigation */}
       <nav className="bg-gradient-to-r from-[#5a7a5a] to-[#6b8e6b] border-b border-[#4a6a4a] px-6 py-4">
         <div className="flex items-center justify-between">

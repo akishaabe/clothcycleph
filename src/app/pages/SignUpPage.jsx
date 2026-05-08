@@ -25,7 +25,7 @@ export function SignUpPage() {
   };
 
   return (
-    <div className="signup-page min-h-screen bg-gradient-to-br from-[#f3f5f2] to-[#e7ebe6] flex items-center justify-center p-6">
+    <div className="signup-page app-darkable-page min-h-screen bg-gradient-to-br from-[#f3f5f2] to-[#e7ebe6] flex items-center justify-center p-6">
       <div className="signup-page__card w-full max-w-5xl grid md:grid-cols-2 gap-0 bg-white rounded-3xl shadow-2xl overflow-hidden">
         {/* Left side - Image */}
         <motion.div
