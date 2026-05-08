@@ -1,9 +1,64 @@
 .landing-page {
   min-height: 100vh;
+  padding: 0 2rem;
 }
-.landing-page .hero-cta-link {
-  transition: transform 0.2s ease;
+
+.hero-section {
+  min-height: 100vh;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  text-align: center;
 }
-.landing-page .hero-cta-link:hover {
-  transform: translateY(-2px);
+
+.hero-title {
+  font-size: 5rem;
+  line-height: 1.1;
+  max-width: 1000px;
+}
+
+.hero-highlight {
+  color: #336158;
+}
+
+.hero-description {
+  color: #9ca3af;
+
+  font-size: 1.1rem;
+
+  max-width: 700px;
+
+  margin:
+    2rem auto 0;
+}
+
+.hero-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+
+  margin-top: 3rem;
+}
+
+.landing-page {
+  overflow-x: hidden;
+}
+
+.hero-glow {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+
+  background: rgba(212, 163, 115, 0.15);
+
+  filter: blur(120px);
+
+  border-radius: 999px;
+
+  top: -150px;
+  right: -150px;
+
+  z-index: 0;
 }

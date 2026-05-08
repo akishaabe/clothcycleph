@@ -3,6 +3,18 @@
 
 @source "../**/*.{js,ts,jsx,tsx}";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
-  --font-family-gloock: "Gloock", cursive;
+  --font-gloock: "Gloock", serif;
+
+  --color-background: #f8faf6;
+  --color-surface: #ffffff;
+  --color-surface-light: #f3f5f2;
+
+  --color-primary: #336158;
+  --color-primary-hover: #2a4c48;
+
+  --color-text: #19221d;
+  --color-text-muted: #5f6f67;
 }

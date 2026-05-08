@@ -1,9 +1,18 @@
-.login-page {
+.login-container {
   min-height: 100vh;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 2rem;
 }
-.login-page__card {
-  max-width: 1100px;
-}
-.login-page input:focus {
-  outline: none;
+
+.login-card {
+  width: 100%;
+  max-width: 450px;
+
+  padding: 3rem;
+
+  border-radius: 32px;
 }

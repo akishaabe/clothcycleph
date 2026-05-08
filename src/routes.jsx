@@ -1,12 +1,12 @@
 import { createBrowserRouter } from "react-router-dom";
-import { LandingPage } from "./pages/LandingPage";
-import { LoginPage } from "./pages/LoginPage";
-import { SignUpPage } from "./pages/SignUpPage";
-import { UserDashboard } from "./pages/UserDashboard";
-import { AdminDashboard } from "./pages/AdminDashboard";
-import { SuperAdminDashboard } from "./pages/SuperAdminDashboard";
-import { SettingsPage } from "./pages/SettingsPage";
-import { SubmissionFormPage } from "./pages/SubmissionFormPage";
+import { LandingPage } from "./app/pages/LandingPage";
+import { LoginPage } from "./app/pages/LoginPage";
+import { SignUpPage } from "./app/pages/SignUpPage";
+import { UserDashboard } from "./app/pages/UserDashboard";
+import { AdminDashboard } from "./app/pages/AdminDashboard";
+import { SuperAdminDashboard } from "./app/pages/SuperAdminDashboard";
+import { SettingsPage } from "./app/pages/SettingsPage";
+import { SubmissionFormPage } from "./app/pages/SubmissionFormPage";
 
 export const router = createBrowserRouter([
   {
