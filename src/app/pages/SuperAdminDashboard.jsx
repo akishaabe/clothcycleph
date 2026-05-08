@@ -31,7 +31,7 @@ export function SuperAdminDashboard() {
             </button>
             <Link to="/" className="flex items-center gap-2">
               <Recycle className="w-6 h-6 text-white" />
-              <span className="text-xl text-white">ClothCycle PH</span>
+              <span className="text-xl text-white font-gloock">ClothCycle PH</span>
             </Link>
             <span className="px-3 py-1 bg-yellow-500 text-[#2d4a2d] text-sm rounded-full flex items-center gap-1">
               <Crown className="w-3 h-3" />

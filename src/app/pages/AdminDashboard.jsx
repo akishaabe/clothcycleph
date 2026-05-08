@@ -34,7 +34,7 @@ export function AdminDashboard() {
             </button>
             <Link to="/" className="flex items-center gap-2">
               <Recycle className="w-6 h-6 text-[#6b8e6b]" />
-              <span className="text-xl text-[#2d4a2d]">ClothCycle PH</span>
+              <span className="text-xl text-[#2d4a2d] font-gloock">ClothCycle PH</span>
             </Link>
             <span className="px-3 py-1 bg-[#6b8e6b] text-white text-sm rounded-full">Admin</span>
           </div>

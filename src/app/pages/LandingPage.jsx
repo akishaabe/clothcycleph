@@ -20,7 +20,7 @@ export function LandingPage() {
             >
               <Recycle className="w-8 h-8 text-[#6b8e6b]" />
             </motion.div>
-            <span className="text-2xl text-[#2d4a2d]">ClothCycle PH</span>
+            <span className="text-2xl text-[#2d4a2d] font-gloock">ClothCycle PH</span>
           </motion.div>
 
           <div className="hidden md:flex items-center gap-8">
@@ -190,7 +190,7 @@ export function LandingPage() {
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <Recycle className="w-6 h-6" />
-                <span className="text-xl">ClothCycle PH</span>
+                <span className="text-xl font-gloock">ClothCycle PH</span>
               </div>
               <p className="text-white/70">Making sustainable fashion accessible to everyone.</p>
             </div>
@@ -230,7 +230,7 @@ export function LandingPage() {
           </div>
 
           <div className="border-t border-white/20 pt-8 text-center text-white/70">
-            <p>&copy; 2026 ClothCycle PH. All rights reserved.</p>
+            <p className="font-gloock">&copy; 2026 ClothCycle PH. All rights reserved.</p>
           </div>
         </div>
       </footer>

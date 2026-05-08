@@ -1,4 +1,8 @@
-@import 'tailwindcss' source(none);
-@source '../**/*.{js,ts,jsx,tsx}';
+@import "tailwindcss";
+@import "tw-animate-css";
 
-@import 'tw-animate-css';
+@source "../**/*.{js,ts,jsx,tsx}";
+
+@theme {
+  --font-family-gloock: "Gloock", cursive;
+}

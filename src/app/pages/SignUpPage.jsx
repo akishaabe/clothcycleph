@@ -45,7 +45,7 @@ export function SignUpPage() {
             >
               <Recycle className="w-24 h-24" />
             </motion.div>
-            <h2 className="text-3xl mb-4">Join ClothCycle PH</h2>
+            <h2 className="text-3xl mb-4 font-gloock">Join ClothCycle PH</h2>
             <p className="text-white/90">Start making a difference today with sustainable textile solutions</p>
           </div>
         </motion.div>
@@ -58,7 +58,7 @@ export function SignUpPage() {
         >
           <Link to="/" className="flex items-center gap-2 mb-8">
             <Recycle className="w-6 h-6 text-[#6b8e6b]" />
-            <span className="text-xl text-[#2d4a2d]">ClothCycle PH</span>
+            <span className="text-xl text-[#2d4a2d] font-gloock">ClothCycle PH</span>
           </Link>
 
           <h1 className="text-3xl mb-2 text-[#2d4a2d]">Sign Up</h1>
