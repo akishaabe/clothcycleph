@@ -21,7 +21,7 @@ export function LoginPage() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    navigate("/dashboard");
+    navigate("/dashboard", { state: { entry: "login" } });
   };
 
   return (

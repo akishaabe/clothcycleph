@@ -8,9 +8,6 @@ import {
   Package,
   TrendingUp,
   Leaf,
-  Facebook,
-  Twitter,
-  Instagram,
 } from "lucide-react";
 
 import "./LandingPage.css";
@@ -20,6 +17,7 @@ export function LandingPage() {
     <div
       className="
         landing-page
+        relative
         min-h-screen
         bg-white
         dark:bg-[radial-gradient(circle_at_top_left,_#1d2330,_transparent_30%),linear-gradient(135deg,#0f1115,#12161f,#0d1016)]
@@ -69,19 +67,6 @@ export function LandingPage() {
           </motion.div>
 
           <div className="hidden md:flex items-center gap-8">
-            <a
-              href="#about"
-              className="text-[#5f6f67] dark:text-zinc-300 hover:text-[#336158] dark:hover:text-[#336158] transition-colors"
-            >
-              About
-            </a>
-
-            <a
-              href="#partner"
-              className="text-[#5f6f67] dark:text-zinc-300 hover:text-[#336158] dark:hover:text-[#336158] transition-colors"
-            >
-              Partner
-            </a>
 
             <Link
               to="/login"
@@ -121,12 +106,6 @@ export function LandingPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
             >
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#e7ebe6] dark:border-white/10 bg-[#f3f5f2] dark:bg-white/5 backdrop-blur-xl mb-8">
-                <Sparkles className="w-4 h-4 text-[#336158]" />
-                <span className="text-sm text-[#5f6f67] dark:text-zinc-300">
-                  Sustainable Fashion Platform
-                </span>
-              </div>
 
               <h1 className="text-6xl md:text-8xl font-light leading-[0.95] tracking-tight mb-8 text-[#19221d] dark:text-white">
                 Give Your Clothes
@@ -143,7 +122,7 @@ export function LandingPage() {
 
               <div className="flex flex-wrap gap-4">
                 <Link
-                  to="/submit"
+                  to="/login"
                   className="
                     px-8
                     py-4
@@ -211,51 +190,6 @@ export function LandingPage() {
                 <div className="absolute inset-0 bg-black/5 dark:bg-black/10"></div>
 
                 <Leaf className="w-64 h-64 text-[#e7ebe6] dark:text-white/20 relative z-10" />
-              </div>
-
-              {/* Floating Stats */}
-              <div
-                className="
-                  absolute
-                  -bottom-8
-                  -left-8
-                  bg-white
-                  dark:bg-[#161a22]/90
-                  backdrop-blur-xl
-                  border
-                  border-[#e7ebe6]
-                  dark:border-white/10
-                  p-6
-                  rounded-3xl
-                  shadow-lg
-                  dark:shadow-2xl
-                "
-              >
-                <div className="flex items-center gap-4">
-                  <div
-                    className="
-                      w-14
-                      h-14
-                      rounded-2xl
-                      bg-[#336158]
-                      flex
-                      items-center
-                      justify-center
-                    "
-                  >
-                    <Recycle className="w-7 h-7 text-white" />
-                  </div>
-
-                  <div>
-                    <div className="text-3xl font-light text-[#19221d] dark:text-white">
-                      50K+
-                    </div>
-
-                    <div className="text-sm text-[#5f6f67] dark:text-zinc-400">
-                      Items Recycled
-                    </div>
-                  </div>
-                </div>
               </div>
             </motion.div>
           </div>
@@ -472,7 +406,7 @@ export function LandingPage() {
       {/* Footer */}
       <footer className="bg-[#f3f5f2] dark:bg-[#0b0d12] border-t border-[#e7ebe6] dark:border-white/10 py-16 px-6">
         <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-4 gap-10 mb-12">
+          <div className="grid md:grid-cols-3 gap-10 mb-12">
             <div>
               <div className="flex items-center gap-3 mb-6">
                 <Recycle className="w-7 h-7 text-[#336158]" />
@@ -494,15 +428,6 @@ export function LandingPage() {
               </h4>
 
               <div className="space-y-3 text-[#5f6f67] dark:text-zinc-500">
-                <div>
-                  <a
-                    href="#about"
-                    className="hover:text-[#336158] dark:hover:text-white transition-colors"
-                  >
-                    About Us
-                  </a>
-                </div>
-
                 <div>
                   <a
                     href="#how-it-works"
@@ -532,41 +457,6 @@ export function LandingPage() {
                 <div>info@clothcycle.ph</div>
                 <div>+63 912 345 6789</div>
                 <div>Manila, Philippines</div>
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-lg mb-5 text-[#19221d] dark:text-white">
-                Follow Us
-              </h4>
-
-              <div className="flex gap-4">
-                {[Facebook, Twitter, Instagram].map(
-                  (Icon, index) => (
-                    <a
-                      key={index}
-                      href="#"
-                      className="
-                        w-12
-                        h-12
-                        bg-[#f3f5f2]
-                        dark:bg-white/5
-                        border
-                        border-[#e7ebe6]
-                        dark:border-white/10
-                        rounded-full
-                        flex
-                        items-center
-                        justify-center
-                        hover:bg-[#e7ebe6]
-                        dark:hover:bg-white/10
-                        transition-all
-                      "
-                    >
-                      <Icon className="w-5 h-5 text-[#5f6f67] dark:text-zinc-300" />
-                    </a>
-                  )
-                )}
               </div>
             </div>
           </div>

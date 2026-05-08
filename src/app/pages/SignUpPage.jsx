@@ -17,7 +17,7 @@ export function SignUpPage() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    navigate("/dashboard");
+    navigate("/dashboard", { state: { entry: "signup" } });
   };
 
   const updateField = (field, value) => {

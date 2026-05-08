@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { motion } from "motion/react";
 import {
   Recycle,
@@ -9,8 +9,6 @@ import {
   Shield,
   Trash2,
   Save,
-  ArrowLeft,
-  Sparkles,
   Phone,
 } from "lucide-react";
 import { useState } from "react";
@@ -25,13 +23,23 @@ const inputClass =
 const iconClass =
   "absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5f6f67]";
 
+const actionButtonClass =
+  "inline-flex min-w-[190px] items-center justify-center gap-2 px-6 py-3 bg-[#336158] text-white rounded-xl hover:bg-[#2a4c48] transition-all hover:shadow-lg";
+
 export function SettingsPage() {
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("profile");
-  const [profile, setProfile] = useState({
-    name: "Juan Dela Cruz",
-    email: "juan@email.com",
-    phone: "+63 912 345 6789",
+  const [savedProfile, setSavedProfile] = useState({
+    name: " ",
+    email: " ",
+    phone: " ",
+  });
+  const [profile, setProfile] = useState(savedProfile);
+  const [profilePhoto, setProfilePhoto] = useState("");
+  const [saveMessage, setSaveMessage] = useState(null);
+  const [security, setSecurity] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
   });
 
   const [notifications, setNotifications] = useState({
@@ -48,21 +56,66 @@ export function SettingsPage() {
     { id: "account", icon: Shield, label: "Account" },
   ];
 
-  const handleSave = () => {
-    alert("Settings saved successfully!");
+  const showSaveMessage = (type, text) => {
+    setSaveMessage({ type, text });
   };
+
+  const handleProfileSave = () => {
+    if (!profile.name.trim() || !profile.email.trim() || !profile.phone.trim()) {
+      showSaveMessage(
+        "error",
+        "Changes were not saved. Please complete all profile fields."
+      );
+      return;
+    }
+
+    setSavedProfile(profile);
+    showSaveMessage("success", "Changes were successfully saved.");
+  };
+
+  const handleSecuritySave = () => {
+    if (
+      !security.currentPassword ||
+      !security.newPassword ||
+      !security.confirmPassword
+    ) {
+      showSaveMessage(
+        "error",
+        "Changes were not saved. Please complete all password fields."
+      );
+      return;
+    }
+
+    if (security.newPassword !== security.confirmPassword) {
+      showSaveMessage(
+        "error",
+        "Changes were not saved. New passwords do not match."
+      );
+      return;
+    }
+
+    showSaveMessage("success", "Changes were successfully saved.");
+  };
+
+  const handlePhotoChange = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setProfilePhoto(URL.createObjectURL(file));
+    }
+  };
+
+  const profileNameSize =
+    savedProfile.name.length > 28
+      ? "text-lg"
+      : savedProfile.name.length > 20
+      ? "text-xl"
+      : "text-2xl";
 
   return (
     <div className="settings-page min-h-screen bg-[radial-gradient(circle_at_top_left,_#e7ebe6,_transparent_28%),linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)] text-[#19221d]">
       <nav className="sticky top-0 z-20 bg-white/85 backdrop-blur-xl border-b border-[#e1e7df] px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate(-1)}
-              className="w-10 h-10 rounded-full bg-[#f3f5f2] border border-[#e1e7df] flex items-center justify-center hover:bg-[#e7ebe6] transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5 text-[#5f6f67]" />
-            </button>
             <Link to="/" className="flex items-center gap-2">
               <Recycle className="w-6 h-6 text-[#336158]" />
               <span className="text-xl text-[#19221d] font-gloock">
@@ -86,24 +139,73 @@ export function SettingsPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8 rounded-[28px] border border-[#dce4da] bg-white/80 p-8 shadow-[0_24px_80px_rgba(25,34,29,0.12)]"
         >
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#dce4da] bg-[#f3f5f2] px-4 py-2 text-sm text-[#5f6f67] mb-5">
-            <Sparkles className="w-4 h-4 text-[#336158]" />
-            Account preferences
-          </div>
           <h1 className="font-gloock text-4xl md:text-5xl mb-3 text-[#19221d]">
             Settings
           </h1>
-          <p className="text-lg text-[#5f6f67] max-w-2xl">
+          <p className="text-base text-[#5f6f67] max-w-2xl">
             Keep your profile, security, notifications, and account controls up
             to date.
           </p>
         </motion.section>
 
+        {saveMessage && (
+          <div
+            className={`mb-6 rounded-2xl border px-5 py-4 text-sm ${
+              saveMessage.type === "success"
+                ? "border-[#b9d3bd] bg-[#eef7ef] text-[#2f5f3a]"
+                : "border-red-200 bg-red-50 text-red-700"
+            }`}
+          >
+            {saveMessage.text}
+          </div>
+        )}
+
         <div className="grid md:grid-cols-[260px_1fr] gap-6">
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className={`${panelClass} rounded-2xl p-6 text-center md:col-start-1 md:row-start-1`}
+          >
+            <div className="mx-auto mb-5 flex h-32 w-32 items-center justify-center overflow-hidden rounded-full bg-[#f5c9e4]">
+              {profilePhoto ? (
+                <img
+                  src={profilePhoto}
+                  alt="Profile"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <User className="h-16 w-16 text-[#336158]" />
+              )}
+            </div>
+
+            <h2
+              className={`${profileNameSize} leading-tight font-bold text-[#19221d]`}
+            >
+              {savedProfile.name}
+            </h2>
+            <p className="mt-2 break-all text-[#6f7f77]">
+              {savedProfile.email}
+            </p>
+
+            <label
+              htmlFor="profile-photo"
+              className="mt-4 inline-flex cursor-pointer rounded-full border border-[#5f6f67] bg-[#6f8793] px-5 py-2 text-white transition-colors hover:bg-[#5d737e]"
+            >
+              Change Photo
+            </label>
+            <input
+              id="profile-photo"
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoChange}
+              className="hidden"
+            />
+          </motion.div>
+
           <motion.aside
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className={`${panelClass} p-3 rounded-2xl h-fit`}
+            className={`${panelClass} h-fit rounded-2xl p-3 md:col-start-1 md:row-start-2`}
           >
             <div className="space-y-2">
               {tabs.map((tab) => (
@@ -126,17 +228,17 @@ export function SettingsPage() {
           <motion.section
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            className={`${panelClass} md:col-span-1 p-8 rounded-2xl`}
+            className={`${panelClass} rounded-2xl p-6 md:col-start-2 md:row-span-2 md:row-start-1 md:flex md:min-h-full md:p-7`}
           >
             {activeTab === "profile" && (
-              <div>
+              <div className="flex w-full flex-col">
                 <h2 className="text-2xl mb-2 text-[#19221d]">
                   Profile Settings
                 </h2>
-                <p className="text-[#5f6f67] mb-6">
+                <p className="text-[#5f6f67] mb-5">
                   Update the details connected to your ClothCycle account.
                 </p>
-                <div className="space-y-6">
+                <div className="flex flex-1 flex-col justify-between gap-5">
                   <div>
                     <label className="block text-sm mb-2 text-[#19221d]">
                       Full Name
@@ -189,8 +291,8 @@ export function SettingsPage() {
                   </div>
 
                   <button
-                    onClick={handleSave}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-[#336158] text-white rounded-xl hover:bg-[#2a4c48] transition-all hover:shadow-lg"
+                    onClick={handleProfileSave}
+                    className={`${actionButtonClass} mt-6`}
                   >
                     <Save className="w-5 h-5" />
                     Save Changes
@@ -200,14 +302,14 @@ export function SettingsPage() {
             )}
 
             {activeTab === "security" && (
-              <div>
+              <div className="flex w-full flex-col">
                 <h2 className="text-2xl mb-2 text-[#19221d]">
                   Security Settings
                 </h2>
-                <p className="text-[#5f6f67] mb-6">
+                <p className="text-[#5f6f67] mb-5">
                   Change your password to keep your account protected.
                 </p>
-                <div className="space-y-6">
+                <div className="flex flex-1 flex-col justify-between gap-5">
                   {["Current Password", "New Password", "Confirm New Password"].map(
                     (label) => (
                       <div key={label}>
@@ -227,8 +329,13 @@ export function SettingsPage() {
                   )}
 
                   <button
-                    onClick={handleSave}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-[#336158] text-white rounded-xl hover:bg-[#2a4c48] transition-all hover:shadow-lg"
+                    onClick={() =>
+                      showSaveMessage(
+                        "success",
+                        "Changes were successfully saved."
+                      )
+                    }
+                    className={actionButtonClass}
                   >
                     <Save className="w-5 h-5" />
                     Update Password
@@ -238,7 +345,7 @@ export function SettingsPage() {
             )}
 
             {activeTab === "notifications" && (
-              <div>
+              <div className="w-full">
                 <h2 className="text-2xl mb-2 text-[#19221d]">
                   Notification Preferences
                 </h2>
@@ -303,8 +410,13 @@ export function SettingsPage() {
                   ))}
 
                   <button
-                    onClick={handleSave}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-[#336158] text-white rounded-xl hover:bg-[#2a4c48] transition-all hover:shadow-lg mt-6"
+                    onClick={() =>
+                      showSaveMessage(
+                        "success",
+                        "Changes were successfully saved."
+                      )
+                    }
+                    className={`${actionButtonClass} mt-6`}
                   >
                     <Save className="w-5 h-5" />
                     Save Preferences
@@ -314,15 +426,15 @@ export function SettingsPage() {
             )}
 
             {activeTab === "account" && (
-              <div>
+              <div className="flex w-full flex-col">
                 <h2 className="text-2xl mb-2 text-[#19221d]">
                   Account Management
                 </h2>
-                <p className="text-[#5f6f67] mb-6">
+                <p className="text-[#5f6f67] mb-5">
                   Review account status and high-impact account actions.
                 </p>
-                <div className="space-y-6">
-                  <div className="p-6 bg-[#f8faf6] border border-[#e7ebe6] rounded-xl">
+                <div className="flex flex-1 flex-col justify-between gap-5">
+                  <div className="p-5 bg-[#f8faf6] border border-[#e7ebe6] rounded-xl">
                     <h3 className="text-lg mb-2 text-[#19221d]">
                       Account Status
                     </h3>
@@ -337,7 +449,7 @@ export function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="p-6 border-2 border-red-200 rounded-xl bg-red-50">
+                  <div className="p-5 border-2 border-red-200 rounded-xl bg-red-50">
                     <h3 className="text-lg mb-2 text-red-700">Danger Zone</h3>
                     <p className="text-sm text-red-600 mb-4">
                       Once you delete your account, there is no going back.

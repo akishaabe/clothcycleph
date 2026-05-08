@@ -1,6 +1,6 @@
 .landing-page {
   min-height: 100vh;
-  padding: 0 2rem;
+  overflow-x: clip;
 }
 
 .hero-section {
@@ -40,10 +40,6 @@
   gap: 1rem;
 
   margin-top: 3rem;
-}
-
-.landing-page {
-  overflow-x: hidden;
 }
 
 .hero-glow {
