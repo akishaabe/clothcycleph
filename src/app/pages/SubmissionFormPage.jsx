@@ -79,11 +79,127 @@ const pathwayOptions = [
   { value: "Upcycle", icon: RefreshCcw },
 ];
 
+const burnTestMomentOptions = [
+  "Burned fast",
+  "Melted and did not burn",
+  "Burned slowly",
+  "Shrinked away from flame",
+  "Curled away",
+  "Turned black",
+];
+
+const burnTestFlameOptions = [
+  "Burns slowly",
+  "Burns quickly",
+  "Melts",
+  "Sputters",
+  "Flame was flickering",
+  "Sizzles",
+  "Drips",
+];
+
+const burnTestNoFlameOptions = [
+  "Continues to burn quickly",
+  "Has an afterglow",
+  "Burns with difficulty",
+  "Completely stops burning",
+  "Continues to melt and burn",
+];
+
+const burnTestSmellOptions = [
+  "Like burning paper",
+  "Like burning hair",
+  "Like celery",
+  "Like chemicals",
+  "Like vinegar",
+  "Sharp and bitter",
+];
+
+const burnTestAshOptions = [
+  "Light and feathery gray ash",
+  "Black ash",
+  "Soft, sticky, gummy",
+  "Easy to crush",
+  "Won’t crush",
+  "Difficult to crush",
+  "Hard, black ash",
+  "Round, hard, grayish bead",
+  "Round, hard, black bead",
+  "Irregular bead",
+  "Irregular, hard, black bead",
+  "Round, shiny black beads",
+];
+
+const burnTestDescriptionMap = {
+  "Burned fast": "The fabric caught fire immediately when flame touched it.",
+  "Melted and did not burn":
+    "The textile softened and liquefied instead of producing a steady flame.",
+  "Burned slowly": "The flame spread gradually and the fabric took time to catch.",
+  "Shrinked away from flame":
+    "The material pulled back from the heat rather than burning straight away.",
+  "Curled away":
+    "The edges curled as the textile heated, a sign of fibers reacting to flame.",
+  "Turned black": "The surface darkened quickly when exposed to the flame.",
+  "Burns slowly": "The flame moves through the textile without spreading fast.",
+  "Burns quickly": "The fabric feeds the flame and burns with speed.",
+  Melts: "The fabric liquefies into a sticky or drippy form while heated.",
+  Sputters: "Small sparks or popping sounds happen as it burns.",
+  "Flame was flickering":
+    "The flame moved irregularly instead of staying steady.",
+  Sizzles: "A sizzling sound suggests moisture or certain synthetic fibers.",
+  Drips: "Molten material drops from the textile as it burns.",
+  "Continues to burn quickly":
+    "Even after the flame is removed, it keeps burning without slowing down.",
+  "Has an afterglow":
+    "The fabric continues to glow or smolder after flames are gone.",
+  "Burns with difficulty":
+    "It is hard to keep the textile burning once the flame is removed.",
+  "Completely stops burning":
+    "The material stops burning immediately after the flame leaves.",
+  "Continues to melt and burn":
+    "It keeps melting while also burning slowly.",
+  "Like burning paper":
+    "A dry paper smell often points to natural cellulose fibers.",
+  "Like burning hair":
+    "This scent usually indicates animal fibers or protein-based materials.",
+  "Like celery":
+    "A green, plant-like odor can appear with certain natural fibers.",
+  "Like chemicals":
+    "A sharp chemical smell often means synthetics or finishes.",
+  "Like vinegar":
+    "A sour or acidic scent may come from coated or treated fibers.",
+  "Sharp and bitter":
+    "A strong bitter odor often means synthetic blends or plastic content.",
+  "Light and feathery gray ash":
+    "Fine, soft ash that crushes easily is typical of natural fibers.",
+  "Black ash": "Dark ash without much residue suggests some synthetic content.",
+  "Soft, sticky, gummy":
+    "The ash stays sticky and does not fall apart cleanly.",
+  "Easy to crush":
+    "The leftover ash or bead breaks apart with light pressure.",
+  "Won’t crush": "The residue stays firm and resists pressure.",
+  "Difficult to crush":
+    "The ash is hard and takes effort to break apart.",
+  "Hard, black ash":
+    "A rigid black residue often means synthetic or blended fibers.",
+  "Round, hard, grayish bead":
+    "A solid gray bead forms as melted material cools.",
+  "Round, hard, black bead":
+    "A dark bead means the material melted and solidified in a dense form.",
+  "Irregular bead":
+    "The melted residue forms an uneven, bumpy shape.",
+  "Irregular, hard, black bead":
+    "A stiff, uneven dark bead suggests melting synthetics.",
+  "Round, shiny black beads":
+    "Small shiny beads are a classic sign of plasticized fibers.",
+};
+
 export function SubmissionFormPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const selectedService = location.state?.service || "";
   const [step, setStep] = useState(1);
+
   const [formData, setFormData] = useState({
     itemTypes: [],
     otherItemType: "",
@@ -100,6 +216,14 @@ export function SubmissionFormPage() {
     buybackInterest: "",
     description: "",
     images: [],
+
+    burnTestChoice: "",
+    burnTestPage: null,
+    burnTestMoment: [],
+    burnTestFlames: [],
+    burnTestNoFlame: [],
+    burnTestSmell: "",
+    burnTestAshes: [],
   });
 
   const updateField = (field, value) => {
@@ -125,8 +249,42 @@ export function SubmissionFormPage() {
     }));
   };
 
+  const setBurnTestChoice = (choice) => {
+    setFormData((prev) => ({
+      ...prev,
+      burnTestChoice: choice,
+      burnTestPage: choice === "Yes" ? 1 : null,
+      burnTestMoment: choice === "Yes" ? prev.burnTestMoment : [],
+      burnTestFlames: choice === "Yes" ? prev.burnTestFlames : [],
+      burnTestNoFlame: choice === "Yes" ? prev.burnTestNoFlame : [],
+      burnTestSmell: choice === "Yes" ? prev.burnTestSmell : "",
+      burnTestAshes: choice === "Yes" ? prev.burnTestAshes : [],
+    }));
+  };
+
+  const handleBurnTestBack = () => {
+    setFormData((prev) => ({
+      ...prev,
+      burnTestPage: prev.burnTestPage > 1 ? prev.burnTestPage - 1 : null,
+      burnTestChoice: prev.burnTestPage > 1 ? prev.burnTestChoice : "",
+    }));
+  };
+
+  const handleBurnTestNext = () => {
+    if (formData.burnTestPage === 6) {
+      setStep(2);
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      burnTestPage: prev.burnTestPage + 1,
+    }));
+  };
+
   const handleSubmit = () => {
-    setStep(5);
+    setStep(6);
+
     setTimeout(() => {
       navigate("/dashboard");
     }, 3000);
@@ -135,23 +293,37 @@ export function SubmissionFormPage() {
   const hasItemTypes =
     formData.itemTypes.length > 0 &&
     (!formData.itemTypes.includes("Other") || formData.otherItemType.trim());
-  const isStepOneComplete =
+
+  const isBurnTestComplete =
+    formData.burnTestChoice === "No" ||
+    (formData.burnTestChoice === "Yes" && formData.burnTestAshes.length > 0);
+
+  const isStepTwoComplete =
     hasItemTypes &&
     formData.condition &&
     formData.cleanliness &&
     formData.quantity;
-  const isStepTwoComplete =
+
+  const isStepThreeComplete =
     formData.knowsFabricType === "Yes"
       ? formData.fabricTypes.length > 0 &&
         formData.fabricIdentification.length > 0 &&
         (formData.noBrandVisible || formData.brand.trim())
       : formData.knowsFabricType === "No" &&
         formData.fabricDescription.length > 0;
-  const isStepThreeComplete =
+
+  const isStepFourComplete =
+    isBurnTestComplete &&
     formData.action &&
     (formData.action !== "Upcycle" || formData.buybackInterest);
 
   const reviewRows = [
+    ["Burn Test", formData.burnTestChoice],
+    ["Moment Flame", formData.burnTestMoment.join(", ")],
+    ["While in Flames", formData.burnTestFlames.join(", ")],
+    ["Without Flame", formData.burnTestNoFlame.join(", ")],
+    ["Smell", formData.burnTestSmell],
+    ["Ash Characteristics", formData.burnTestAshes.join(", ")],
     ["Item Type", formData.itemTypes.join(", ")],
     ["Condition", formData.condition],
     ["Cleanliness", formData.cleanliness],
@@ -181,6 +353,7 @@ export function SubmissionFormPage() {
             >
               <ArrowLeft className="w-5 h-5 text-[#5a6f5a]" />
             </button>
+
             <Link to="/" className="flex items-center gap-2">
               <Recycle className="w-6 h-6 text-[#6b8e6b]" />
               <span className="text-xl text-[#2d4a2d] font-gloock">
@@ -207,7 +380,7 @@ export function SubmissionFormPage() {
 
         <div className="mb-12">
           <div className="flex items-center justify-between mb-4">
-            {[1, 2, 3, 4].map((num) => (
+            {[1, 2, 3, 4, 5].map((num) => (
               <div key={num} className="flex items-center flex-1">
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
@@ -218,7 +391,8 @@ export function SubmissionFormPage() {
                 >
                   {step > num ? <CheckCircle className="w-5 h-5" /> : num}
                 </div>
-                {num < 4 && (
+
+                {num < 5 && (
                   <div
                     className={`flex-1 h-1 mx-2 transition-all ${
                       step > num ? "bg-[#6b8e6b]" : "bg-[#d4d8d0]"
@@ -228,7 +402,9 @@ export function SubmissionFormPage() {
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-4 text-center text-sm text-[#5a6f5a]">
+
+          <div className="grid grid-cols-5 text-center text-sm text-[#5a6f5a]">
+            <span>Burn Test</span>
             <span>Items</span>
             <span>Fabric</span>
             <span>Pathway</span>
@@ -236,13 +412,219 @@ export function SubmissionFormPage() {
           </div>
         </div>
 
-        <motion.div
-          key={step}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="bg-white p-8 rounded-2xl shadow-lg"
-        >
+<motion.div
+  key={`${step}-${formData.burnTestPage}`}
+  initial={{ opacity: 0, x: 20 }}
+  animate={{ opacity: 1, x: 0 }}
+  className="bg-white p-8 rounded-2xl shadow-lg"
+>
           {step === 1 && (
+            <div className="space-y-7">
+              <h2 className="text-2xl text-[#2d4a2d]">Burn Test</h2>
+
+              {!formData.burnTestChoice && (
+                <QuestionBlock label="Do you want to do a burn test?">
+                  <p className="text-sm text-[#5a6f5a]/80 mb-4">
+                    A burn test can help determine if your textile item is
+                    organic, like cotton, or synthetic, like polyester.
+                  </p>
+
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {["Yes", "No"].map((answer) => (
+                      <RadioOption
+                        key={answer}
+                        name="burnTestChoice"
+                        label={answer}
+                        checked={formData.burnTestChoice === answer}
+                        onChange={() => setBurnTestChoice(answer)}
+                      />
+                    ))}
+                  </div>
+                </QuestionBlock>
+              )}
+
+              {formData.burnTestChoice === "No" && (
+                <QuestionBlock label="Do you want to do a burn test?">
+                  <p className="text-sm text-[#5a6f5a]/80 mb-4">
+                    A burn test can help determine if your textile item is
+                    organic, like cotton, or synthetic, like polyester.
+                  </p>
+
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {["Yes", "No"].map((answer) => (
+                      <RadioOption
+                        key={answer}
+                        name="burnTestChoice"
+                        label={answer}
+                        checked={formData.burnTestChoice === answer}
+                        onChange={() => setBurnTestChoice(answer)}
+                      />
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setStep(2)}
+                    className="mt-4 w-full py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg"
+                  >
+                    Continue to item details
+                  </button>
+                </QuestionBlock>
+              )}
+
+              {formData.burnTestChoice === "Yes" &&
+                formData.burnTestPage === 1 && (
+                  <div className="space-y-6">
+                    <QuestionBlock label="How to do a burn test?">
+                      <div className="space-y-3 text-[#5a6f5a]">
+                        <p>1. Cut up a small piece of your textile waste.</p>
+                        <p>
+                          2. Prepare a lighter or a candle. Don’t use a match.
+                        </p>
+                        <p>
+                          3. Prepare tweezers for the safety of your fingers.
+                        </p>
+                        <p>
+                          4. Prepare something to put your burning textile on,
+                          such as glassware or a baking tray.
+                        </p>
+                        <p>
+                          5. Take notes on how it burns, smells, reacts to
+                          flame, and what the ashes look like.
+                        </p>
+                        <p>6. Get burning!</p>
+                      </div>
+                    </QuestionBlock>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleBurnTestBack}
+                        className="flex-1 py-3 bg-white text-[#6b8e6b] border-2 border-[#6b8e6b] rounded-xl hover:bg-[#f5f5f0] transition-all"
+                      >
+                        Back
+                      </button>
+
+                      <button
+                        onClick={handleBurnTestNext}
+                        className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+              {formData.burnTestChoice === "Yes" &&
+                formData.burnTestPage === 2 && (
+                  <BurnTestCheckboxPage
+                    label="How did it look like the moment flame touched the textile?"
+                    description="Was it fast, did it curl, did it melt? You can select multiple items that apply."
+                    options={burnTestMomentOptions}
+                    selected={formData.burnTestMoment}
+                    onToggle={(option) =>
+                      toggleListValue("burnTestMoment", option)
+                    }
+                    onBack={handleBurnTestBack}
+                    onNext={handleBurnTestNext}
+                  />
+                )}
+
+              {formData.burnTestChoice === "Yes" &&
+                formData.burnTestPage === 3 && (
+                  <BurnTestCheckboxPage
+                    label="How did it look like while in flames?"
+                    description="Slowly? Quickly? Melting?"
+                    options={burnTestFlameOptions}
+                    selected={formData.burnTestFlames}
+                    onToggle={(option) =>
+                      toggleListValue("burnTestFlames", option)
+                    }
+                    onBack={handleBurnTestBack}
+                    onNext={handleBurnTestNext}
+                  />
+                )}
+
+              {formData.burnTestChoice === "Yes" &&
+                formData.burnTestPage === 4 && (
+                  <BurnTestCheckboxPage
+                    label="When there was no flame, what did you notice?"
+                    description="Yes, again. Promise this is the last on how it looks like on flames."
+                    options={burnTestNoFlameOptions}
+                    selected={formData.burnTestNoFlame}
+                    onToggle={(option) =>
+                      toggleListValue("burnTestNoFlame", option)
+                    }
+                    onBack={handleBurnTestBack}
+                    onNext={handleBurnTestNext}
+                  />
+                )}
+
+              {formData.burnTestChoice === "Yes" &&
+                formData.burnTestPage === 5 && (
+                  <div className="space-y-6">
+                    <QuestionBlock label="Almost there, how did it smell like?">
+                      <p className="text-sm text-[#5a6f5a]/80 mb-4">
+                        Like what? Just one. Pick the one closest.
+                      </p>
+
+                      <div className="grid md:grid-cols-2 gap-3">
+                        {burnTestSmellOptions.map((option) => (
+                          <RadioOption
+                            key={option}
+                            name="burnTestSmell"
+                            label={option}
+                            checked={formData.burnTestSmell === option}
+                            onChange={() =>
+                              updateField("burnTestSmell", option)
+                            }
+                          />
+                        ))}
+                      </div>
+
+                      {formData.burnTestSmell && (
+                        <SelectedOptionSummary
+                          selected={[formData.burnTestSmell]}
+                          descriptionMap={burnTestDescriptionMap}
+                        />
+                      )}
+                    </QuestionBlock>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleBurnTestBack}
+                        className="flex-1 py-3 bg-white text-[#6b8e6b] border-2 border-[#6b8e6b] rounded-xl hover:bg-[#f5f5f0] transition-all"
+                      >
+                        Back
+                      </button>
+
+                      <button
+                        onClick={handleBurnTestNext}
+                        disabled={!formData.burnTestSmell}
+                        className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+              {formData.burnTestChoice === "Yes" &&
+                formData.burnTestPage === 6 && (
+                  <BurnTestCheckboxPage
+                    label="What were the characteristics of the ashes?"
+                    description="Don’t let the ashes fly!"
+                    options={burnTestAshOptions}
+                    selected={formData.burnTestAshes}
+                    onToggle={(option) =>
+                      toggleListValue("burnTestAshes", option)
+                    }
+                    onBack={handleBurnTestBack}
+                    onNext={handleBurnTestNext}
+                  />
+                )}
+            </div>
+          )}
+
+          {step === 2 && (
             <div className="space-y-7">
               <h2 className="text-2xl text-[#2d4a2d]">Item Details</h2>
 
@@ -257,6 +639,7 @@ export function SubmissionFormPage() {
                     />
                   ))}
                 </div>
+
                 {formData.itemTypes.includes("Other") && (
                   <input
                     type="text"
@@ -296,6 +679,7 @@ export function SubmissionFormPage() {
                     />
                   ))}
                 </div>
+
                 {formData.cleanliness === "Heavily soiled or contaminated" && (
                   <div className="mt-3 rounded-xl border border-[#d4a574] bg-[#fff8e8] px-4 py-3 text-sm text-[#7a5427]">
                     Heavily soiled or contaminated items may need special
@@ -317,17 +701,26 @@ export function SubmissionFormPage() {
                 />
               </QuestionBlock>
 
-              <button
-                onClick={() => setStep(2)}
-                disabled={!isStepOneComplete}
-                className="w-full py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Continue
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStep(1)}
+                  className="flex-1 py-3 bg-white text-[#6b8e6b] border-2 border-[#6b8e6b] rounded-xl hover:bg-[#f5f5f0] transition-all"
+                >
+                  Back
+                </button>
+
+                <button
+                  onClick={() => setStep(3)}
+                  disabled={!isStepTwoComplete}
+                  className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Continue
+                </button>
+              </div>
             </div>
           )}
 
-          {step === 2 && (
+          {step === 3 && (
             <div className="space-y-7">
               <h2 className="text-2xl text-[#2d4a2d]">Fabric Details</h2>
 
@@ -384,6 +777,7 @@ export function SubmissionFormPage() {
                       className="w-full px-4 py-3 border-2 border-[#d4d8d0] rounded-xl focus:border-[#6b8e6b] bg-white disabled:bg-[#f5f5f0]"
                       placeholder="Enter brand name"
                     />
+
                     <div className="mt-3">
                       <CheckboxOption
                         label="No brand visible"
@@ -414,14 +808,15 @@ export function SubmissionFormPage() {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setStep(1)}
+                  onClick={() => setStep(2)}
                   className="flex-1 py-3 bg-white text-[#6b8e6b] border-2 border-[#6b8e6b] rounded-xl hover:bg-[#f5f5f0] transition-all"
                 >
                   Back
                 </button>
+
                 <button
-                  onClick={() => setStep(3)}
-                  disabled={!isStepTwoComplete}
+                  onClick={() => setStep(4)}
+                  disabled={!isStepThreeComplete}
                   className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Continue
@@ -430,7 +825,7 @@ export function SubmissionFormPage() {
             </div>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <div className="space-y-7">
               <h2 className="text-2xl text-[#2d4a2d]">Intended Pathway</h2>
 
@@ -462,9 +857,7 @@ export function SubmissionFormPage() {
                         name="buybackInterest"
                         label={answer}
                         checked={formData.buybackInterest === answer}
-                        onChange={() =>
-                          updateField("buybackInterest", answer)
-                        }
+                        onChange={() => updateField("buybackInterest", answer)}
                       />
                     ))}
                   </div>
@@ -495,14 +888,15 @@ export function SubmissionFormPage() {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(3)}
                   className="flex-1 py-3 bg-white text-[#6b8e6b] border-2 border-[#6b8e6b] rounded-xl hover:bg-[#f5f5f0] transition-all"
                 >
                   Back
                 </button>
+
                 <button
-                  onClick={() => setStep(4)}
-                  disabled={!isStepThreeComplete}
+                  onClick={() => setStep(5)}
+                  disabled={!isStepFourComplete}
                   className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Continue
@@ -511,7 +905,7 @@ export function SubmissionFormPage() {
             </div>
           )}
 
-          {step === 4 && (
+          {step === 5 && (
             <div className="space-y-6">
               <h2 className="text-2xl text-[#2d4a2d]">
                 Review Your Submission
@@ -539,11 +933,12 @@ export function SubmissionFormPage() {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setStep(3)}
+                  onClick={() => setStep(4)}
                   className="flex-1 py-3 bg-white text-[#6b8e6b] border-2 border-[#6b8e6b] rounded-xl hover:bg-[#f5f5f0] transition-all"
                 >
                   Back
                 </button>
+
                 <button
                   onClick={handleSubmit}
                   className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg"
@@ -554,7 +949,7 @@ export function SubmissionFormPage() {
             </div>
           )}
 
-          {step === 5 && (
+          {step === 6 && (
             <div className="text-center py-12">
               <motion.div
                 initial={{ scale: 0 }}
@@ -565,18 +960,73 @@ export function SubmissionFormPage() {
                   <CheckCircle className="w-12 h-12 text-white" />
                 </div>
               </motion.div>
+
               <h2 className="text-3xl mb-4 text-[#2d4a2d]">
                 Submission Successful!
               </h2>
+
               <p className="text-lg text-[#5a6f5a] mb-2">
                 Thank you for contributing to a sustainable future.
               </p>
+
               <p className="text-[#5a6f5a]">
                 We'll review your submission and get back to you soon.
               </p>
             </div>
           )}
         </motion.div>
+      </div>
+    </div>
+  );
+}
+
+function BurnTestCheckboxPage({
+  label,
+  description,
+  options,
+  selected,
+  onToggle,
+  onBack,
+  onNext,
+  nextLabel = "Next",
+}) {
+  return (
+    <div className="space-y-6">
+      <QuestionBlock label={label}>
+        <p className="text-sm text-[#5a6f5a]/80 mb-4">{description}</p>
+
+        <div className="grid md:grid-cols-2 gap-3">
+          {options.map((option) => (
+            <CheckboxOption
+              key={option}
+              label={option}
+              checked={selected.includes(option)}
+              onChange={() => onToggle(option)}
+            />
+          ))}
+        </div>
+
+        <SelectedOptionSummary
+          selected={selected}
+          descriptionMap={burnTestDescriptionMap}
+        />
+      </QuestionBlock>
+
+      <div className="flex gap-3">
+        <button
+          onClick={onBack}
+          className="flex-1 py-3 bg-white text-[#6b8e6b] border-2 border-[#6b8e6b] rounded-xl hover:bg-[#f5f5f0] transition-all"
+        >
+          Back
+        </button>
+
+        <button
+          onClick={onNext}
+          disabled={selected.length === 0}
+          className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {nextLabel}
+        </button>
       </div>
     </div>
   );
@@ -655,11 +1105,38 @@ function FabricChecklist({ selected, onToggle }) {
             />
             <span>{fabric.value}</span>
           </span>
+
           <span className="mt-2 block pl-7 text-sm leading-5 text-[#5a6f5a]">
             {fabric.description}
           </span>
         </label>
       ))}
+    </div>
+  );
+}
+
+function SelectedOptionSummary({ selected, descriptionMap }) {
+  if (!selected || selected.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 rounded-2xl border border-[#d4d8d0] bg-[#f5f5f0] p-4 text-sm text-[#5a6f5a]">
+      <div className="mb-3 font-semibold text-[#2d4a2d]">
+        Selected details
+      </div>
+
+      <div className="space-y-3">
+        {selected.map((item) => (
+          <div key={item}>
+            <div className="font-semibold text-[#2d4a2d]">{item}</div>
+            <div>
+              {descriptionMap[item] ||
+                "A selected detail for the chosen option."}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
