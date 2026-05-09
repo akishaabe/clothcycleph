@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   Building2,
@@ -125,12 +125,12 @@ export function MessagesPage() {
     <div className={`messages-page messages-theme-${messagesTheme} app-darkable-page min-h-screen`}>
       <nav className="sticky top-0 z-20 border-b px-6 py-4 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
+          <div className="flex items-center gap-2" aria-label="ClothCycle PH">
             <Recycle className="h-6 w-6 messages-brand-icon" />
             <span className="font-gloock text-xl messages-heading">
               ClothCycle PH
             </span>
-          </Link>
+          </div>
 
           <button
             onClick={() => navigate(details.backPath)}
