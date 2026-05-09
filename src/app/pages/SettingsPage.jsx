@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
 import {
   Recycle,
@@ -27,6 +27,16 @@ const actionButtonClass =
   "inline-flex min-w-[190px] items-center justify-center gap-2 px-6 py-3 bg-[#336158] text-white rounded-xl hover:bg-[#2a4c48] transition-all hover:shadow-lg";
 
 export function SettingsPage() {
+  const [searchParams] = useSearchParams();
+  const settingsTheme = ["partner", "admin"].includes(searchParams.get("theme"))
+    ? searchParams.get("theme")
+    : "default";
+  const backPath =
+    settingsTheme === "partner"
+      ? "/partner"
+      : settingsTheme === "admin"
+      ? "/admin"
+      : "/dashboard";
   const [activeTab, setActiveTab] = useState("profile");
   const [savedProfile, setSavedProfile] = useState({
     name: " ",
@@ -112,20 +122,20 @@ export function SettingsPage() {
       : "text-2xl";
 
   return (
-    <div className="settings-page app-darkable-page min-h-screen bg-[radial-gradient(circle_at_top_left,_#e7ebe6,_transparent_28%),linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)] text-[#19221d]">
+    <div className={`settings-page settings-theme-${settingsTheme} app-darkable-page min-h-screen bg-[radial-gradient(circle_at_top_left,_#e7ebe6,_transparent_28%),linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)] text-[#19221d]`}>
       <nav className="sticky top-0 z-20 bg-white/85 backdrop-blur-xl border-b border-[#e1e7df] px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
-            <Link to="/" className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <Recycle className="w-6 h-6 text-[#336158]" />
               <span className="text-xl text-[#19221d] font-gloock">
                 ClothCycle PH
               </span>
-            </Link>
+            </div>
           </div>
 
           <Link
-            to="/dashboard"
+            to={backPath}
             className="rounded-xl border border-[#dce4da] bg-white px-4 py-2 text-[#336158] hover:bg-[#f3f5f2] transition-colors"
           >
             Back to Dashboard
@@ -166,7 +176,7 @@ export function SettingsPage() {
             animate={{ opacity: 1, x: 0 }}
             className={`${panelClass} rounded-2xl p-6 text-center md:col-start-1 md:row-start-1`}
           >
-            <div className="mx-auto mb-5 flex h-32 w-32 items-center justify-center overflow-hidden rounded-full bg-[#f5c9e4]">
+            <div className="mx-auto mb-5 flex h-32 w-32 items-center justify-center overflow-hidden rounded-full bg-[#e5e7eb]">
               {profilePhoto ? (
                 <img
                   src={profilePhoto}
@@ -174,7 +184,7 @@ export function SettingsPage() {
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <User className="h-16 w-16 text-[#336158]" />
+                <User className="h-16 w-16 text-[#4b5563]" />
               )}
             </div>
 
@@ -189,7 +199,7 @@ export function SettingsPage() {
 
             <label
               htmlFor="profile-photo"
-              className="mt-4 inline-flex cursor-pointer rounded-full border border-[#5f6f67] bg-[#6f8793] px-5 py-2 text-white transition-colors hover:bg-[#5d737e]"
+              className="profile-photo-button mt-4 inline-flex cursor-pointer rounded-full border border-[#6b7280] bg-[#9ca3af] px-5 py-2 text-white transition-colors hover:bg-[#6b7280]"
             >
               Change Photo
             </label>

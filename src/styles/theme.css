@@ -54,3 +54,90 @@
   --ring: #d4a373;
 }
 
+.dark .partner-dashboard {
+  background: radial-gradient(circle at top left, rgba(79, 111, 159, 0.24), transparent 30%),
+    linear-gradient(135deg, #07111f, #0f1b33, #111827) !important;
+}
+
+.dark .partner-dashboard nav {
+  background-color: rgba(15, 27, 51, 0.92) !important;
+  border-color: #1e3a8a !important;
+}
+
+.dark .partner-dashboard .bg-white {
+  background-color: #111c2f !important;
+}
+
+.dark .partner-dashboard [class*="bg-[#eff6ff]"],
+.dark .partner-dashboard [class*="hover:bg-[#eff6ff]"]:hover,
+.dark .partner-dashboard tr:hover {
+  background-color: #142846 !important;
+}
+
+.dark .partner-dashboard [class*="hover:bg-[#dbeafe]"]:hover {
+  background-color: #1d3b68 !important;
+}
+
+.dark .partner-dashboard [class*="border-[#d6e6f8]"] {
+  border-color: #1e3a8a !important;
+}
+
+.dark .partner-dashboard [class*="text-[#10233f]"] {
+  color: #eaf4ff !important;
+}
+
+.dark .partner-dashboard [class*="text-[#41668f]"] {
+  color: #9fc5f8 !important;
+}
+
+.dark .partner-dashboard .recharts-default-tooltip {
+  background-color: #111c2f !important;
+  border-color: #1e3a8a !important;
+  color: #eaf4ff !important;
+}
+
+.dark .admin-dashboard {
+  background: radial-gradient(circle at top left, rgba(185, 154, 74, 0.24), transparent 30%),
+    linear-gradient(135deg, #171003, #261b05, #111827) !important;
+}
+
+.dark .admin-dashboard nav {
+  background: linear-gradient(90deg, #4f3d17, #806326) !important;
+  border-color: #6f520c !important;
+}
+
+.dark .admin-dashboard .bg-white {
+  background-color: #1f1a10 !important;
+}
+
+.dark .admin-dashboard [class*="bg-[#fff8e6]"],
+.dark .admin-dashboard tr:hover {
+  background-color: #2b220e !important;
+}
+
+.dark .admin-dashboard [class*="bg-[#fff3c4]"] {
+  background-color: #f4d56b !important;
+}
+
+.dark .admin-dashboard [class*="border-[#ead9aa]"] {
+  border-color: #6f520c !important;
+}
+
+.dark .admin-dashboard [class*="text-[#4a3300]"] {
+  color: #fff4cc !important;
+}
+
+.dark .admin-dashboard [class*="text-[#7a5a13]"] {
+  color: #f2cf74 !important;
+}
+
+.dark .admin-dashboard [class*="text-[#2d2100]"] {
+  color: #2d2100 !important;
+}
+
+.dark .admin-dashboard .recharts-default-tooltip {
+  background-color: #1f1a10 !important;
+  border-color: #6f520c !important;
+  color: #fff4cc !important;
+}
+

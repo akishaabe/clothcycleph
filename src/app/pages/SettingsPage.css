@@ -7,3 +7,140 @@
 .settings-page input:focus {
   outline: none;
 }
+
+.settings-page .profile-photo-button {
+  background-color: #9ca3af !important;
+  border-color: #6b7280 !important;
+  color: #ffffff !important;
+}
+
+.settings-page .profile-photo-button:hover {
+  background-color: #6b7280 !important;
+}
+
+.settings-theme-partner {
+  --settings-bg: radial-gradient(circle at top left, #e4edf6, transparent 28%),
+    linear-gradient(135deg, #f3f7fb, #eef4fa, #e4edf6);
+  --settings-card: rgba(255, 255, 255, 0.9);
+  --settings-subtle: #eff6ff;
+  --settings-border: #d6e6f8;
+  --settings-primary: #4f6f9f;
+  --settings-primary-hover: #3f5f8f;
+  --settings-text: #10233f;
+  --settings-muted: #41668f;
+  --settings-ring: rgba(79, 111, 159, 0.18);
+}
+
+.settings-theme-admin {
+  --settings-bg: radial-gradient(circle at top left, #eadfbe, transparent 28%),
+    linear-gradient(135deg, #fbf7ec, #f4ecd3, #eadfbe);
+  --settings-card: rgba(255, 255, 255, 0.9);
+  --settings-subtle: #fff8e6;
+  --settings-border: #ead9aa;
+  --settings-primary: #b99a4a;
+  --settings-primary-hover: #9a7a2f;
+  --settings-text: #4a3300;
+  --settings-muted: #7a5a13;
+  --settings-ring: rgba(185, 154, 74, 0.22);
+}
+
+.dark .settings-theme-partner {
+  --settings-bg: radial-gradient(circle at top left, rgba(79, 111, 159, 0.24), transparent 30%),
+    linear-gradient(135deg, #07111f, #0f1b33, #111827);
+  --settings-card: rgba(17, 28, 47, 0.94);
+  --settings-subtle: #142846;
+  --settings-border: #1e3a8a;
+  --settings-primary: #8aa6c8;
+  --settings-primary-hover: #6b93b8;
+  --settings-text: #eaf4ff;
+  --settings-muted: #9fc5f8;
+  --settings-ring: rgba(138, 166, 200, 0.28);
+}
+
+.dark .settings-theme-admin {
+  --settings-bg: radial-gradient(circle at top left, rgba(185, 154, 74, 0.24), transparent 30%),
+    linear-gradient(135deg, #171003, #261b05, #111827);
+  --settings-card: rgba(31, 26, 16, 0.94);
+  --settings-subtle: #2b220e;
+  --settings-border: #6f520c;
+  --settings-primary: #d6c281;
+  --settings-primary-hover: #b99a4a;
+  --settings-text: #fff4cc;
+  --settings-muted: #f2cf74;
+  --settings-ring: rgba(214, 194, 129, 0.26);
+}
+
+.settings-theme-partner,
+.settings-theme-admin {
+  background: var(--settings-bg) !important;
+  color: var(--settings-text) !important;
+}
+
+.settings-theme-partner nav,
+.settings-theme-admin nav,
+.settings-theme-partner .bg-white,
+.settings-theme-admin .bg-white,
+.settings-theme-partner .bg-white\/80,
+.settings-theme-admin .bg-white\/80,
+.settings-theme-partner .bg-white\/85,
+.settings-theme-admin .bg-white\/85,
+.settings-theme-partner .bg-white\/90,
+.settings-theme-admin .bg-white\/90 {
+  background-color: var(--settings-card) !important;
+  border-color: var(--settings-border) !important;
+}
+
+.settings-theme-partner [class*="bg-[#f8faf6]"],
+.settings-theme-admin [class*="bg-[#f8faf6]"],
+.settings-theme-partner [class*="hover:bg-[#f3f5f2]"]:hover,
+.settings-theme-admin [class*="hover:bg-[#f3f5f2]"]:hover {
+  background-color: var(--settings-subtle) !important;
+}
+
+.settings-theme-partner [class*="border-[#e1e7df]"],
+.settings-theme-admin [class*="border-[#e1e7df]"],
+.settings-theme-partner [class*="border-[#dce4da]"],
+.settings-theme-admin [class*="border-[#dce4da]"],
+.settings-theme-partner [class*="border-[#e7ebe6]"],
+.settings-theme-admin [class*="border-[#e7ebe6]"] {
+  border-color: var(--settings-border) !important;
+}
+
+.settings-theme-partner [class*="text-[#19221d]"],
+.settings-theme-admin [class*="text-[#19221d]"] {
+  color: var(--settings-text) !important;
+}
+
+.settings-theme-partner [class*="text-[#5f6f67]"],
+.settings-theme-admin [class*="text-[#5f6f67]"],
+.settings-theme-partner [class*="text-[#6f7f77]"],
+.settings-theme-admin [class*="text-[#6f7f77]"] {
+  color: var(--settings-muted) !important;
+}
+
+.settings-theme-partner [class*="text-[#336158]"],
+.settings-theme-admin [class*="text-[#336158]"] {
+  color: var(--settings-primary) !important;
+}
+
+.settings-theme-partner [class*="bg-[#336158]"],
+.settings-theme-admin [class*="bg-[#336158]"] {
+  background-color: var(--settings-primary) !important;
+}
+
+.settings-theme-partner [class*="hover:bg-[#2a4c48]"]:hover,
+.settings-theme-admin [class*="hover:bg-[#2a4c48]"]:hover {
+  background-color: var(--settings-primary-hover) !important;
+}
+
+.settings-theme-partner [class*="focus:border-[#336158]"]:focus,
+.settings-theme-admin [class*="focus:border-[#336158]"]:focus {
+  border-color: var(--settings-primary) !important;
+  box-shadow: 0 0 0 2px var(--settings-ring) !important;
+}
+
+.settings-theme-partner input,
+.settings-theme-admin input {
+  background-color: var(--settings-card) !important;
+  color: var(--settings-text) !important;
+}

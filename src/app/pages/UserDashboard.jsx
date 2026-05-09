@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { motion } from "motion/react";
 import {
@@ -94,12 +94,12 @@ export function UserDashboard() {
             <button className="md:hidden">
               <Menu className="w-6 h-6 text-[#19221d]" />
             </button>
-            <Link to="/" className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <Recycle className="w-6 h-6 text-[#336158]" />
               <span className="text-xl text-[#19221d] font-gloock">
                 ClothCycle PH
               </span>
-            </Link>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -342,7 +342,7 @@ export function UserDashboard() {
               Log out?
             </h2>
             <p className="mt-2 text-sm text-[#5f6f67]">
-              Are you sure you want to log out of your ClothCycle PH account?
+              Are you sure you want to log out of your account?
             </p>
             <div className="mt-6 flex justify-end gap-3">
               <button

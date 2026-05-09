@@ -4,7 +4,7 @@ import { LoginPage } from "./app/pages/LoginPage";
 import { SignUpPage } from "./app/pages/SignUpPage";
 import { UserDashboard } from "./app/pages/UserDashboard";
 import { AdminDashboard } from "./app/pages/AdminDashboard";
-import { SuperAdminDashboard } from "./app/pages/SuperAdminDashboard";
+import { PartnerDashboard } from "./app/pages/PartnerDashboard";
 import { SettingsPage } from "./app/pages/SettingsPage";
 import { SubmissionFormPage } from "./app/pages/SubmissionFormPage";
 import { FloatingPageControls } from "./app/components/FloatingPageControls";
@@ -40,12 +40,12 @@ export const router = createBrowserRouter([
     Component: withPageControls(UserDashboard),
   },
   {
-    path: "/admin",
-    Component: withPageControls(AdminDashboard),
+    path: "/partner",
+    Component: withPageControls(PartnerDashboard),
   },
   {
-    path: "/super-admin",
-    Component: withPageControls(SuperAdminDashboard),
+    path: "/admin",
+    Component: withPageControls(AdminDashboard),
   },
   {
     path: "/settings",

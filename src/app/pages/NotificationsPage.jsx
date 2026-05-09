@@ -1,6 +1,7 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Bell, CheckCircle2, PackageCheck, Recycle } from "lucide-react";
 import { motion } from "motion/react";
+import "./NotificationsPage.css";
 
 const notifications = [
   {
@@ -28,20 +29,30 @@ const notifications = [
 
 export function NotificationsPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const notificationsTheme = ["partner", "admin"].includes(searchParams.get("theme"))
+    ? searchParams.get("theme")
+    : "default";
+  const backPath =
+    notificationsTheme === "partner"
+      ? "/partner"
+      : notificationsTheme === "admin"
+      ? "/admin"
+      : "/dashboard";
 
   return (
-    <div className="app-darkable-page min-h-screen bg-[radial-gradient(circle_at_top_left,_#e7ebe6,_transparent_28%),linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)] text-[#19221d]">
+    <div className={`notifications-page notifications-theme-${notificationsTheme} app-darkable-page min-h-screen bg-[radial-gradient(circle_at_top_left,_#e7ebe6,_transparent_28%),linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)] text-[#19221d]`}>
       <nav className="sticky top-0 z-20 border-b border-[#e1e7df] bg-white/85 px-6 py-4 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <Recycle className="h-6 w-6 text-[#336158]" />
             <span className="font-gloock text-xl text-[#19221d]">
               ClothCycle PH
             </span>
-          </Link>
+          </div>
 
           <button
-            onClick={() => navigate("/dashboard")}
+            onClick={() => navigate(backPath)}
             className="inline-flex items-center gap-2 rounded-xl border border-[#dce4da] bg-white px-4 py-2 text-[#336158] transition-colors hover:bg-[#f3f5f2]"
           >
             <ArrowLeft className="h-4 w-4" />

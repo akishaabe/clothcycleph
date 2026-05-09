@@ -12,6 +12,34 @@ import {
 
 import "./LandingPage.css";
 
+const revealUp = {
+  hidden: { opacity: 0, y: 42 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] },
+  },
+};
+
+const revealScale = {
+  hidden: { opacity: 0, scale: 0.94 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] },
+  },
+};
+
+const staggerGroup = {
+  visible: {
+    transition: {
+      staggerChildren: 0.14,
+    },
+  },
+};
+
+const viewportReveal = { once: true, amount: 0.24 };
+
 export function LandingPage() {
   return (
     <div
@@ -197,16 +225,17 @@ export function LandingPage() {
       </section>
 
       {/* How It Works */}
-      <section
+      <motion.section
         id="how-it-works"
         className="py-24 px-6 bg-transparent"
+        initial="hidden"
+        whileInView="visible"
+        viewport={viewportReveal}
       >
         <div className="max-w-7xl mx-auto">
           <motion.div
             className="text-center mb-20"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+            variants={revealUp}
           >
             <h2 className="text-5xl font-light mb-4 text-[#19221d] dark:text-white">
               How It Works
@@ -217,7 +246,10 @@ export function LandingPage() {
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <motion.div
+            className="grid md:grid-cols-3 gap-8"
+            variants={staggerGroup}
+          >
             {[
               {
                 icon: Recycle,
@@ -237,13 +269,10 @@ export function LandingPage() {
                 description:
                   "Turn unwanted pieces into unique creations through innovation.",
               },
-            ].map((item, index) => (
+            ].map((item) => (
               <motion.div
                 key={item.title}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.2 }}
+                variants={revealUp}
                 whileHover={{
                   y: -10,
                 }}
@@ -284,14 +313,64 @@ export function LandingPage() {
                 </p>
               </motion.div>
             ))}
-          </div>
+          </motion.div>
         </div>
-      </section>
+      </motion.section>
+
+      {/* SDG 12 */}
+      <motion.section
+        className="py-24 px-6 bg-[#ffffff] dark:bg-white/[0.02]"
+        initial="hidden"
+        whileInView="visible"
+        viewport={viewportReveal}
+      >
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            variants={revealUp}
+            className="
+              grid
+              gap-8
+              md:grid-cols-[auto_minmax(0,1fr)]
+              md:gap-12
+              items-center
+            "
+          >
+            <div className="flex justify-center md:justify-start">
+              <img
+                src="/sdg12-logo.png"
+                alt="SDG 12 Responsible Consumption and Production"
+                className="w-full max-w-[300px] md:max-w-[340px] bg-white"
+              />
+            </div>
+
+            <div>
+              <h2 className="font-sans text-4xl md:text-5xl font-semibold mb-6 text-[#19221d] dark:text-white">
+                Aligned With SDG 12
+              </h2>
+
+              <p className="text-lg md:text-xl leading-relaxed text-[#5f6f67] dark:text-zinc-300">
+                At ClothCycle PH, we believe fashion should not come at the
+                expense of the planet. Our platform aligns with Sustainable
+                Development Goal 12: Responsible Consumption and Production by
+                promoting sustainable clothing practices such as recycling,
+                upcycling, and donating pre-loved garments instead of sending
+                them to landfills.
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      </motion.section>
 
       {/* Statistics */}
-      <section className="py-24 px-6">
+      <motion.section
+        className="py-24 px-6"
+        initial="hidden"
+        whileInView="visible"
+        viewport={viewportReveal}
+      >
         <div className="max-w-7xl mx-auto">
-          <div
+          <motion.div
+            variants={revealScale}
             className="
               rounded-[40px]
               bg-gradient-to-br
@@ -305,7 +384,10 @@ export function LandingPage() {
               p-12
             "
           >
-            <div className="grid md:grid-cols-3 gap-10 text-center">
+            <motion.div
+              className="grid md:grid-cols-3 gap-10 text-center"
+              variants={staggerGroup}
+            >
               {[
                 {
                   icon: Package,
@@ -322,13 +404,10 @@ export function LandingPage() {
                   value: "150+",
                   label: "Partners",
                 },
-              ].map((stat, index) => (
+              ].map((stat) => (
                 <motion.div
                   key={stat.label}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: index * 0.1 }}
+                  variants={revealScale}
                   className="
                     bg-[#f3f5f2]
                     dark:bg-white/5
@@ -351,18 +430,22 @@ export function LandingPage() {
                   </div>
                 </motion.div>
               ))}
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         </div>
-      </section>
+      </motion.section>
 
       {/* Partners */}
-      <section id="partner" className="py-24 px-6">
+      <motion.section
+        id="partner"
+        className="py-24 px-6"
+        initial="hidden"
+        whileInView="visible"
+        viewport={viewportReveal}
+      >
         <div className="max-w-7xl mx-auto text-center">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+            variants={revealUp}
           >
             <h2 className="text-5xl font-light mb-4 text-[#19221d] dark:text-white">
               Featured Partners
@@ -372,10 +455,15 @@ export function LandingPage() {
               Organizations helping create a sustainable future
             </p>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            <motion.div
+              className="grid grid-cols-2 md:grid-cols-4 gap-8"
+              variants={staggerGroup}
+            >
               {[1, 2, 3, 4].map((i) => (
-                <div
+                <motion.div
                   key={i}
+                  variants={revealScale}
+                  whileHover={{ y: -6 }}
                   className="
                     h-28
                     bg-white
@@ -396,15 +484,21 @@ export function LandingPage() {
                   <span className="text-[#5f6f67] dark:text-zinc-300">
                     Partner {i}
                   </span>
-                </div>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           </motion.div>
         </div>
-      </section>
+      </motion.section>
 
       {/* Footer */}
-      <footer className="bg-[#f3f5f2] dark:bg-[#0b0d12] border-t border-[#e7ebe6] dark:border-white/10 py-16 px-6">
+      <motion.footer
+        className="bg-[#f3f5f2] dark:bg-[#0b0d12] border-t border-[#e7ebe6] dark:border-white/10 py-16 px-6"
+        initial="hidden"
+        whileInView="visible"
+        viewport={viewportReveal}
+        variants={revealUp}
+      >
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-3 gap-10 mb-12">
             <div>
@@ -467,7 +561,7 @@ export function LandingPage() {
             </p>
           </div>
         </div>
-      </footer>
+      </motion.footer>
     </div>
   );
 }
