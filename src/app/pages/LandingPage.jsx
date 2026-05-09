@@ -237,9 +237,9 @@ export function LandingPage() {
             className="text-center mb-20"
             variants={revealUp}
           >
-            <h2 className="text-5xl font-light mb-4 text-[#19221d] dark:text-white">
+            <h3 className="text-5xl font-light mb-4 text-[#19221d] dark:text-white">
               How It Works
-            </h2>
+            </h3>
 
             <p className="text-lg text-[#5f6f67] dark:text-zinc-400">
               Three modern ways to contribute sustainably
@@ -344,9 +344,9 @@ export function LandingPage() {
             </div>
 
             <div>
-              <h2 className="font-sans text-4xl md:text-5xl font-semibold mb-6 text-[#19221d] dark:text-white">
+              <h3 className="font-sans text-4xl md:text-5xl font-semibold mb-6 text-[#19221d] dark:text-white">
                 Aligned With SDG 12
-              </h2>
+              </h3>
 
               <p className="text-lg md:text-xl leading-relaxed text-[#5f6f67] dark:text-zinc-300">
                 At ClothCycle PH, we believe fashion should not come at the
@@ -447,9 +447,9 @@ export function LandingPage() {
           <motion.div
             variants={revealUp}
           >
-            <h2 className="text-5xl font-light mb-4 text-[#19221d] dark:text-white">
+            <h3 className="text-5xl font-light mb-4 text-[#19221d] dark:text-white">
               Featured Partners
-            </h2>
+            </h3>
 
             <p className="text-lg text-[#5f6f67] dark:text-zinc-400 mb-16">
               Organizations helping create a sustainable future

@@ -28,13 +28,22 @@ html.dark body {
 }
 
 h1,
-h2,
 h3,
 h4,
 h5,
 h6 {
   font-family: 'Gloock', serif;
   letter-spacing: 0.5px;
+}
+
+h2 {
+  font-family: 'Inter', sans-serif;
+  
+}
+
+h7 {
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
 }
 
 .font-gloock {

@@ -102,12 +102,12 @@ export function LoginPage() {
               <Recycle className="w-28 h-28 text-[#336158] dark:text-white" />
             </motion.div>
 
-            <h2 className="text-5xl font-light leading-tight mb-6 text-[#19221d] dark:text-white">
+            <h3 className="text-5xl font-light leading-tight mb-6 text-[#19221d] dark:text-white">
               Welcome
               <span className="block font-gloock">
                 Back
               </span>
-            </h2>
+            </h3>
 
             <p className="text-[#5f6f67] dark:text-white/80 text-lg leading-relaxed max-w-md mx-auto">
               Continue your journey towards a more

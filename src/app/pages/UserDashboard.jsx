@@ -176,8 +176,8 @@ export function UserDashboard() {
           transition={{ delay: 0.1 }}
           className="dashboard-service-section mb-8 rounded-[28px] border border-[#dce7d9] bg-[linear-gradient(135deg,#f8fbf6,#eff6ec,#f7faf5)] p-6 shadow-[0_14px_42px_rgba(51,97,88,0.09)] md:p-8"
         >
-          <h2 className="dashboard-service-heading mb-6 text-center font-sans text-xl font-bold text-[#19221d]">
-            Select a service
+          <h2 className="dashboard-service-heading mb-6 text-center font-inter text-xl font-bold text-[#19221d]">
+          Select a service
           </h2>
 
           <div className="mx-auto grid max-w-4xl grid-cols-1 gap-5 md:grid-cols-3">

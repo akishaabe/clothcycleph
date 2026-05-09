@@ -420,7 +420,7 @@ export function SubmissionFormPage() {
 >
           {step === 1 && (
             <div className="space-y-7">
-              <h2 className="text-2xl text-[#2d4a2d]">Burn Test</h2>
+              <h7 className="text-2xl text-[#2d4a2d]">Burn Test</h7>
 
               {!formData.burnTestChoice && (
                 <QuestionBlock label="Do you want to do a burn test?">
@@ -625,7 +625,7 @@ export function SubmissionFormPage() {
 
           {step === 2 && (
             <div className="space-y-7">
-              <h2 className="text-2xl text-[#2d4a2d]">Item Details</h2>
+              <h7 className="text-2xl text-[#2d4a2d]">Item Details</h7>
 
               <QuestionBlock label="What type of item/s are you submitting?">
                 <div className="grid md:grid-cols-2 gap-3">
@@ -721,7 +721,7 @@ export function SubmissionFormPage() {
 
           {step === 3 && (
             <div className="space-y-7">
-              <h2 className="text-2xl text-[#2d4a2d]">Fabric Details</h2>
+              <h7 className="text-2xl text-[#2d4a2d]">Fabric Details</h7>
 
               <QuestionBlock label="Do you know the fabric type of the item/s?">
                 <div className="grid sm:grid-cols-2 gap-3">
@@ -826,7 +826,7 @@ export function SubmissionFormPage() {
 
           {step === 4 && (
             <div className="space-y-7">
-              <h2 className="text-2xl text-[#2d4a2d]">Intended Pathway</h2>
+              <h7 className="text-2xl text-[#2d4a2d]">Intended Pathway</h7>
 
               <QuestionBlock label="What would you prefer to do with this item?">
                 <div className="grid md:grid-cols-3 gap-3">
@@ -960,9 +960,9 @@ export function SubmissionFormPage() {
                 </div>
               </motion.div>
 
-              <h2 className="text-3xl mb-4 text-[#2d4a2d]">
+              <h7 className="text-3xl mb-4 text-[#2d4a2d]">
                 Submission Successful!
-              </h2>
+              </h7>
 
               <p className="text-lg text-[#5a6f5a] mb-2">
                 Thank you for contributing to a sustainable future.

@@ -7,7 +7,8 @@
 
 @theme {
   --font-gloock: "Gloock", serif;
-
+  --font-inter: "Inter", sans-serif;
+  
   --color-background: #f8faf6;
   --color-surface: #ffffff;
   --color-surface-light: #f3f5f2;
