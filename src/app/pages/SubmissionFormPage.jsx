@@ -568,18 +568,17 @@ export function SubmissionFormPage() {
 
                       <div className="grid md:grid-cols-2 gap-3">
                         {burnTestSmellOptions.map((option) => (
-                          <RadioOption
+                          <BurnTestRadioOption
                             key={option}
                             name="burnTestSmell"
                             label={option}
+                            description={burnTestDescriptionMap[option]}
                             checked={formData.burnTestSmell === option}
-                            onChange={() =>
-                              updateField("burnTestSmell", option)
-                            }
+                            onChange={() => updateField("burnTestSmell", option)}
                           />
                         ))}
                       </div>
-
+                    
                       {formData.burnTestSmell && (
                         <SelectedOptionSummary
                           selected={[formData.burnTestSmell]}
@@ -997,19 +996,15 @@ function BurnTestCheckboxPage({
 
         <div className="grid md:grid-cols-2 gap-3">
           {options.map((option) => (
-            <CheckboxOption
+            <BurnTestCheckboxOption
               key={option}
               label={option}
+              description={burnTestDescriptionMap[option]}
               checked={selected.includes(option)}
               onChange={() => onToggle(option)}
             />
           ))}
         </div>
-
-        <SelectedOptionSummary
-          selected={selected}
-          descriptionMap={burnTestDescriptionMap}
-        />
       </QuestionBlock>
 
       <div className="flex gap-3">
@@ -1029,6 +1024,59 @@ function BurnTestCheckboxPage({
         </button>
       </div>
     </div>
+  );
+}
+
+function BurnTestCheckboxOption({ label, description, checked, onChange }) {
+  return (
+    <label
+      className={`cursor-pointer rounded-xl border-2 px-4 py-3 transition-all ${
+        checked
+          ? "border-[#6b8e6b] bg-[#6b8e6b]/10"
+          : "border-[#d4d8d0] hover:border-[#6b8e6b]"
+      }`}
+    >
+      <span className="flex items-center gap-3 text-[#2d4a2d]">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onChange}
+          className="h-4 w-4 accent-[#6b8e6b]"
+        />
+        <span>{label}</span>
+      </span>
+
+      <span className="mt-2 block pl-7 text-sm leading-5 text-[#5a6f5a]">
+        {description}
+      </span>
+    </label>
+  );
+}
+
+function BurnTestRadioOption({ name, label, description, checked, onChange }) {
+  return (
+    <label
+      className={`cursor-pointer rounded-xl border-2 px-4 py-3 transition-all ${
+        checked
+          ? "border-[#6b8e6b] bg-[#6b8e6b]/10"
+          : "border-[#d4d8d0] hover:border-[#6b8e6b]"
+      }`}
+    >
+      <span className="flex items-center gap-3 text-[#2d4a2d]">
+        <input
+          type="radio"
+          name={name}
+          checked={checked}
+          onChange={onChange}
+          className="h-4 w-4 accent-[#6b8e6b]"
+        />
+        <span>{label}</span>
+      </span>
+
+      <span className="mt-2 block pl-7 text-sm leading-5 text-[#5a6f5a]">
+        {description}
+      </span>
+    </label>
   );
 }
 
@@ -1119,24 +1167,4 @@ function SelectedOptionSummary({ selected, descriptionMap }) {
   if (!selected || selected.length === 0) {
     return null;
   }
-
-  return (
-    <div className="mt-4 rounded-2xl border border-[#d4d8d0] bg-[#f5f5f0] p-4 text-sm text-[#5a6f5a]">
-      <div className="mb-3 font-semibold text-[#2d4a2d]">
-        Selected details
-      </div>
-
-      <div className="space-y-3">
-        {selected.map((item) => (
-          <div key={item}>
-            <div className="font-semibold text-[#2d4a2d]">{item}</div>
-            <div>
-              {descriptionMap[item] ||
-                "A selected detail for the chosen option."}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
