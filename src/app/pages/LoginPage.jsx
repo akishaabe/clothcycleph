@@ -21,7 +21,7 @@ export function LoginPage() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    navigate("/dashboard", { state: { entry: "login" } });
+    navigate("/dashboard");
   };
 
   return (
@@ -101,30 +101,6 @@ export function LoginPage() {
             >
               <Recycle className="w-28 h-28 text-[#336158] dark:text-white" />
             </motion.div>
-
-            <div
-              className="
-                inline-flex
-                items-center
-                gap-2
-                px-4
-                py-2
-                rounded-full
-                bg-white/70
-                dark:bg-white/10
-                backdrop-blur-xl
-                border
-                border-[#d7ddd5]
-                dark:border-white/20
-                mb-8
-              "
-            >
-              <Sparkles className="w-4 h-4 text-[#336158] dark:text-white" />
-
-              <span className="text-sm text-[#19221d] dark:text-white">
-                Sustainable Fashion Platform
-              </span>
-            </div>
 
             <h2 className="text-5xl font-light leading-tight mb-6 text-[#19221d] dark:text-white">
               Welcome

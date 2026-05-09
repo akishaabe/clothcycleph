@@ -180,7 +180,14 @@ export function UserDashboard() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.15 + index * 0.08 }}
                 whileHover={{ y: -4 }}
-                onClick={() => navigate("/submit")}
+                onClick={() =>
+                  navigate("/submit", {
+                    state: {
+                      service:
+                        service.title === "Not Sure?" ? "" : service.title,
+                    },
+                  })
+                }
                 className={`dashboard-service-card rounded-2xl border border-[#dce4da] p-6 text-center shadow-[0_10px_24px_rgba(25,34,29,0.07)] transition-all hover:brightness-[1.02] hover:shadow-[0_16px_36px_rgba(25,34,29,0.12)] ${
                   service.wide
                     ? "md:col-span-3 flex items-center justify-center gap-5 py-4"
