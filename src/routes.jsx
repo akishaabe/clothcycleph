@@ -8,6 +8,8 @@ import { SuperAdminDashboard } from "./app/pages/SuperAdminDashboard";
 import { SettingsPage } from "./app/pages/SettingsPage";
 import { SubmissionFormPage } from "./app/pages/SubmissionFormPage";
 import { FloatingPageControls } from "./app/components/FloatingPageControls";
+import { LegalDocumentPage } from "./app/pages/LegalDocumentPage";
+import { NotificationsPage } from "./app/pages/NotificationsPage";
 
 const withPageControls = (Page) => {
   return function PageWithControls() {
@@ -52,5 +54,17 @@ export const router = createBrowserRouter([
   {
     path: "/submit",
     Component: withPageControls(SubmissionFormPage),
+  },
+  {
+    path: "/terms",
+    Component: withPageControls(() => <LegalDocumentPage type="terms" />),
+  },
+  {
+    path: "/privacy",
+    Component: withPageControls(() => <LegalDocumentPage type="privacy" />),
+  },
+  {
+    path: "/notifications",
+    Component: withPageControls(NotificationsPage),
   },
 ]);

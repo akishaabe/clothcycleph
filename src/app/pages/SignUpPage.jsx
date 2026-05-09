@@ -162,8 +162,20 @@ export function SignUpPage() {
                 required
               />
               <span>
-                I agree to the <a href="#" className="text-[#336158] hover:underline">Terms & Conditions</a> and{" "}
-                <a href="#" className="text-[#336158] hover:underline">Privacy Policy</a>
+                I agree to the{" "}
+                <Link
+                  to="/terms"
+                  className="text-[#336158] hover:underline"
+                >
+                  Terms & Conditions
+                </Link>{" "}
+                and{" "}
+                <Link
+                  to="/privacy"
+                  className="text-[#336158] hover:underline"
+                >
+                  Privacy Policy
+                </Link>
               </span>
             </label>
 

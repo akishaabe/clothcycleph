@@ -103,7 +103,12 @@ export function UserDashboard() {
           </div>
 
           <div className="flex items-center gap-4">
-            <button className="w-10 h-10 rounded-full bg-[#f3f5f2] border border-[#e1e7df] flex items-center justify-center hover:bg-[#e7ebe6] transition-colors">
+            <button
+              onClick={() => navigate("/notifications")}
+              className="w-10 h-10 rounded-full bg-[#f3f5f2] border border-[#e1e7df] flex items-center justify-center hover:bg-[#e7ebe6] transition-colors"
+              aria-label="Open notifications"
+              title="Notifications"
+            >
               <Bell className="w-5 h-5 text-[#5f6f67]" />
             </button>
             <div className="relative">
