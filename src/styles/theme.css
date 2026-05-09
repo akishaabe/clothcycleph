@@ -97,22 +97,53 @@
 }
 
 .dark .admin-dashboard {
-  background: radial-gradient(circle at top left, rgba(185, 154, 74, 0.24), transparent 30%),
-    linear-gradient(135deg, #171003, #261b05, #111827) !important;
+  background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent 30%),
+    linear-gradient(135deg, #050505, #111111, #181818) !important;
 }
 
 .dark .admin-dashboard nav {
-  background: linear-gradient(90deg, #4f3d17, #806326) !important;
-  border-color: #6f520c !important;
+  background: rgba(10, 10, 10, 0.94) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
 .dark .admin-dashboard .bg-white {
-  background-color: #1f1a10 !important;
+  background-color: #121212 !important;
+}
+
+.dark .admin-dashboard [class*="bg-gray-50"],
+.dark .admin-dashboard [class*="bg-gray-100"],
+.dark .admin-dashboard [class*="hover:bg-gray-100"]:hover,
+.dark .admin-dashboard [class*="hover:bg-gray-200"]:hover {
+  background-color: #1f1f1f !important;
+}
+
+.dark .admin-dashboard [class*="bg-gray-200"] {
+  background-color: #2a2a2a !important;
+}
+
+.dark .admin-dashboard [class*="bg-gray-950"],
+.dark .admin-dashboard [class*="hover:bg-black"]:hover {
+  background-color: #f5f5f5 !important;
+  color: #050505 !important;
+}
+
+.dark .admin-dashboard [class*="border-gray-200"] {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+.dark .admin-dashboard [class*="text-gray-950"] {
+  color: #f5f5f5 !important;
+}
+
+.dark .admin-dashboard [class*="text-gray-700"],
+.dark .admin-dashboard [class*="text-gray-600"],
+.dark .admin-dashboard [class*="text-gray-500"] {
+  color: #b7b7b7 !important;
 }
 
 .dark .admin-dashboard [class*="bg-[#fff8e6]"],
 .dark .admin-dashboard tr:hover {
-  background-color: #2b220e !important;
+  background-color: #1f1f1f !important;
 }
 
 .dark .admin-dashboard [class*="bg-[#fff3c4]"] {
@@ -120,15 +151,15 @@
 }
 
 .dark .admin-dashboard [class*="border-[#ead9aa]"] {
-  border-color: #6f520c !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
 }
 
 .dark .admin-dashboard [class*="text-[#4a3300]"] {
-  color: #fff4cc !important;
+  color: #f5f5f5 !important;
 }
 
 .dark .admin-dashboard [class*="text-[#7a5a13]"] {
-  color: #f2cf74 !important;
+  color: #b7b7b7 !important;
 }
 
 .dark .admin-dashboard [class*="text-[#2d2100]"] {
@@ -136,8 +167,13 @@
 }
 
 .dark .admin-dashboard .recharts-default-tooltip {
-  background-color: #1f1a10 !important;
-  border-color: #6f520c !important;
-  color: #fff4cc !important;
+  background-color: #121212 !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  color: #f5f5f5 !important;
+}
+
+.dark .admin-dashboard .admin-crown-badge {
+  background-color: #f4d56b !important;
+  color: #2d2100 !important;
 }
 

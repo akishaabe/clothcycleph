@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { motion } from "motion/react";
-import { Recycle, Users, Package, TrendingUp, CheckCircle, XCircle, Bell, User, BarChart3, Settings, LogOut } from "lucide-react";
+import { Recycle, Users, Package, TrendingUp, CheckCircle, XCircle, Bell, User, BarChart3, Settings, LogOut, MessageSquare } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const platformData = [
@@ -52,6 +52,9 @@ export function PartnerDashboard() {
           </div>
 
           <div className="flex items-center gap-4">
+            <Link to="/messages?theme=partner" className="w-10 h-10 rounded-full bg-[#eff6ff] flex items-center justify-center hover:bg-[#dbeafe] transition-colors" aria-label="Open messages" title="Messages">
+              <MessageSquare className="w-5 h-5 text-[#41668f]" />
+            </Link>
             <Link to="/notifications?theme=partner" className="w-10 h-10 rounded-full bg-[#eff6ff] flex items-center justify-center hover:bg-[#dbeafe] transition-colors">
               <Bell className="w-5 h-5 text-[#41668f]" />
             </Link>

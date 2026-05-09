@@ -10,6 +10,7 @@ import { SubmissionFormPage } from "./app/pages/SubmissionFormPage";
 import { FloatingPageControls } from "./app/components/FloatingPageControls";
 import { LegalDocumentPage } from "./app/pages/LegalDocumentPage";
 import { NotificationsPage } from "./app/pages/NotificationsPage";
+import { MessagesPage } from "./app/pages/MessagesPage";
 
 const withPageControls = (Page) => {
   return function PageWithControls() {
@@ -66,5 +67,9 @@ export const router = createBrowserRouter([
   {
     path: "/notifications",
     Component: withPageControls(NotificationsPage),
+  },
+  {
+    path: "/messages",
+    Component: withPageControls(MessagesPage),
   },
 ]);
