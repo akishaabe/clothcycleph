@@ -7,8 +7,8 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, name: string, password: string, role?: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
+  signup: (email: string, name: string, password: string, role?: string) => Promise<User>;
   logout: () => void;
   updateUser: (user: User) => void;
 }
@@ -38,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await authService.login({ email, password });
       setToken(response.token);
       setUser(response.user);
+      return response.user;
     } catch (error) {
       throw error;
     }
@@ -48,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await authService.signup({ email, name, password, role: role as any });
       setToken(response.token);
       setUser(response.user);
+      return response.user;
     } catch (error) {
       throw error;
     }

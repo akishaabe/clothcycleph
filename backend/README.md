@@ -101,6 +101,22 @@ Important:
 - Use the same `JWT_SECRET` for everyone if you want login tokens to work across machines.
 - Keep `CORS_ORIGIN` as each member's frontend URL, usually `http://localhost:5173`.
 
+## Role Testing
+
+During development, the frontend dashboards are intentionally reachable by direct URL so the team can test screens quickly:
+```text
+http://localhost:5173/dashboard
+http://localhost:5173/partner
+http://localhost:5173/admin
+```
+
+Login still returns the user's real backend role and redirects to the matching dashboard:
+- `user` -> `/dashboard`
+- `partner` -> `/partner`
+- `admin` -> `/admin`
+
+Do not rely on frontend route hiding for security. When a backend endpoint becomes role-sensitive, protect that API route with `roleMiddleware`.
+
 ## 📁 Project Structure
 
 ```

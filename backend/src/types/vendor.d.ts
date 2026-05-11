@@ -22,5 +22,6 @@ declare module 'pg' {
     query(text: string, params?: any[]): Promise<QueryResult>;
     connect(): Promise<PoolClient>;
     on(event: string, listener: (error: Error) => void): this;
+    end(): Promise<void>;
   }
 }
