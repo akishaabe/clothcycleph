@@ -96,7 +96,7 @@ const getStatusClass = (status) => {
   return "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300";
 };
 
-const canCreateRole = (role) => role === "Admin";
+const canCreateRole = (role) => role === "Admin" || role === "Partner";
 const canSuspendRole = (role) => role === "User" || role === "Partner";
 
 export function AdminDashboard() {
@@ -316,9 +316,9 @@ export function AdminDashboard() {
         {/* System Metrics */}
         <div className="grid md:grid-cols-4 gap-6 mb-8">
           {[
-            { icon: Users, label: "Managed Users", value: roleCounts.User, trend: "+120", color: "#111827" },
-            { icon: Shield, label: "Managed Admins", value: roleCounts.Admin, trend: "+3", color: "#374151" },
-            { icon: Building2, label: "Managed Partners", value: roleCounts.Partner, trend: "+8", color: "#4b5563" },
+            { icon: Users, label: "Users", value: roleCounts.User, trend: "+120", color: "#111827" },
+            { icon: Shield, label: "Admins", value: roleCounts.Admin, trend: "+3", color: "#374151" },
+            { icon: Building2, label: "Partners", value: roleCounts.Partner, trend: "+8", color: "#4b5563" },
             { icon: Activity, label: "System Health", value: "98.5%", trend: "Optimal", color: "#6b7280" }
           ].map((metric, index) => (
             <motion.div
