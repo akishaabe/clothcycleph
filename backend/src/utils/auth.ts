@@ -3,9 +3,11 @@ import bcrypt from 'bcryptjs';
 import { config } from '../config/env.js';
 
 export const generateToken = (payload: any): string => {
-  return jwt.sign(payload, config.jwt.secret!, {
-    expiresIn: config.jwt.expiresIn,
-  });
+  const options: jwt.SignOptions = {
+    expiresIn: config.jwt.expiresIn as jwt.SignOptions['expiresIn'],
+  };
+
+  return jwt.sign(payload, config.jwt.secret as jwt.Secret, options);
 };
 
 export const verifyToken = (token: string): any => {

@@ -9,6 +9,7 @@ import messageRoutes from './routes/messages.js';
 import uploadRoutes from './routes/upload.js';
 
 const app = express();
+let databaseStatus: 'starting' | 'connected' | 'error' = 'starting';
 
 // Middleware
 app.use(express.json());
@@ -17,7 +18,13 @@ app.use(cors({ origin: config.cors.origin }));
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'ClothCycle Backend is running' });
+  const isHealthy = databaseStatus === 'connected';
+
+  res.status(isHealthy ? 200 : 503).json({
+    status: isHealthy ? 'ok' : 'degraded',
+    message: 'ClothCycle Backend is running',
+    database: databaseStatus,
+  });
 });
 
 // Routes
@@ -34,20 +41,22 @@ app.use((req, res) => {
 // Error handling middleware
 app.use(errorHandler);
 
-// Initialize database and start server
+// Start Express first so health checks can report database startup failures.
 async function startServer() {
+  const PORT = config.server.port;
+
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Environment: ${config.server.env}`);
+  });
+
   try {
     await initializeDatabase();
-    console.log('✅ Database initialized');
-
-    const PORT = config.server.port;
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on http://localhost:${PORT}`);
-      console.log(`📝 Environment: ${config.server.env}`);
-    });
+    databaseStatus = 'connected';
+    console.log('Database initialized');
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
+    databaseStatus = 'error';
+    console.error('Database initialization failed:', error);
   }
 }
 
