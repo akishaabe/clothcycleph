@@ -1,0 +1,165 @@
+erDiagram
+    USERS {
+        UUID user_id PK
+        TEXT name
+        TEXT email
+        TEXT password_hash
+        TEXT role
+        TEXT status
+        TEXT phone
+        TEXT address
+        JSON profile_photo
+        DATETIME terms_accepted_at
+        DATETIME created_at
+        DATETIME updated_at
+        DATETIME last_login_at
+    }
+
+    PARTNER_PROFILES {
+        UUID partner_profile_id PK
+        UUID user_id FK
+        TEXT organization_name
+        TEXT contact_person
+        TEXT location
+        TEXT service_types
+        TEXT status
+        BOOLEAN verified
+        DATETIME created_at
+        DATETIME updated_at
+    }
+
+    USER_PREFERENCES {
+        UUID preference_id PK
+        UUID user_id FK
+        BOOLEAN email_notifications
+        BOOLEAN push_notifications
+        BOOLEAN sms_notifications
+        BOOLEAN newsletter
+        DATETIME updated_at
+    }
+
+    SUBMISSIONS {
+        UUID submission_id PK
+        UUID user_id FK
+        UUID partner_profile_id FK
+        TEXT submission_code
+        TEXT service_type
+        TEXT submission_status
+        INTEGER quantity
+        BOOLEAN buyback_interest
+        TEXT description
+        TEXT action
+        DATETIME created_at
+        DATETIME updated_at
+        DATETIME scheduled_at
+    }
+
+    SUBMISSION_DETAILS {
+        UUID detail_id PK
+        UUID submission_id FK
+        TEXT item_types
+        TEXT other_item_type
+        TEXT condition
+        TEXT cleanliness
+        BOOLEAN knows_fabric_type
+        TEXT fabric_types
+        TEXT fabric_identification
+        TEXT brand
+        BOOLEAN no_brand_visible
+        TEXT fabric_description
+    }
+
+    BURN_TESTS {
+        UUID burn_test_id PK
+        UUID submission_id FK
+        BOOLEAN performed
+        INTEGER page
+        TEXT moment
+        TEXT flames
+        TEXT no_flame
+        TEXT smell
+        TEXT ashes
+    }
+
+    SUBMISSION_IMAGES {
+        UUID image_id PK
+        UUID submission_id FK
+        TEXT url
+        JSON metadata
+        DATETIME uploaded_at
+    }
+
+    RECOMMENDATIONS {
+        UUID recommendation_id PK
+        UUID submission_id FK
+        UUID partner_profile_id FK
+        TEXT recommended_pathway
+        TEXT details
+        DATETIME generated_at
+    }
+
+    NOTIFICATIONS {
+        UUID notification_id PK
+        UUID user_id FK
+        TEXT title
+        TEXT message
+        TEXT notification_type
+        BOOLEAN is_read
+        DATETIME created_at
+    }
+
+    ACTIVITY_LOGS {
+        UUID log_id PK
+        UUID user_id FK
+        TEXT action
+        TEXT entity_type
+        UUID entity_id
+        TEXT details
+        DATETIME created_at
+    }
+
+    CONVERSATIONS {
+        UUID conversation_id PK
+        UUID user_id FK
+        UUID partner_profile_id FK
+        TEXT conversation_type
+        TEXT subject
+        TEXT status
+        UUID related_submission_id FK
+        DATETIME updated_at
+    }
+
+    MESSAGES {
+        UUID message_id PK
+        UUID conversation_id FK
+        UUID sender_user_id FK
+        TEXT sender_type
+        TEXT body
+        DATETIME created_at
+    }
+
+    MESSAGE_ATTACHMENTS {
+        UUID attachment_id PK
+        UUID message_id FK
+        TEXT filename
+        TEXT url
+        JSON metadata
+        DATETIME uploaded_at
+    }
+
+    USERS ||--o{ PARTNER_PROFILES : owns
+    USERS ||--o{ SUBMISSIONS : creates
+    USERS ||--o{ NOTIFICATIONS : receives
+    USERS ||--o{ ACTIVITY_LOGS : records
+    USERS ||--o{ USER_PREFERENCES : controls
+    USERS ||--o{ CONVERSATIONS : participates
+    PARTNER_PROFILES ||--o{ SUBMISSIONS : assigned_to
+    PARTNER_PROFILES ||--o{ RECOMMENDATIONS : provides
+    PARTNER_PROFILES ||--o{ CONVERSATIONS : participates
+    SUBMISSIONS ||--|| SUBMISSION_DETAILS : contains
+    SUBMISSIONS ||--o{ BURN_TESTS : has
+    SUBMISSIONS ||--o{ SUBMISSION_IMAGES : has
+    SUBMISSIONS ||--o{ RECOMMENDATIONS : generates
+    SUBMISSIONS ||--o{ CONVERSATIONS : relates_to
+    CONVERSATIONS ||--o{ MESSAGES : holds
+    MESSAGES ||--o{ MESSAGE_ATTACHMENTS : includes

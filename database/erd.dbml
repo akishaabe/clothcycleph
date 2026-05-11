@@ -1,0 +1,165 @@
+Table users {
+  user_id uuid [pk]
+  name text
+  email text [unique, not null]
+  password_hash text [not null]
+  role text
+  status text
+  phone text
+  address text
+  profile_photo jsonb
+  terms_accepted_at timestamptz
+  created_at timestamptz
+  updated_at timestamptz
+  last_login_at timestamptz
+}
+
+Table partner_profiles {
+  partner_profile_id uuid [pk]
+  user_id uuid [not null]
+  organization_name text
+  contact_person text
+  location text
+  service_types text
+  status text
+  verified boolean
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table user_preferences {
+  preference_id uuid [pk]
+  user_id uuid [not null]
+  email_notifications boolean
+  push_notifications boolean
+  sms_notifications boolean
+  newsletter boolean
+  updated_at timestamptz
+}
+
+Table submissions {
+  submission_id uuid [pk]
+  user_id uuid [not null]
+  partner_profile_id uuid
+  submission_code text [unique, not null]
+  service_type text
+  submission_status text
+  quantity int
+  buyback_interest boolean
+  description text
+  action text
+  created_at timestamptz
+  updated_at timestamptz
+  scheduled_at timestamptz
+}
+
+Table submission_details {
+  detail_id uuid [pk]
+  submission_id uuid [not null]
+  item_types text
+  other_item_type text
+  condition text
+  cleanliness text
+  knows_fabric_type boolean
+  fabric_types text
+  fabric_identification text
+  brand text
+  no_brand_visible boolean
+  fabric_description text
+}
+
+Table burn_tests {
+  burn_test_id uuid [pk]
+  submission_id uuid [not null]
+  performed boolean
+  page int
+  moment text
+  flames text
+  no_flame text
+  smell text
+  ashes text
+}
+
+Table submission_images {
+  image_id uuid [pk]
+  submission_id uuid [not null]
+  url text
+  metadata jsonb
+  uploaded_at timestamptz
+}
+
+Table recommendations {
+  recommendation_id uuid [pk]
+  submission_id uuid [not null]
+  partner_profile_id uuid
+  recommended_pathway text
+  details text
+  generated_at timestamptz
+}
+
+Table notifications {
+  notification_id uuid [pk]
+  user_id uuid [not null]
+  title text
+  message text
+  notification_type text
+  is_read boolean
+  created_at timestamptz
+}
+
+Table activity_logs {
+  log_id uuid [pk]
+  user_id uuid
+  action text
+  entity_type text
+  entity_id uuid
+  details text
+  created_at timestamptz
+}
+
+Table conversations {
+  conversation_id uuid [pk]
+  user_id uuid [not null]
+  partner_profile_id uuid
+  conversation_type text
+  subject text
+  status text
+  related_submission_id uuid
+  updated_at timestamptz
+}
+
+Table messages {
+  message_id uuid [pk]
+  conversation_id uuid [not null]
+  sender_user_id uuid
+  sender_type text
+  body text
+  created_at timestamptz
+}
+
+Table message_attachments {
+  attachment_id uuid [pk]
+  message_id uuid [not null]
+  filename text
+  url text
+  metadata jsonb
+  uploaded_at timestamptz
+}
+
+Ref: partner_profiles.user_id > users.user_id
+Ref: user_preferences.user_id > users.user_id
+Ref: submissions.user_id > users.user_id
+Ref: submissions.partner_profile_id > partner_profiles.partner_profile_id
+Ref: submission_details.submission_id > submissions.submission_id
+Ref: burn_tests.submission_id > submissions.submission_id
+Ref: submission_images.submission_id > submissions.submission_id
+Ref: recommendations.submission_id > submissions.submission_id
+Ref: recommendations.partner_profile_id > partner_profiles.partner_profile_id
+Ref: notifications.user_id > users.user_id
+Ref: activity_logs.user_id > users.user_id
+Ref: conversations.user_id > users.user_id
+Ref: conversations.partner_profile_id > partner_profiles.partner_profile_id
+Ref: conversations.related_submission_id > submissions.submission_id
+Ref: messages.conversation_id > conversations.conversation_id
+Ref: messages.sender_user_id > users.user_id
+Ref: message_attachments.message_id > messages.message_id
