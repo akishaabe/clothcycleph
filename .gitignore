@@ -12,6 +12,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+dev-server*.log
+backend/dev-server*.log
+
 
 # OS files
 .DS_Store
@@ -21,3 +24,7 @@ thumbs.db
 .vscode/
 .idea/
 node_modules
+
+backend/src/seeds/
+*.log
+
