@@ -6,10 +6,13 @@ import {
   Lock,
   Leaf,
   Sparkles,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { getDashboardPathForRole } from "../../utils/roleRoutes";
 
 import "./LoginPage.css";
 
@@ -21,6 +24,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,18 +32,10 @@ export function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await login(email, password);
-      const storedUser = JSON.parse(localStorage.getItem("user") || "null");
-
-      if (storedUser?.role === "partner") {
-        navigate("/partner");
-      } else if (storedUser?.role === "admin") {
-        navigate("/admin");
-      } else {
-        navigate("/dashboard");
-      }
-    } catch (err) {
-      setError(err.message || "Unable to log in");
+      const user = await login(email, password);
+      navigate(getDashboardPathForRole(user.role));
+    } catch (loginError) {
+      setError(loginError.message || "Login failed");
     } finally {
       setIsSubmitting(false);
     }
@@ -180,11 +176,11 @@ export function LoginPage() {
               onSubmit={handleSubmit}
               className="space-y-6"
             >
-              {error && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
                   {error}
                 </div>
-              )}
+              ) : null}
 
               {/* Email */}
               <div>
@@ -262,7 +258,7 @@ export function LoginPage() {
                   />
 
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) =>
                       setPassword(e.target.value)
@@ -291,6 +287,30 @@ export function LoginPage() {
                       transition-all
                     "
                   />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    className="
+                      absolute
+                      right-4
+                      top-1/2
+                      -translate-y-1/2
+                      text-[#5f6f67]
+                      transition-colors
+                      hover:text-[#336158]
+                      dark:text-zinc-500
+                      dark:hover:text-white
+                    "
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
+                  </button>
                 </div>
               </div>
 
@@ -352,7 +372,7 @@ export function LoginPage() {
                   hover:scale-[1.02]
                   font-medium
                   disabled:cursor-not-allowed
-                  disabled:opacity-60
+                  disabled:opacity-70
                 "
               >
                 {isSubmitting ? "Logging in..." : "Log In"}

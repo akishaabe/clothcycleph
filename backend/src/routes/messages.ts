@@ -7,14 +7,17 @@ import {
   markMessageAsRead,
 } from '../controllers/messageController.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { userIdParamSchema, uuidParamSchema } from '../schemas/common.js';
+import { sendMessageSchema } from '../schemas/messages.js';
 
 const router = Router();
 
 // All message routes require authentication
-router.post('/', authMiddleware, sendMessage);
 router.get('/contacts', authMiddleware, getMessageContacts);
+router.post('/', authMiddleware, validate(sendMessageSchema), sendMessage);
 router.get('/conversations', authMiddleware, getConversations);
-router.get('/:userId', authMiddleware, getMessages);
-router.put('/:id/read', authMiddleware, markMessageAsRead);
+router.get('/:userId', authMiddleware, validate(userIdParamSchema, 'params'), getMessages);
+router.put('/:id/read', authMiddleware, validate(uuidParamSchema, 'params'), markMessageAsRead);
 
 export default router;
