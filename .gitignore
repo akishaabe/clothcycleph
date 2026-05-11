@@ -1,4 +1,4 @@
-# Dependencies
+gi # Dependencies
 node_modules/
 
 # Vite / build
@@ -19,3 +19,4 @@ thumbs.db
 # Editor files
 .vscode/
 .idea/
+node_modules

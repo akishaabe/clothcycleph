@@ -1,7 +1,26 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { Recycle, Users, Shield, Building2, Activity, Bell, User, Crown, UserCog, ChevronRight, Search, Settings, LogOut, MessageSquare } from "lucide-react";
+import {
+  Recycle,
+  Users,
+  Shield,
+  Building2,
+  Activity,
+  Bell,
+  User,
+  Crown,
+  ChevronRight,
+  Search,
+  Settings,
+  LogOut,
+  MessageSquare,
+  Plus,
+  Pencil,
+  Trash2,
+  X,
+  Save,
+} from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const systemData = [
@@ -12,12 +31,13 @@ const systemData = [
   { date: "29 May", users: 1500, admins: 19, partners: 58 }
 ];
 
-const managementItems = [
-  { id: 1, name: "Maria Santos", role: "Admin", email: "maria@clothcycle.ph", status: "active", joined: "2025-12-15" },
-  { id: 2, name: "Juan Cruz", role: "Partner", email: "juan@partner.com", status: "active", joined: "2026-01-10" },
-  { id: 3, name: "Ana Reyes", role: "User", email: "ana@email.com", status: "active", joined: "2026-02-20" },
-  { id: 4, name: "Pedro Garcia", role: "Admin", email: "pedro@clothcycle.ph", status: "inactive", joined: "2025-11-05" },
-  { id: 5, name: "Lisa Tan", role: "Partner", email: "lisa@partner.com", status: "active", joined: "2026-03-12" }
+const initialAccounts = [
+  { id: 1, name: "Maria Santos", role: "Admin", email: "maria@clothcycle.ph", status: "active", joined: "2025-12-15", phone: "+63 917 210 4411", organization: "ClothCycle PH" },
+  { id: 2, name: "Juan Cruz", role: "Partner", email: "juan@partner.com", status: "active", joined: "2026-01-10", phone: "+63 918 440 1120", organization: "Green Loom Partners" },
+  { id: 3, name: "Ana Reyes", role: "User", email: "ana@email.com", status: "active", joined: "2026-02-20", phone: "+63 912 552 0192", organization: "Individual" },
+  { id: 4, name: "Pedro Garcia", role: "Admin", email: "pedro@clothcycle.ph", status: "inactive", joined: "2025-11-05", phone: "+63 915 772 8801", organization: "ClothCycle PH" },
+  { id: 5, name: "Lisa Tan", role: "Partner", email: "lisa@partner.com", status: "active", joined: "2026-03-12", phone: "+63 916 337 9012", organization: "Circular Weaves Hub" },
+  { id: 6, name: "Carlo Mendoza", role: "User", email: "carlo@email.com", status: "suspended", joined: "2026-04-01", phone: "+63 919 771 1050", organization: "Individual" },
 ];
 
 const getTrendClass = (value) => {
@@ -32,10 +52,192 @@ const getTrendClass = (value) => {
   return "bg-gray-100 text-gray-700 dark:bg-white/10 dark:text-gray-200";
 };
 
+const roleConfig = {
+  User: {
+    icon: Users,
+    title: "Manage Users",
+    label: "Users",
+    description: "Review regular accounts, then suspend or remove access when needed.",
+    color: "#111827",
+  },
+  Admin: {
+    icon: Shield,
+    title: "Manage Admins",
+    label: "Admins",
+    description: "Control administrator access and operational privileges.",
+    color: "#374151",
+  },
+  Partner: {
+    icon: Building2,
+    title: "Manage Partners",
+    label: "Partners",
+    description: "Review partner access, then suspend or remove organizations when needed.",
+    color: "#4b5563",
+  },
+};
+
+const emptyForm = {
+  name: "",
+  email: "",
+  phone: "",
+  organization: "",
+  status: "active",
+};
+
+const getStatusClass = (status) => {
+  if (status === "active") {
+    return "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300";
+  }
+
+  if (status === "suspended") {
+    return "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200";
+  }
+
+  return "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300";
+};
+
+const canCreateRole = (role) => role === "Admin";
+const canSuspendRole = (role) => role === "User" || role === "Partner";
+
 export function AdminDashboard() {
   const navigate = useNavigate();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [accounts, setAccounts] = useState(initialAccounts);
+  const [activeRole, setActiveRole] = useState("User");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState(null);
+  const [suspendTarget, setSuspendTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [formData, setFormData] = useState(emptyForm);
+
+  const activeConfig = roleConfig[activeRole];
+  const roleAccounts = useMemo(
+    () => accounts.filter((account) => account.role === activeRole),
+    [accounts, activeRole]
+  );
+  const filteredAccounts = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    if (!query) {
+      return roleAccounts;
+    }
+
+    return roleAccounts.filter((account) =>
+      [account.name, account.email, account.phone, account.organization, account.status]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [roleAccounts, searchQuery]);
+
+  const roleCounts = useMemo(
+    () =>
+      Object.keys(roleConfig).reduce((counts, role) => {
+        counts[role] = accounts.filter((account) => account.role === role).length;
+        return counts;
+      }, {}),
+    [accounts]
+  );
+
+  const openCreateModal = (role = activeRole) => {
+    setActiveRole(role);
+    setEditingAccount(null);
+    setFormData({
+      ...emptyForm,
+      organization: role === "User" ? "Individual" : role === "Admin" ? "ClothCycle PH" : "",
+    });
+    setIsAccountModalOpen(true);
+  };
+
+  const openEditModal = (account) => {
+    setEditingAccount(account);
+    setFormData({
+      name: account.name,
+      email: account.email,
+      phone: account.phone,
+      organization: account.organization,
+      status: account.status,
+    });
+    setIsAccountModalOpen(true);
+  };
+
+  const closeAccountModal = () => {
+    setIsAccountModalOpen(false);
+    setEditingAccount(null);
+    setFormData(emptyForm);
+  };
+
+  const handleFormChange = (field, value) => {
+    setFormData((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleSaveAccount = (event) => {
+    event.preventDefault();
+
+    if (editingAccount) {
+      setAccounts((current) =>
+        current.map((account) =>
+          account.id === editingAccount.id
+            ? { ...account, ...formData }
+            : account
+        )
+      );
+    } else {
+      setAccounts((current) => [
+        {
+          id: Date.now(),
+          role: activeRole,
+          joined: new Date().toISOString().slice(0, 10),
+          ...formData,
+        },
+        ...current,
+      ]);
+    }
+
+    closeAccountModal();
+  };
+
+  const confirmDeleteAccount = () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    setAccounts((current) =>
+      current.filter((account) => account.id !== deleteTarget.id)
+    );
+    setDeleteTarget(null);
+  };
+
+  const confirmSuspendAccount = () => {
+    if (!suspendTarget) {
+      return;
+    }
+
+    setAccounts((current) =>
+      current.map((account) =>
+        account.id === suspendTarget.id
+          ? {
+              ...account,
+              status: account.status === "suspended" ? "active" : "suspended",
+            }
+          : account
+      )
+    );
+
+    if (editingAccount?.id === suspendTarget.id) {
+      const nextStatus =
+        suspendTarget.status === "suspended" ? "active" : "suspended";
+
+      setEditingAccount((current) =>
+        current ? { ...current, status: nextStatus } : current
+      );
+      setFormData((current) => ({ ...current, status: nextStatus }));
+    }
+
+    setSuspendTarget(null);
+  };
 
   return (
     <div className="admin-dashboard app-darkable-page min-h-screen bg-[radial-gradient(circle_at_top_left,_#e5e7eb,_transparent_28%),linear-gradient(135deg,#f7f7f7,#ffffff,#eeeeee)]">
@@ -114,9 +316,9 @@ export function AdminDashboard() {
         {/* System Metrics */}
         <div className="grid md:grid-cols-4 gap-6 mb-8">
           {[
-            { icon: Users, label: "Total Users", value: "1,500", trend: "+120", color: "#111827" },
-            { icon: Shield, label: "Total Admins", value: "19", trend: "+3", color: "#374151" },
-            { icon: Building2, label: "Total Partners", value: "58", trend: "+8", color: "#4b5563" },
+            { icon: Users, label: "Managed Users", value: roleCounts.User, trend: "+120", color: "#111827" },
+            { icon: Shield, label: "Managed Admins", value: roleCounts.Admin, trend: "+3", color: "#374151" },
+            { icon: Building2, label: "Managed Partners", value: roleCounts.Partner, trend: "+8", color: "#4b5563" },
             { icon: Activity, label: "System Health", value: "98.5%", trend: "Optimal", color: "#6b7280" }
           ].map((metric, index) => (
             <motion.div
@@ -184,18 +386,20 @@ export function AdminDashboard() {
 
         {/* Role Management Cards */}
         <div className="grid md:grid-cols-3 gap-6 mb-8">
-          {[
-            { icon: Users, title: "Manage Users", count: "1,500", color: "#111827" },
-            { icon: Shield, title: "Manage Admins", count: "19", color: "#374151" },
-            { icon: Building2, title: "Manage Partners", count: "58", color: "#4b5563" }
-          ].map((card, index) => (
+          {Object.entries(roleConfig).map(([role, card], index) => (
             <motion.button
-              key={card.title}
+              key={role}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 + index * 0.1 }}
               whileHover={{ scale: 1.02 }}
-              className="bg-white p-6 rounded-2xl shadow-lg hover:shadow-2xl transition-all text-left"
+              onClick={() => {
+                setActiveRole(role);
+                setSearchQuery("");
+              }}
+              className={`bg-white p-6 rounded-2xl shadow-lg hover:shadow-2xl transition-all text-left border ${
+                activeRole === role ? "border-gray-950" : "border-gray-200"
+              }`}
             >
               <div
                 className="w-14 h-14 rounded-xl flex items-center justify-center mb-4"
@@ -204,35 +408,61 @@ export function AdminDashboard() {
                 <card.icon className="w-7 h-7 text-white" />
               </div>
               <h3 className="text-xl mb-2 text-gray-950">{card.title}</h3>
+              <p className="mb-4 min-h-10 text-sm text-gray-600">{card.description}</p>
               <div className="flex items-center justify-between">
-                <span className="text-2xl text-gray-600">{card.count} users</span>
+                <span className="text-2xl text-gray-600">
+                  {roleCounts[role]} {card.label.toLowerCase()}
+                </span>
                 <ChevronRight className="w-5 h-5 text-gray-600" />
               </div>
             </motion.button>
           ))}
         </div>
 
-        {/* User Management Table */}
+        {/* Account Management Table */}
         <motion.div
+          key={activeRole}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
           className="bg-white p-6 rounded-2xl shadow-lg mb-8"
         >
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl text-gray-950">User Management</h3>
-            <div className="flex gap-2">
-              <div className="relative">
+          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="flex items-center gap-3">
+                <div
+                  className="flex h-11 w-11 items-center justify-center rounded-xl"
+                  style={{ backgroundColor: activeConfig.color }}
+                >
+                  <activeConfig.icon className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl text-gray-950">{activeConfig.title}</h3>
+                  <p className="text-sm text-gray-600">{activeConfig.description}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative min-w-[260px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <input
                   type="text"
-                  placeholder="Search users..."
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder={`Search ${activeConfig.label.toLowerCase()}...`}
                   className="pl-10 pr-4 py-2 border-2 border-gray-200 rounded-lg focus:border-gray-950 focus:outline-none bg-white text-gray-950"
                 />
               </div>
-              <button className="px-4 py-2 bg-gray-950 text-white rounded-lg hover:bg-black transition-colors">
-                Add New
-              </button>
+              {canCreateRole(activeRole) && (
+                <button
+                  onClick={() => openCreateModal(activeRole)}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-950 px-4 py-2 text-white transition-colors hover:bg-black"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add {activeRole}
+                </button>
+              )}
             </div>
           </div>
 
@@ -243,13 +473,15 @@ export function AdminDashboard() {
                   <th className="text-left py-3 px-4 text-sm text-gray-600">Name</th>
                   <th className="text-left py-3 px-4 text-sm text-gray-600">Role</th>
                   <th className="text-left py-3 px-4 text-sm text-gray-600">Email</th>
+                  <th className="text-left py-3 px-4 text-sm text-gray-600">Phone</th>
+                  <th className="text-left py-3 px-4 text-sm text-gray-600">Organization</th>
                   <th className="text-left py-3 px-4 text-sm text-gray-600">Status</th>
                   <th className="text-left py-3 px-4 text-sm text-gray-600">Joined</th>
                   <th className="text-left py-3 px-4 text-sm text-gray-600">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {managementItems.map((item) => (
+                {filteredAccounts.map((item) => (
                   <tr key={item.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
                     <td className="py-3 px-4 text-sm text-gray-950">{item.name}</td>
                     <td className="py-3 px-4">
@@ -266,27 +498,44 @@ export function AdminDashboard() {
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-600">{item.email}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600">{item.phone}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600">{item.organization}</td>
                     <td className="py-3 px-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs ${
-                          item.status === "active"
-                            ? "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300"
-                            : "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300"
-                        }`}
-                      >
+                      <span className={`px-3 py-1 rounded-full text-xs ${getStatusClass(item.status)}`}>
                         {item.status}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-600">{item.joined}</td>
                     <td className="py-3 px-4">
-                      <button className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors">
-                        <UserCog className="w-4 h-4 text-gray-700" />
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => openEditModal(item)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 transition-colors hover:bg-gray-200"
+                          aria-label={`Edit ${item.name}`}
+                          title="Edit"
+                        >
+                          <Pencil className="h-4 w-4 text-gray-700" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget(item)}
+                          className="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
+                          aria-label={`Remove ${item.name}`}
+                          title="Remove"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
+            {filteredAccounts.length === 0 && (
+              <div className="py-12 text-center text-gray-600">
+                No {activeConfig.label.toLowerCase()} match your search.
+              </div>
+            )}
           </div>
         </motion.div>
 
@@ -346,6 +595,240 @@ export function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {isAccountModalOpen && (
+        <AccountModal
+          role={activeRole}
+          formData={formData}
+          editingAccount={editingAccount}
+          onChange={handleFormChange}
+          onClose={closeAccountModal}
+          onRequestSuspend={() => setSuspendTarget(editingAccount)}
+          onSubmit={handleSaveAccount}
+        />
+      )}
+
+      {suspendTarget && (
+        <ConfirmationDialog
+          title={
+            suspendTarget.status === "suspended"
+              ? `Reactivate ${suspendTarget.role.toLowerCase()}?`
+              : `Suspend ${suspendTarget.role.toLowerCase()}?`
+          }
+          message={
+            suspendTarget.status === "suspended"
+              ? `${suspendTarget.name} will regain access to their ClothCycle PH account.`
+              : `${suspendTarget.name} will lose access until an admin reactivates the account.`
+          }
+          confirmLabel={
+            suspendTarget.status === "suspended" ? "Reactivate" : "Suspend"
+          }
+          confirmClass={
+            suspendTarget.status === "suspended"
+              ? "bg-green-700 hover:bg-green-800"
+              : "bg-amber-600 hover:bg-amber-700"
+          }
+          onCancel={() => setSuspendTarget(null)}
+          onConfirm={confirmSuspendAccount}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmationDialog
+          title={`Remove ${deleteTarget.role.toLowerCase()}?`}
+          message={`This will permanently remove ${deleteTarget.name} from the ${deleteTarget.role.toLowerCase()} management list.`}
+          confirmLabel="Remove"
+          confirmClass="bg-red-600 hover:bg-red-700"
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={confirmDeleteAccount}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConfirmationDialog({
+  title,
+  message,
+  confirmLabel,
+  confirmClass,
+  onCancel,
+  onConfirm,
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-6 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-[0_24px_70px_rgba(0,0,0,0.24)]">
+        <h2 className="font-sans text-xl font-bold text-gray-950">
+          {title}
+        </h2>
+        <p className="mt-2 text-sm text-gray-600">{message}</p>
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="rounded-xl border border-gray-200 px-4 py-2 text-gray-600 hover:bg-gray-100"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`rounded-xl px-4 py-2 text-white ${confirmClass}`}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccountModal({
+  role,
+  formData,
+  editingAccount,
+  onChange,
+  onClose,
+  onRequestSuspend,
+  onSubmit,
+}) {
+  const title = editingAccount ? `Edit ${role}` : `Add ${role}`;
+  const config = roleConfig[role];
+  const showSuspendAction = editingAccount && canSuspendRole(role);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-6 backdrop-blur-sm">
+      <motion.form
+        initial={{ opacity: 0, y: 18, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        onSubmit={onSubmit}
+        className="w-full max-w-xl rounded-2xl border border-gray-200 bg-white p-6 shadow-[0_24px_70px_rgba(0,0,0,0.24)]"
+      >
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div
+              className="flex h-11 w-11 items-center justify-center rounded-xl"
+              style={{ backgroundColor: config.color }}
+            >
+              <config.icon className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="font-sans text-2xl font-bold text-gray-950">
+                {title}
+              </h2>
+              <p className="text-sm text-gray-600">
+                {editingAccount ? "Update account details." : "Create a new managed account."}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-gray-100 p-2 text-gray-700 hover:bg-gray-200"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="block">
+            <span className="mb-2 block text-sm text-gray-600">Full Name</span>
+            <input
+              value={formData.name}
+              onChange={(event) => onChange("name", event.target.value)}
+              className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-gray-950 outline-none focus:border-gray-950"
+              required
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-sm text-gray-600">Email</span>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(event) => onChange("email", event.target.value)}
+              className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-gray-950 outline-none focus:border-gray-950"
+              required
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-sm text-gray-600">Phone</span>
+            <input
+              value={formData.phone}
+              onChange={(event) => onChange("phone", event.target.value)}
+              className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-gray-950 outline-none focus:border-gray-950"
+              required
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-sm text-gray-600">
+              {role === "Partner" ? "Partner Organization" : "Organization"}
+            </span>
+            <input
+              value={formData.organization}
+              onChange={(event) => onChange("organization", event.target.value)}
+              className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-gray-950 outline-none focus:border-gray-950"
+              required
+            />
+          </label>
+
+          {canSuspendRole(role) ? (
+            <div className="md:col-span-2 rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <span className="mb-2 block text-sm text-gray-600">Status</span>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className={`w-fit rounded-full px-3 py-1 text-xs ${getStatusClass(formData.status)}`}>
+                  {formData.status}
+                </span>
+                {showSuspendAction && (
+                  <button
+                    type="button"
+                    onClick={onRequestSuspend}
+                    className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                      formData.status === "suspended"
+                        ? "bg-green-100 text-green-700 hover:bg-green-200"
+                        : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                    }`}
+                  >
+                    {formData.status === "suspended"
+                      ? "Reactivate Account"
+                      : "Suspend Account"}
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <label className="block md:col-span-2">
+              <span className="mb-2 block text-sm text-gray-600">Status</span>
+              <select
+                value={formData.status}
+                onChange={(event) => onChange("status", event.target.value)}
+                className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-gray-950 outline-none focus:border-gray-950"
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </label>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-gray-200 px-4 py-2 text-gray-600 hover:bg-gray-100"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="inline-flex items-center gap-2 rounded-xl bg-gray-950 px-4 py-2 text-white hover:bg-black"
+          >
+            <Save className="h-4 w-4" />
+            Save
+          </button>
+        </div>
+      </motion.form>
     </div>
   );
 }
