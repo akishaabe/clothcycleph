@@ -17,11 +17,24 @@ cd backend
 cp .env.example .env
 ```
 
-2. **Update .env with your database credentials**
+On Windows PowerShell, use:
+```powershell
+Copy-Item .env.example .env
+```
+
+2. **Update `.env` with your own database credentials**
 ```env
 DATABASE_URL=postgresql://username:password@localhost:5432/clothcycle
 JWT_SECRET=your_secret_key_here
 CORS_ORIGIN=http://localhost:5173
+```
+
+Each developer keeps their own `.env`. Do not commit `.env`.
+
+If PostgreSQL was installed on a different port, update the port in `DATABASE_URL`.
+For example:
+```env
+DATABASE_URL=postgresql://postgres:password@localhost:6543/clothcycle
 ```
 
 3. **Install dependencies**
@@ -42,7 +55,51 @@ createdb clothcycle
 npm run dev
 ```
 
+On Windows PowerShell, if `npm` is blocked by script policy, use:
+```powershell
+npm.cmd run dev
+```
+
 Server will run on `http://localhost:5000`
+
+## Team Database Setup
+
+There are two supported ways to run the project as a team.
+
+### Option A: Each member uses a local database
+
+Use this when everyone wants to work offline or avoid changing the same data.
+
+Each member creates their own `.env`:
+```env
+DATABASE_URL=postgresql://postgres:your_password@localhost:your_port/clothcycle
+JWT_SECRET=shared_dev_secret
+CORS_ORIGIN=http://localhost:5173
+```
+
+Then create the database locally:
+```bash
+createdb clothcycle
+```
+
+The backend will create the tables automatically on first run.
+
+### Option B: Everyone uses one shared database
+
+Use this when your group wants to see the same users, submissions, and messages.
+
+Create one PostgreSQL database using a hosted provider such as Supabase, Neon, Render, Railway, or a school-hosted Postgres server. Put the same shared URL in each member's local `.env`:
+```env
+DATABASE_URL=postgresql://username:password@host:5432/clothcycle?sslmode=require
+JWT_SECRET=shared_dev_secret
+CORS_ORIGIN=http://localhost:5173
+```
+
+Important:
+- Do not put the real shared database password in `.env.example`, README, or commits.
+- Share the real `DATABASE_URL` privately through your group chat or password manager.
+- Use the same `JWT_SECRET` for everyone if you want login tokens to work across machines.
+- Keep `CORS_ORIGIN` as each member's frontend URL, usually `http://localhost:5173`.
 
 ## 📁 Project Structure
 

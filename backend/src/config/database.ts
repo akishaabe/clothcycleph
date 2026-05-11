@@ -3,9 +3,13 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const databaseUrl = process.env.DATABASE_URL;
+const requiresSsl =
+  process.env.NODE_ENV === 'production' || databaseUrl?.includes('sslmode=require');
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  connectionString: databaseUrl,
+  ssl: requiresSsl ? { rejectUnauthorized: false } : false,
 });
 
 pool.on('error', (err) => {

@@ -1,35 +1,43 @@
 erDiagram
     USERS {
-        UUID user_id PK
-        TEXT name
-        TEXT email
-        TEXT password_hash
-        TEXT role
-        TEXT status
-        TEXT phone
-        TEXT address
+        UUID id PK
+        VARCHAR email UK
+        VARCHAR name
+        VARCHAR password_hash
+        VARCHAR role
+        VARCHAR status
+        UUID partner_id FK
+        VARCHAR avatar_url
         JSON profile_photo
+        TEXT bio
+        VARCHAR phone
+        TEXT address
         DATETIME terms_accepted_at
+        DATETIME last_login_at
         DATETIME created_at
         DATETIME updated_at
-        DATETIME last_login_at
     }
 
-    PARTNER_PROFILES {
-        UUID partner_profile_id PK
-        UUID user_id FK
-        TEXT organization_name
-        TEXT contact_person
-        TEXT location
+    PARTNERS {
+        UUID id PK
+        VARCHAR name
+        TEXT description
+        VARCHAR logo_url
+        VARCHAR email UK
+        VARCHAR phone
+        TEXT address
+        VARCHAR website
         TEXT service_types
-        TEXT status
+        VARCHAR contact_person
+        VARCHAR status
         BOOLEAN verified
+        DECIMAL rating
         DATETIME created_at
         DATETIME updated_at
     }
 
     USER_PREFERENCES {
-        UUID preference_id PK
+        UUID id PK
         UUID user_id FK
         BOOLEAN email_notifications
         BOOLEAN push_notifications
@@ -39,23 +47,28 @@ erDiagram
     }
 
     SUBMISSIONS {
-        UUID submission_id PK
+        UUID id PK
         UUID user_id FK
-        UUID partner_profile_id FK
-        TEXT submission_code
-        TEXT service_type
-        TEXT submission_status
+        VARCHAR item_type
+        VARCHAR condition
+        VARCHAR fabric
+        VARCHAR cleanliness
+        TEXT description
+        JSON photos
+        VARCHAR status
+        UUID assigned_partner_id FK
+        VARCHAR submission_code UK
+        VARCHAR service_type
         INTEGER quantity
         BOOLEAN buyback_interest
-        TEXT description
-        TEXT action
+        VARCHAR action
+        DATETIME scheduled_at
         DATETIME created_at
         DATETIME updated_at
-        DATETIME scheduled_at
     }
 
     SUBMISSION_DETAILS {
-        UUID detail_id PK
+        UUID id PK
         UUID submission_id FK
         TEXT item_types
         TEXT other_item_type
@@ -67,10 +80,12 @@ erDiagram
         TEXT brand
         BOOLEAN no_brand_visible
         TEXT fabric_description
+        DATETIME created_at
+        DATETIME updated_at
     }
 
     BURN_TESTS {
-        UUID burn_test_id PK
+        UUID id PK
         UUID submission_id FK
         BOOLEAN performed
         INTEGER page
@@ -79,67 +94,117 @@ erDiagram
         TEXT no_flame
         TEXT smell
         TEXT ashes
+        DATETIME created_at
+        DATETIME updated_at
     }
 
     SUBMISSION_IMAGES {
-        UUID image_id PK
+        UUID id PK
         UUID submission_id FK
         TEXT url
+        TEXT storage_key
         JSON metadata
         DATETIME uploaded_at
     }
 
-    RECOMMENDATIONS {
-        UUID recommendation_id PK
+    TRANSACTIONS {
+        UUID id PK
         UUID submission_id FK
-        UUID partner_profile_id FK
-        TEXT recommended_pathway
+        UUID from_user_id FK
+        UUID to_partner_id FK
+        VARCHAR type
+        TEXT notes
+        DATETIME created_at
+        DATETIME updated_at
+    }
+
+    RECOMMENDATION_RUNS {
+        UUID id PK
+        UUID submission_id FK
+        UUID requested_by_user_id FK
+        VARCHAR engine_name
+        VARCHAR engine_version
+        VARCHAR status
+        JSON criteria
+        JSON input_snapshot
+        DATETIME started_at
+        DATETIME completed_at
+        TEXT error_message
+        DATETIME created_at
+    }
+
+    RECOMMENDATION_RESULTS {
+        UUID id PK
+        UUID run_id FK
+        UUID submission_id FK
+        UUID partner_id FK
+        VARCHAR recommended_pathway
+        INTEGER rank
+        DECIMAL score
+        DECIMAL confidence
+        TEXT explanation
         TEXT details
+        JSON output_payload
+        BOOLEAN selected
         DATETIME generated_at
     }
 
-    NOTIFICATIONS {
-        UUID notification_id PK
+    RECOMMENDATION_FEEDBACK {
+        UUID id PK
+        UUID recommendation_result_id FK
         UUID user_id FK
-        TEXT title
+        INTEGER rating
+        BOOLEAN accepted
+        TEXT feedback
+        DATETIME created_at
+    }
+
+    NOTIFICATIONS {
+        UUID id PK
+        UUID user_id FK
+        VARCHAR type
+        VARCHAR title
         TEXT message
-        TEXT notification_type
-        BOOLEAN is_read
+        UUID related_id
+        BOOLEAN read
         DATETIME created_at
     }
 
     ACTIVITY_LOGS {
-        UUID log_id PK
+        UUID id PK
         UUID user_id FK
-        TEXT action
-        TEXT entity_type
+        VARCHAR action
+        VARCHAR entity_type
         UUID entity_id
-        TEXT details
+        JSON details
         DATETIME created_at
     }
 
     CONVERSATIONS {
-        UUID conversation_id PK
+        UUID id PK
         UUID user_id FK
-        UUID partner_profile_id FK
-        TEXT conversation_type
+        UUID partner_id FK
+        VARCHAR conversation_type
         TEXT subject
-        TEXT status
+        VARCHAR status
         UUID related_submission_id FK
+        DATETIME created_at
         DATETIME updated_at
     }
 
     MESSAGES {
-        UUID message_id PK
+        UUID id PK
+        UUID from_user_id FK
+        UUID to_user_id FK
         UUID conversation_id FK
-        UUID sender_user_id FK
-        TEXT sender_type
-        TEXT body
+        VARCHAR sender_type
+        TEXT content
+        BOOLEAN read
         DATETIME created_at
     }
 
     MESSAGE_ATTACHMENTS {
-        UUID attachment_id PK
+        UUID id PK
         UUID message_id FK
         TEXT filename
         TEXT url
@@ -147,19 +212,29 @@ erDiagram
         DATETIME uploaded_at
     }
 
-    USERS ||--o{ PARTNER_PROFILES : owns
-    USERS ||--o{ SUBMISSIONS : creates
-    USERS ||--o{ NOTIFICATIONS : receives
-    USERS ||--o{ ACTIVITY_LOGS : records
+    PARTNERS ||--o{ USERS : owns_partner_users
     USERS ||--o{ USER_PREFERENCES : controls
-    USERS ||--o{ CONVERSATIONS : participates
-    PARTNER_PROFILES ||--o{ SUBMISSIONS : assigned_to
-    PARTNER_PROFILES ||--o{ RECOMMENDATIONS : provides
-    PARTNER_PROFILES ||--o{ CONVERSATIONS : participates
-    SUBMISSIONS ||--|| SUBMISSION_DETAILS : contains
+    USERS ||--o{ SUBMISSIONS : creates
+    PARTNERS ||--o{ SUBMISSIONS : assigned_to
+    SUBMISSIONS ||--|| SUBMISSION_DETAILS : has
     SUBMISSIONS ||--o{ BURN_TESTS : has
     SUBMISSIONS ||--o{ SUBMISSION_IMAGES : has
-    SUBMISSIONS ||--o{ RECOMMENDATIONS : generates
+    SUBMISSIONS ||--o{ TRANSACTIONS : has
+    USERS ||--o{ TRANSACTIONS : starts
+    PARTNERS ||--o{ TRANSACTIONS : receives
+    SUBMISSIONS ||--o{ RECOMMENDATION_RUNS : evaluated_by
+    USERS ||--o{ RECOMMENDATION_RUNS : requests
+    RECOMMENDATION_RUNS ||--o{ RECOMMENDATION_RESULTS : produces
+    SUBMISSIONS ||--o{ RECOMMENDATION_RESULTS : receives
+    PARTNERS ||--o{ RECOMMENDATION_RESULTS : ranked_in
+    RECOMMENDATION_RESULTS ||--o{ RECOMMENDATION_FEEDBACK : receives
+    USERS ||--o{ RECOMMENDATION_FEEDBACK : gives
+    USERS ||--o{ NOTIFICATIONS : receives
+    USERS ||--o{ ACTIVITY_LOGS : records
+    USERS ||--o{ CONVERSATIONS : participates
+    PARTNERS ||--o{ CONVERSATIONS : participates
     SUBMISSIONS ||--o{ CONVERSATIONS : relates_to
-    CONVERSATIONS ||--o{ MESSAGES : holds
+    USERS ||--o{ MESSAGES : sends
+    USERS ||--o{ MESSAGES : receives
+    CONVERSATIONS ||--o{ MESSAGES : contains
     MESSAGES ||--o{ MESSAGE_ATTACHMENTS : includes
