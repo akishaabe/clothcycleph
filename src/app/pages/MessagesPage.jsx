@@ -122,6 +122,8 @@ const formatMessageTime = (value) => {
   }).format(new Date(value));
 };
 
+const normalizeEmail = (email) => email?.trim().toLowerCase() ?? "";
+
 export function MessagesPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -157,8 +159,22 @@ export function MessagesPage() {
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
   const canAccessMessages = isAuthenticated || isPreview;
-  const activeConversations = isPreview ? previewConversations : conversations;
-  const activeContacts = isPreview ? previewContacts : contacts;
+  const isCurrentUserId = (id) => Boolean(currentUser?.id && id === currentUser.id);
+  const isCurrentUserEmail = (email) =>
+    Boolean(
+      currentUser?.email &&
+        normalizeEmail(email) === normalizeEmail(currentUser.email)
+    );
+  const activeConversations = (
+    isPreview ? previewConversations : conversations
+  ).filter(
+    (conversation) =>
+      !isCurrentUserId(conversation.other_user_id) &&
+      !isCurrentUserEmail(conversation.other_user_email)
+  );
+  const activeContacts = (isPreview ? previewContacts : contacts).filter(
+    (contact) => !isCurrentUserId(contact.id) && !isCurrentUserEmail(contact.email)
+  );
   const activeMessages = isPreview
     ? previewThreadMessages[activeUserId] || []
     : messages;
@@ -243,6 +259,14 @@ export function MessagesPage() {
   }, [activeUserId, activeConversations]);
 
   useEffect(() => {
+    if (!activeUserId || activeUserId !== currentUser?.id) {
+      return;
+    }
+
+    setActiveUserId(activeConversations[0]?.other_user_id ?? null);
+  }, [activeUserId, activeConversations, currentUser?.id]);
+
+  useEffect(() => {
     if (!activeUserId || isPreview) {
       return;
     }
@@ -276,12 +300,22 @@ export function MessagesPage() {
     }
 
     setSendError("");
+    const recipientId = activeParticipant?.id || activeUserId;
+
+    if (
+      !recipientId ||
+      isCurrentUserId(recipientId) ||
+      isCurrentUserEmail(activeParticipant?.email)
+    ) {
+      setSendError("Choose a partner, user, or admin before sending.");
+      return;
+    }
 
     if (isPreview) {
       const nextMessage = {
         id: `preview-message-${Date.now()}`,
         from_user_id: previewUser.id,
-        to_user_id: activeUserId,
+        to_user_id: recipientId,
         content,
         read: true,
         created_at: new Date().toISOString(),
@@ -296,7 +330,7 @@ export function MessagesPage() {
     }
 
     try {
-      await sendMessage(activeUserId, content);
+      await sendMessage(recipientId, content);
       setDraft("");
       setSelectedFile(null);
       if (fileInputRef.current) {

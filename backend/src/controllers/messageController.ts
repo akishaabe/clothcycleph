@@ -97,6 +97,10 @@ export const getMessages = async (req: Request, res: Response) => {
       throw new AppError(401, 'User not authenticated');
     }
 
+    if (userId === currentUserId) {
+      throw new AppError(400, 'You cannot open a conversation with yourself');
+    }
+
     await query(
       `UPDATE messages
        SET read = true
@@ -138,7 +142,8 @@ export const getConversations = async (req: Request, res: Response) => {
              ELSE m.from_user_id
            END AS other_user_id
          FROM messages m
-         WHERE m.from_user_id = $1 OR m.to_user_id = $1
+         WHERE (m.from_user_id = $1 OR m.to_user_id = $1)
+           AND m.from_user_id <> m.to_user_id
        ),
        ranked_messages AS (
          SELECT
@@ -168,6 +173,7 @@ export const getConversations = async (req: Request, res: Response) => {
          GROUP BY from_user_id
        ) unread ON unread.from_user_id = rm.other_user_id
        WHERE rm.row_number = 1
+         AND rm.other_user_id <> $1
        ORDER BY rm.created_at DESC`,
       [userId]
     );

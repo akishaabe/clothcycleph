@@ -20,22 +20,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize from localStorage on mount
+  // Initialize from the token-backed profile, not the cached user object.
   useEffect(() => {
     let isMounted = true;
 
     const initializeAuth = async () => {
       const storedToken = localStorage.getItem('auth_token');
-      const storedUser = localStorage.getItem('user');
 
-      if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-
+      if (storedToken) {
         try {
           const response = await authService.getProfile();
 
           if (isMounted) {
+            setToken(storedToken);
             setUser(response.data);
             localStorage.setItem('user', JSON.stringify(response.data));
           }
@@ -95,10 +92,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const value = {
-    user,
-    token,
-    isLoading,
-    isAuthenticated: !!token,
+      user,
+      token,
+      isLoading,
+    isAuthenticated: !!token && !!user && !isLoading,
     login,
     signup,
     logout,
