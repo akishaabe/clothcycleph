@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  getMessageContacts,
   sendMessage,
   getMessages,
   getConversations,
@@ -11,6 +12,7 @@ const router = Router();
 
 // All message routes require authentication
 router.post('/', authMiddleware, sendMessage);
+router.get('/contacts', authMiddleware, getMessageContacts);
 router.get('/conversations', authMiddleware, getConversations);
 router.get('/:userId', authMiddleware, getMessages);
 router.put('/:id/read', authMiddleware, markMessageAsRead);

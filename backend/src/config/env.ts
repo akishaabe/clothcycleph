@@ -2,6 +2,11 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 export const config = {
   server: {
     port: parseInt(process.env.PORT || '5000', 10),
@@ -15,7 +20,7 @@ export const config = {
     expiresIn: '7d',
   },
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origins: corsOrigins,
   },
   r2: {
     accountId: process.env.R2_ACCOUNT_ID,

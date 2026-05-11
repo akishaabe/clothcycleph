@@ -10,6 +10,7 @@ import {
   Message,
   SendMessagePayload,
   Conversation,
+  MessageContact,
 } from '../types/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -144,6 +145,12 @@ export const submissionService = {
 // ============= MESSAGE ENDPOINTS =============
 
 export const messageService = {
+  async getContacts(): Promise<{ data: MessageContact[]; count: number }> {
+    return fetchWithAuth('/messages/contacts', {
+      method: 'GET',
+    });
+  },
+
   async sendMessage(payload: SendMessagePayload): Promise<{ message: string; data: Message }> {
     return fetchWithAuth('/messages', {
       method: 'POST',

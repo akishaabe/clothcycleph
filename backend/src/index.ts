@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { createServer } from 'http';
 import { config } from './config/env.js';
 import { initializeDatabase } from './models/schema.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -7,14 +8,30 @@ import authRoutes from './routes/auth.js';
 import submissionRoutes from './routes/submissions.js';
 import messageRoutes from './routes/messages.js';
 import uploadRoutes from './routes/upload.js';
+import { initializeSocketServer } from './services/socketService.js';
 
 const app = express();
+const httpServer = createServer(app);
 let databaseStatus: 'starting' | 'connected' | 'error' = 'starting';
 
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors({ origin: config.cors.origin }));
+app.use(
+  cors({
+    origin(
+      origin: string | undefined,
+      callback: (error: Error | null, allow?: boolean) => void
+    ) {
+      if (!origin || isAllowedCorsOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS blocked origin: ${origin}`));
+    },
+  })
+);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -45,10 +62,26 @@ app.use(errorHandler);
 async function startServer() {
   const PORT = config.server.port;
 
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-    console.log(`Environment: ${config.server.env}`);
-  });
+  initializeSocketServer(httpServer);
+
+  try {
+    await listen(PORT);
+  } catch (error) {
+    const serverError = error as NodeJS.ErrnoException;
+
+    if (serverError.code === 'EADDRINUSE') {
+      console.error(
+        `Port ${PORT} is already in use. Stop the other backend process or set a different PORT in backend/.env.`
+      );
+    } else {
+      console.error('Failed to start HTTP server:', error);
+    }
+
+    process.exit(1);
+  }
+
+  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Environment: ${config.server.env}`);
 
   try {
     await initializeDatabase();
@@ -58,6 +91,36 @@ async function startServer() {
     databaseStatus = 'error';
     console.error('Database initialization failed:', error);
   }
+}
+
+function listen(port: number) {
+  return new Promise<void>((resolve, reject) => {
+    const onError = (error: Error) => {
+      httpServer.off('listening', onListening);
+      reject(error);
+    };
+
+    const onListening = () => {
+      httpServer.off('error', onError);
+      resolve();
+    };
+
+    httpServer.once('error', onError);
+    httpServer.once('listening', onListening);
+    httpServer.listen(port);
+  });
+}
+
+function isAllowedCorsOrigin(origin: string) {
+  if (config.cors.origins.includes(origin)) {
+    return true;
+  }
+
+  if (config.server.env === 'development') {
+    return /^http:\/\/(localhost|127\.0\.0\.1):517\d$/.test(origin);
+  }
+
+  return false;
 }
 
 startServer();

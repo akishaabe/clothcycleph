@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { motion } from "motion/react";
-import { Recycle, Users, Package, TrendingUp, CheckCircle, XCircle, Bell, User, BarChart3, Settings, LogOut, MessageSquare } from "lucide-react";
+import { Recycle, Package, Clock, CheckCircle, XCircle, Bell, User, BarChart3, Settings, LogOut, MessageSquare } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const platformData = [
@@ -107,11 +107,10 @@ export function PartnerDashboard() {
         </motion.div>
 
         {/* Metrics */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
           {[
-            { icon: Users, label: "Total Users", value: "1,450", change: "+12%", color: "#4f6f9f" },
             { icon: Package, label: "Active Requests", value: "23", change: "+5", color: "#8aa6c8" },
-            { icon: TrendingUp, label: "Partner Activity", value: "87%", change: "+3%", color: "#3f5f8f" },
+            { icon: Clock, label: "Pending Requests", value: "12", change: "+2", color: "#3f5f8f" },
             { icon: BarChart3, label: "Total Submissions", value: "750", change: "+8%", color: "#6b93b8" }
           ].map((metric, index) => (
             <motion.div

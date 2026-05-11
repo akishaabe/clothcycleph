@@ -9,19 +9,40 @@ import {
 } from "lucide-react";
 
 import { useState } from "react";
+import { useAuth } from "../../context/AuthContext";
 
 import "./LoginPage.css";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
+    setIsSubmitting(true);
 
-    navigate("/dashboard");
+    try {
+      await login(email, password);
+      const storedUser = JSON.parse(localStorage.getItem("user") || "null");
+
+      if (storedUser?.role === "partner") {
+        navigate("/partner");
+      } else if (storedUser?.role === "admin") {
+        navigate("/admin");
+      } else {
+        navigate("/dashboard");
+      }
+    } catch (err) {
+      setError(err.message || "Unable to log in");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -159,6 +180,12 @@ export function LoginPage() {
               onSubmit={handleSubmit}
               className="space-y-6"
             >
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+
               {/* Email */}
               <div>
                 <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
@@ -312,6 +339,7 @@ export function LoginPage() {
               {/* Login Button */}
               <button
                 type="submit"
+                disabled={isSubmitting}
                 className="
                   w-full
                   py-4
@@ -323,9 +351,11 @@ export function LoginPage() {
                   hover:shadow-2xl
                   hover:scale-[1.02]
                   font-medium
+                  disabled:cursor-not-allowed
+                  disabled:opacity-60
                 "
               >
-                Log In
+                {isSubmitting ? "Logging in..." : "Log In"}
               </button>
             </form>
 

@@ -81,9 +81,24 @@ export interface SendMessagePayload {
   content: string;
 }
 
+export interface MessageContact {
+  id: string;
+  name: string;
+  email: string;
+  role: 'user' | 'partner' | 'admin';
+  avatar_url?: string;
+}
+
 export interface Conversation {
   other_user_id: string;
+  other_user_name: string;
+  other_user_email: string;
+  other_user_role: 'user' | 'partner' | 'admin';
+  other_user_avatar_url?: string;
+  last_message_content: string;
+  last_message_from_user_id: string;
   last_message_time: string;
+  unread_count: number;
 }
 
 // File upload types

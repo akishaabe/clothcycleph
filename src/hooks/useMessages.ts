@@ -1,15 +1,61 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { messageService } from '../services/api';
-import { Message, Conversation } from '../types/api';
+import { Message, Conversation, MessageContact } from '../types/api';
+import { disconnectSocket, getSocket } from '../services/socket';
 
 export function useMessages() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [contacts, setContacts] = useState<MessageContact[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeThreadUserId, setActiveThreadUserId] = useState<string | null>(null);
 
-  const fetchConversations = async () => {
-    setIsLoading(true);
+  useEffect(() => {
+    const socket = getSocket();
+
+    if (!socket) {
+      return undefined;
+    }
+
+    const handleMessageCreated = (message: Message) => {
+      setMessages((current) => {
+        const isActiveThread =
+          activeThreadUserId &&
+          (message.from_user_id === activeThreadUserId ||
+            message.to_user_id === activeThreadUserId);
+
+        if (!isActiveThread || current.some((item) => item.id === message.id)) {
+          return current;
+        }
+
+        return [...current, message];
+      });
+
+      fetchConversations({ silent: true });
+    };
+
+    socket.on('message:created', handleMessageCreated);
+
+    return () => {
+      socket.off('message:created', handleMessageCreated);
+    };
+  }, [activeThreadUserId]);
+
+  const fetchContacts = async () => {
+    setError(null);
+    try {
+      const response = await messageService.getContacts();
+      setContacts(response.data);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const fetchConversations = async (options: { silent?: boolean } = {}) => {
+    if (!options.silent) {
+      setIsLoading(true);
+    }
     setError(null);
     try {
       const response = await messageService.getConversations();
@@ -17,11 +63,14 @@ export function useMessages() {
     } catch (err) {
       setError((err as Error).message);
     } finally {
-      setIsLoading(false);
+      if (!options.silent) {
+        setIsLoading(false);
+      }
     }
   };
 
   const fetchMessages = async (userId: string) => {
+    setActiveThreadUserId(userId);
     setIsLoading(true);
     setError(null);
     try {
@@ -41,7 +90,13 @@ export function useMessages() {
         to_user_id: toUserId,
         content,
       });
-      setMessages([...messages, response.data]);
+      setMessages((current) => {
+        if (current.some((item) => item.id === response.data.id)) {
+          return current;
+        }
+
+        return [...current, response.data];
+      });
       return response.data;
     } catch (err) {
       setError((err as Error).message);
@@ -65,11 +120,14 @@ export function useMessages() {
   return {
     messages,
     conversations,
+    contacts,
     isLoading,
     error,
+    fetchContacts,
     fetchConversations,
     fetchMessages,
     sendMessage,
     markAsRead,
+    disconnectSocket,
   };
 }

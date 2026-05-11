@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -13,76 +13,9 @@ import {
   X,
   UserRound,
 } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
+import { useMessages } from "../../hooks/useMessages";
 import "./MessagesPage.css";
-
-const conversations = [
-  {
-    id: 1,
-    name: "Green Loom Partners",
-    role: "Donation Partner",
-    channel: "Submission SUB-047",
-    preview: "We can receive the sorted cotton shirts tomorrow afternoon.",
-    time: "9:42 AM",
-    unread: 2,
-    status: "Online",
-    messages: [
-      {
-        from: "partner",
-        body: "Hi Akisha, we reviewed SUB-047. The cotton shirts are accepted for donation.",
-        time: "9:18 AM",
-      },
-      {
-        from: "me",
-        body: "Great. Do you need them packed by color or by item type?",
-        time: "9:26 AM",
-      },
-      {
-        from: "partner",
-        body: "By item type is enough. Please keep damaged pieces in a separate bag.",
-        time: "9:42 AM",
-      },
-    ],
-  },
-  {
-    id: 2,
-    name: "Circular Weaves Hub",
-    role: "Recycling Partner",
-    channel: "Pickup coordination",
-    preview: "Please confirm the pickup window and estimated item count.",
-    time: "Yesterday",
-    unread: 0,
-    status: "Away",
-    messages: [
-      {
-        from: "partner",
-        body: "We have an available pickup window on Friday between 2 PM and 5 PM.",
-        time: "Yesterday",
-      },
-      {
-        from: "me",
-        body: "That works. The batch has around 24 textile items.",
-        time: "Yesterday",
-      },
-    ],
-  },
-  {
-    id: 3,
-    name: "Admin Support",
-    role: "ClothCycle Team",
-    channel: "Account support",
-    preview: "Your partner conversation history is now synced.",
-    time: "May 6",
-    unread: 0,
-    status: "Online",
-    messages: [
-      {
-        from: "partner",
-        body: "Your partner conversation history is now synced across devices.",
-        time: "May 6",
-      },
-    ],
-  },
-];
 
 const themeDetails = {
   default: {
@@ -102,24 +35,308 @@ const themeDetails = {
   },
 };
 
+const roleLabel = {
+  user: "ClothCycle User",
+  partner: "Partner",
+  admin: "ClothCycle Team",
+};
+
+const previewUser = {
+  id: "preview-user",
+  name: "Preview User",
+  email: "preview@clothcycle.ph",
+  role: "user",
+};
+
+const getThemeForRole = (role) => {
+  if (role === "partner" || role === "admin") {
+    return role;
+  }
+
+  return "default";
+};
+
+const previewContacts = [
+  {
+    id: "preview-admin",
+    name: "Admin Support",
+    email: "support@clothcycle.ph",
+    role: "admin",
+  },
+];
+
+const previewConversations = [
+  {
+    other_user_id: "preview-partner",
+    other_user_name: "Green Loom Partners",
+    other_user_email: "partner@greenloom.ph",
+    other_user_role: "partner",
+    other_user_avatar_url: "",
+    last_message_content: "We can receive the sorted cotton shirts tomorrow afternoon.",
+    last_message_from_user_id: "preview-partner",
+    last_message_time: new Date().toISOString(),
+    unread_count: 2,
+  },
+];
+
+const previewInitialMessages = {
+  "preview-partner": [
+    {
+      id: "preview-message-1",
+      from_user_id: "preview-partner",
+      to_user_id: "preview-user",
+      content: "Hi, we reviewed your textile submission. The cotton shirts are accepted for donation.",
+      read: true,
+      created_at: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
+    },
+    {
+      id: "preview-message-2",
+      from_user_id: "preview-user",
+      to_user_id: "preview-partner",
+      content: "Great. Do you need them packed by color or by item type?",
+      read: true,
+      created_at: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
+    },
+    {
+      id: "preview-message-3",
+      from_user_id: "preview-partner",
+      to_user_id: "preview-user",
+      content: "By item type is enough. Please keep damaged pieces in a separate bag.",
+      read: false,
+      created_at: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+    },
+  ],
+  "preview-admin": [],
+};
+
+const formatMessageTime = (value) => {
+  if (!value) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+};
+
 export function MessagesPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedTheme = searchParams.get("theme");
-  const messagesTheme = ["partner", "admin"].includes(requestedTheme)
-    ? requestedTheme
-    : "default";
+  const isPreview = searchParams.get("preview") === "true";
+  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const currentUser = isPreview ? previewUser : user;
+  const messagesTheme = isPreview
+    ? ["partner", "admin"].includes(requestedTheme)
+      ? requestedTheme
+      : "default"
+    : getThemeForRole(currentUser?.role);
   const details = themeDetails[messagesTheme];
-  const [activeId, setActiveId] = useState(conversations[0].id);
+  const {
+    messages,
+    conversations,
+    contacts,
+    isLoading,
+    error,
+    fetchContacts,
+    fetchConversations,
+    fetchMessages,
+    sendMessage,
+  } = useMessages();
+  const [activeUserId, setActiveUserId] = useState(null);
+  const [draft, setDraft] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
-  const fileInputRef = useRef(null);
-  const activeConversation = useMemo(
-    () => conversations.find((conversation) => conversation.id === activeId),
-    [activeId]
+  const [sendError, setSendError] = useState("");
+  const [previewThreadMessages, setPreviewThreadMessages] = useState(
+    previewInitialMessages
   );
+  const fileInputRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const canAccessMessages = isAuthenticated || isPreview;
+  const activeConversations = isPreview ? previewConversations : conversations;
+  const activeContacts = isPreview ? previewContacts : contacts;
+  const activeMessages = isPreview
+    ? previewThreadMessages[activeUserId] || []
+    : messages;
+
+  const conversationUserIds = useMemo(
+    () =>
+      new Set(
+        activeConversations.map((conversation) => conversation.other_user_id)
+      ),
+    [activeConversations]
+  );
+
+  const contactById = useMemo(() => {
+    const entries = activeContacts.map((contact) => [contact.id, contact]);
+    return new Map(entries);
+  }, [activeContacts]);
+
+  const activeConversation = useMemo(
+    () =>
+      activeConversations.find(
+        (conversation) => conversation.other_user_id === activeUserId
+      ),
+    [activeUserId, activeConversations]
+  );
+
+  const activeContact = activeUserId ? contactById.get(activeUserId) : null;
+  const activeParticipant = activeConversation
+    ? {
+        id: activeConversation.other_user_id,
+        name: activeConversation.other_user_name,
+        email: activeConversation.other_user_email,
+        role: activeConversation.other_user_role,
+        avatar_url: activeConversation.other_user_avatar_url,
+      }
+    : activeContact;
+
+  const starterContacts = activeContacts.filter(
+    (contact) => !conversationUserIds.has(contact.id)
+  );
+
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const visibleConversations = activeConversations.filter((conversation) =>
+    [
+      conversation.other_user_name,
+      conversation.other_user_email,
+      conversation.other_user_role,
+      conversation.last_message_content,
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedSearch)
+  );
+  const visibleStarterContacts = starterContacts.filter((contact) =>
+    [contact.name, contact.email, contact.role]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedSearch)
+  );
+
   const selectedFileSize = selectedFile
     ? `${Math.max(selectedFile.size / 1024, 1).toFixed(0)} KB`
     : "";
+
+  const isMessageFromCurrentUser = (message) =>
+    Boolean(currentUser?.id && message.from_user_id === currentUser.id);
+
+  useEffect(() => {
+    if (!isAuthenticated || isPreview) {
+      return;
+    }
+
+    fetchContacts();
+    fetchConversations();
+  }, [isAuthenticated, isPreview]);
+
+  useEffect(() => {
+    if (activeUserId || activeConversations.length === 0) {
+      return;
+    }
+
+    setActiveUserId(activeConversations[0].other_user_id);
+  }, [activeUserId, activeConversations]);
+
+  useEffect(() => {
+    if (!activeUserId || isPreview) {
+      return;
+    }
+
+    fetchMessages(activeUserId);
+  }, [activeUserId, isPreview]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !activeUserId || isPreview) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      fetchConversations();
+      fetchMessages(activeUserId);
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeUserId, isAuthenticated, isPreview]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [activeMessages, activeUserId]);
+
+  const handleSend = async (event) => {
+    event.preventDefault();
+    const content = draft.trim();
+
+    if (!activeUserId || !content) {
+      return;
+    }
+
+    setSendError("");
+
+    if (isPreview) {
+      const nextMessage = {
+        id: `preview-message-${Date.now()}`,
+        from_user_id: previewUser.id,
+        to_user_id: activeUserId,
+        content,
+        read: true,
+        created_at: new Date().toISOString(),
+      };
+
+      setPreviewThreadMessages((current) => ({
+        ...current,
+        [activeUserId]: [...(current[activeUserId] || []), nextMessage],
+      }));
+      setDraft("");
+      return;
+    }
+
+    try {
+      await sendMessage(activeUserId, content);
+      setDraft("");
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      await fetchConversations();
+    } catch (err) {
+      setSendError(err.message || "Failed to send message");
+    }
+  };
+
+  if (isAuthLoading && !isPreview) {
+    return (
+      <div className={`messages-page messages-theme-${messagesTheme} app-darkable-page flex min-h-screen items-center justify-center`}>
+        <p className="messages-muted text-lg">Loading messages...</p>
+      </div>
+    );
+  }
+
+  if (!canAccessMessages) {
+    return (
+      <div className={`messages-page messages-theme-${messagesTheme} app-darkable-page flex min-h-screen items-center justify-center p-6`}>
+        <div className="messages-shell w-full max-w-md rounded-2xl border p-8 text-center">
+          <UserRound className="messages-brand-icon mx-auto mb-4 h-12 w-12" />
+          <h1 className="messages-heading font-sans text-2xl font-bold">
+            Log in to use messages
+          </h1>
+          <p className="messages-muted mt-2">
+            Messages are connected to your ClothCycle account so users and partners can coordinate safely.
+          </p>
+          <button
+            onClick={() => navigate("/login")}
+            className="messages-send mt-6 rounded-xl px-5 py-3 font-semibold"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`messages-page messages-theme-${messagesTheme} app-darkable-page min-h-screen`}>
@@ -146,10 +363,23 @@ export function MessagesPage() {
         <section className="messages-shell grid min-h-[820px] overflow-hidden rounded-[28px] border shadow-[0_18px_54px_rgba(25,34,29,0.1)] lg:grid-cols-[470px_1fr]">
           <aside className="messages-sidebar border-r">
             <div className="border-b p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h1 className="messages-heading font-sans text-2xl font-bold">
+                    {details.label}
+                  </h1>
+                  <p className="messages-muted mt-1 text-sm">
+                    Signed in as {currentUser?.name} ({roleLabel[currentUser?.role]})
+                  </p>
+                </div>
+                <details.icon className="messages-brand-icon h-8 w-8" />
+              </div>
               <div className="messages-search flex items-center gap-4 rounded-2xl border px-6 py-5">
                 <Search className="h-6 w-6" />
                 <input
                   type="text"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Search conversations"
                   className="w-full bg-transparent text-lg outline-none"
                 />
@@ -157,134 +387,226 @@ export function MessagesPage() {
             </div>
 
             <div className="divide-y">
-              {conversations.map((conversation) => (
+              {visibleConversations.map((conversation) => (
                 <button
-                  key={conversation.id}
-                  onClick={() => setActiveId(conversation.id)}
+                  key={conversation.other_user_id}
+                  onClick={() => setActiveUserId(conversation.other_user_id)}
                   className={`messages-thread flex w-full gap-4 p-5 text-left transition-colors ${
-                    conversation.id === activeId ? "is-active" : ""
+                    conversation.other_user_id === activeUserId ? "is-active" : ""
                   }`}
                 >
                   <div className="messages-avatar flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-xl">
-                    {conversation.name.charAt(0)}
+                    {conversation.other_user_name.charAt(0)}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-3">
                       <h2 className="truncate font-sans text-lg font-bold messages-heading">
-                        {conversation.name}
+                        {conversation.other_user_name}
                       </h2>
-                      <span className="shrink-0 text-base messages-muted">
-                        {conversation.time}
+                      <span className="shrink-0 text-sm messages-muted">
+                        {formatMessageTime(conversation.last_message_time)}
                       </span>
                     </div>
                     <p className="mt-1 text-base messages-muted">
-                      {conversation.channel}
+                      {roleLabel[conversation.other_user_role]}
                     </p>
                     <p className="mt-3 truncate text-lg messages-preview">
-                      {conversation.preview}
+                      {conversation.last_message_content}
                     </p>
                   </div>
-                  {conversation.unread > 0 && (
+                  {Number(conversation.unread_count) > 0 && (
                     <span className="messages-unread mt-1 flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-base font-bold">
-                      {conversation.unread}
+                      {conversation.unread_count}
                     </span>
                   )}
                 </button>
               ))}
+
+              {visibleStarterContacts.length > 0 && (
+                <div className="p-4">
+                  <p className="messages-muted px-1 pb-3 text-sm font-semibold">
+                    Start a conversation
+                  </p>
+                  <div className="space-y-2">
+                    {visibleStarterContacts.map((contact) => (
+                      <button
+                        key={contact.id}
+                        onClick={() => setActiveUserId(contact.id)}
+                        className={`messages-thread flex w-full gap-4 rounded-2xl p-4 text-left transition-colors ${
+                          contact.id === activeUserId ? "is-active" : ""
+                        }`}
+                      >
+                        <div className="messages-avatar flex h-12 w-12 shrink-0 items-center justify-center rounded-xl">
+                          {contact.name.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <h2 className="truncate font-sans font-bold messages-heading">
+                            {contact.name}
+                          </h2>
+                          <p className="truncate text-sm messages-muted">
+                            {roleLabel[contact.role]} - {contact.email}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!isLoading &&
+                visibleConversations.length === 0 &&
+                visibleStarterContacts.length === 0 && (
+                  <div className="messages-muted p-6 text-center">
+                    No matching conversations or contacts.
+                  </div>
+                )}
             </div>
           </aside>
 
           <section className="messages-chat flex min-h-[820px] flex-col">
-            <header className="flex flex-col gap-3 border-b p-7 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="font-sans text-3xl font-bold messages-heading">
-                  {activeConversation.name}
-                </h2>
-                <p className="mt-1 text-lg messages-muted">
-                  {activeConversation.role} - {activeConversation.status}
-                </p>
-              </div>
-              <span className="messages-pill inline-flex w-fit items-center gap-2 rounded-full px-5 py-2.5 text-lg">
-                <Clock3 className="h-5 w-5" />
-                Usually replies within 1 hour
-              </span>
-            </header>
-
-            <div className="flex-1 space-y-6 p-7">
-              {activeConversation.messages.map((message, index) => (
-                <div
-                  key={`${message.time}-${index}`}
-                  className={`flex ${message.from === "me" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`messages-bubble max-w-[82%] rounded-2xl px-6 py-5 ${
-                      message.from === "me" ? "is-mine" : "is-theirs"
-                    }`}
-                  >
-                    <p className="text-lg leading-8">{message.body}</p>
-                    <div className="mt-3 flex items-center justify-end gap-1 text-base opacity-80">
-                      {message.time}
-                      {message.from === "me" && <Check className="h-3.5 w-3.5" />}
-                    </div>
+            {activeParticipant ? (
+              <>
+                <header className="flex flex-col gap-3 border-b p-7 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h2 className="font-sans text-3xl font-bold messages-heading">
+                      {activeParticipant.name}
+                    </h2>
+                    <p className="mt-1 text-lg messages-muted">
+                      {roleLabel[activeParticipant.role]} - {activeParticipant.email}
+                    </p>
                   </div>
-                </div>
-              ))}
-            </div>
+                  <span className="messages-pill inline-flex w-fit items-center gap-2 rounded-full px-5 py-2.5 text-lg">
+                    <Clock3 className="h-5 w-5" />
+                    Transaction and inquiry thread
+                  </span>
+                </header>
 
-            <div className="border-t p-6">
-              <div className="messages-composer rounded-2xl border p-4">
-                {selectedFile && (
-                  <div className="messages-attachment mb-2 flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm">
-                    <div className="min-w-0">
-                      <span className="block truncate font-semibold">
-                        {selectedFile.name}
-                      </span>
-                      <span className="text-xs opacity-75">{selectedFileSize}</span>
+                {(error || sendError) && (
+                  <div className="border-b p-4">
+                    <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {sendError || error}
                     </div>
-                    <button
-                      onClick={() => {
-                        setSelectedFile(null);
-                        if (fileInputRef.current) {
-                          fileInputRef.current.value = "";
-                        }
-                      }}
-                      className="messages-icon-button rounded-lg p-2"
-                      aria-label="Remove attachment"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
                   </div>
                 )}
-                <div className="flex items-center gap-3">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="messages-icon-button rounded-xl p-4"
-                    aria-label="Attach file"
-                    title="Attach file"
-                  >
-                    <Paperclip className="h-6 w-6" />
-                  </button>
-                  <input
-                    type="text"
-                    placeholder="Write a message..."
-                    className="min-w-0 flex-1 bg-transparent px-2 text-lg outline-none"
-                  />
-                  <button className="messages-send inline-flex items-center gap-2 rounded-xl px-6 py-4 text-lg font-semibold">
-                    <Send className="h-5 w-5" />
-                    Send
-                  </button>
+
+                <div className="flex-1 space-y-6 overflow-y-auto p-7">
+                  {activeMessages.length === 0 && (
+                    <div className="messages-muted flex h-full items-center justify-center text-center">
+                      No messages yet. Send the first note to coordinate a transaction or inquiry.
+                    </div>
+                  )}
+
+                  {activeMessages.map((message) => {
+                    const isMine = isMessageFromCurrentUser(message);
+
+                    return (
+                      <div
+                        key={message.id}
+                        className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+                      >
+                        <div
+                          className={`messages-bubble max-w-[82%] rounded-2xl px-6 py-5 ${
+                            isMine ? "is-mine" : "is-theirs"
+                          }`}
+                        >
+                          <p className="text-lg leading-8">{message.content}</p>
+                          <div className="mt-3 flex items-center justify-end gap-1 text-base opacity-80">
+                            {formatMessageTime(message.created_at)}
+                            {isMine && <Check className="h-3.5 w-3.5" />}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                <form onSubmit={handleSend} className="border-t p-6">
+                  <div className="messages-composer rounded-2xl border p-4">
+                    {selectedFile && (
+                      <div className="messages-attachment mb-2 flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm">
+                        <div className="min-w-0">
+                          <span className="block truncate font-semibold">
+                            {selectedFile.name}
+                          </span>
+                          <span className="text-xs opacity-75">{selectedFileSize}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedFile(null);
+                            if (fileInputRef.current) {
+                              fileInputRef.current.value = "";
+                            }
+                          }}
+                          className="messages-icon-button rounded-lg p-2"
+                          aria-label="Remove attachment"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="hidden"
+                        onChange={(event) =>
+                          setSelectedFile(event.target.files?.[0] ?? null)
+                        }
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="messages-icon-button rounded-xl p-4"
+                        aria-label="Attach file"
+                        title="Attach file"
+                      >
+                        <Paperclip className="h-6 w-6" />
+                      </button>
+                      <input
+                        type="text"
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                        placeholder="Write a message..."
+                        className="min-w-0 flex-1 bg-transparent px-2 text-lg outline-none"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!draft.trim()}
+                        className="messages-send inline-flex items-center gap-2 rounded-xl px-6 py-4 text-lg font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Send className="h-5 w-5" />
+                        Send
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <div className="flex flex-1 items-center justify-center p-8 text-center">
+                <div>
+                  <MessageEmptyIcon />
+                  <h2 className="messages-heading mt-4 font-sans text-2xl font-bold">
+                    No conversation selected
+                  </h2>
+                  <p className="messages-muted mt-2 max-w-md">
+                    Choose an existing thread or a contact from the left to start coordinating.
+                  </p>
                 </div>
               </div>
-            </div>
+            )}
           </section>
         </section>
       </main>
+    </div>
+  );
+}
+
+function MessageEmptyIcon() {
+  return (
+    <div className="messages-avatar mx-auto flex h-16 w-16 items-center justify-center rounded-2xl">
+      <Send className="h-7 w-7" />
     </div>
   );
 }

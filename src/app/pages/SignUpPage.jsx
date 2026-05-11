@@ -2,10 +2,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { Recycle, Mail, Lock, User, Leaf } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "../../context/AuthContext";
 import "./SignUpPage.css";
 
 export function SignUpPage() {
   const navigate = useNavigate();
+  const { signup } = useAuth();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -14,10 +16,30 @@ export function SignUpPage() {
     role: "user",
     terms: false
   });
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    navigate("/dashboard", { state: { entry: "signup" } });
+    setError("");
+
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await signup(formData.email, formData.name, formData.password, formData.role);
+      navigate(formData.role === "partner" ? "/partner" : "/dashboard", {
+        state: { entry: "signup" },
+      });
+    } catch (err) {
+      setError(err.message || "Unable to create account");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const updateField = (field, value) => {
@@ -65,6 +87,12 @@ export function SignUpPage() {
           <p className="text-[#5f6f67] mb-8">Create your account to get started</p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
             <div>
               <label className="block text-sm mb-2 text-[#19221d]">Full Name</label>
               <div className="relative">
@@ -181,9 +209,10 @@ export function SignUpPage() {
 
             <button
               type="submit"
-              className="w-full py-3 bg-[#336158] text-white rounded-xl hover:bg-[#2a4c48] transition-all hover:shadow-lg"
+              disabled={isSubmitting}
+              className="w-full py-3 bg-[#336158] text-white rounded-xl hover:bg-[#2a4c48] transition-all hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Create Account
+              {isSubmitting ? "Creating account..." : "Create Account"}
             </button>
           </form>
 
