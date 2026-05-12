@@ -1,0 +1,16 @@
+name = "clothcycle-api"
+main = "src/worker.ts"
+compatibility_date = "2026-05-12"
+
+[vars]
+EMAIL_PROVIDER = "console"
+EMAIL_FROM = "ClothCycle PH <no-reply@yourdomain.com>"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "clothcycle"
+database_id = "replace-with-cloudflare-d1-database-id"
+
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "clothcycle-uploads"

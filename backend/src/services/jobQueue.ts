@@ -1,7 +1,7 @@
 import Queue from 'bull';
 import { config } from '../config/env.js';
 import { sendEmail } from './emailService.js';
-import { createNotification } from './notificationService.js';
+import { createNotification, type NotificationType } from './notificationService.js';
 import { isRedisConnected } from '../config/redis.js';
 
 // Initialize queues - will be null if Redis is unavailable
@@ -143,7 +143,7 @@ export async function enqueueEmail(
 
 export async function enqueueNotification(
   userId: string,
-  type: string,
+  type: NotificationType,
   title: string,
   body?: string,
   data?: Record<string, unknown>,

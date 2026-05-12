@@ -4,7 +4,7 @@ export const signupSchema = z.object({
   email: z.string().email().trim().toLowerCase(),
   name: z.string().trim().min(1).max(255),
   password: z.string().min(6).max(128),
-  role: z.enum(['user', 'partner', 'admin']).default('user'),
+  role: z.literal('user').default('user'),
 });
 
 export const loginSchema = z.object({
@@ -14,7 +14,25 @@ export const loginSchema = z.object({
 
 export const twoFactorVerifySchema = z.object({
   two_factor_token: z.string().min(1),
+  code: z.string().trim().min(6).max(32),
+});
+
+export const twoFactorResendSchema = z.object({
+  two_factor_token: z.string().min(1),
+});
+
+export const twoFactorEnableSchema = z.object({
+  password: z.string().min(1).max(128),
   code: z.string().trim().regex(/^\d{6}$/, 'Code must be 6 digits'),
+});
+
+export const twoFactorDisableSchema = z.object({
+  password: z.string().min(1).max(128),
+  code: z.string().trim().min(6).max(32).optional(),
+});
+
+export const twoFactorSetupSchema = z.object({
+  password: z.string().min(1).max(128),
 });
 
 export const forgotPasswordSchema = z.object({
@@ -22,13 +40,13 @@ export const forgotPasswordSchema = z.object({
 });
 
 export const resetPasswordSchema = z.object({
-  token: z.string().min(32),
+  token: z.string().trim().regex(/^\d{6}$/, 'Reset code must be 6 digits'),
   password: z.string().min(6).max(128),
 });
 
 export const googleAuthSchema = z.object({
   credential: z.string().min(1),
-  role: z.enum(['user', 'partner']).default('user'),
+  role: z.literal('user').default('user'),
 });
 
 export const updateProfileSchema = z.object({

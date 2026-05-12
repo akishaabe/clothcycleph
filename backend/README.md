@@ -101,6 +101,28 @@ Important:
 - Use the same `JWT_SECRET` for everyone if you want login tokens to work across machines.
 - Keep `CORS_ORIGIN` as each member's frontend URL, usually `http://localhost:5173`.
 
+After the shared database is configured, one person should apply migrations:
+```bash
+npm run migrate
+```
+
+Then start the backend:
+```bash
+npm run dev
+```
+
+In another terminal, verify the main API modules against the running backend:
+```bash
+npm run verify:crud
+```
+
+On Windows PowerShell, use `npm.cmd` if scripts are blocked:
+```powershell
+npm.cmd run migrate
+npm.cmd run dev
+npm.cmd run verify:crud
+```
+
 ## Role Testing
 
 During development, the frontend dashboards are intentionally reachable by direct URL so the team can test screens quickly:

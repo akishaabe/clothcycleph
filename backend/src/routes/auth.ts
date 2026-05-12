@@ -5,6 +5,9 @@ import {
   getProfile,
   updateProfile,
   verifyTwoFactor,
+  resendTwoFactorCode,
+  setupTwoFactor,
+  getTwoFactorStatus,
   enableTwoFactor,
   disableTwoFactor,
   forgotPassword,
@@ -20,6 +23,10 @@ import {
   resetPasswordSchema,
   signupSchema,
   twoFactorVerifySchema,
+  twoFactorResendSchema,
+  twoFactorSetupSchema,
+  twoFactorEnableSchema,
+  twoFactorDisableSchema,
   updateProfileSchema,
 } from '../schemas/auth.js';
 
@@ -30,13 +37,17 @@ router.post('/signup', validate(signupSchema), signup);
 router.post('/login', validate(loginSchema), login);
 router.post('/google', validate(googleAuthSchema), continueWithGoogle);
 router.post('/2fa/verify', validate(twoFactorVerifySchema), verifyTwoFactor);
+router.post('/2fa/resend', validate(twoFactorResendSchema), resendTwoFactorCode);
 router.post('/forgot-password', validate(forgotPasswordSchema), forgotPassword);
 router.post('/reset-password', validate(resetPasswordSchema), resetPassword);
 
 // Protected routes
 router.get('/profile', authMiddleware, getProfile);
 router.put('/profile', authMiddleware, validate(updateProfileSchema), updateProfile);
-router.post('/2fa/enable', authMiddleware, enableTwoFactor);
-router.post('/2fa/disable', authMiddleware, disableTwoFactor);
+router.get('/2fa/status', authMiddleware, getTwoFactorStatus);
+router.get('/2fa/setup', authMiddleware, setupTwoFactor);
+router.post('/2fa/setup', authMiddleware, validate(twoFactorSetupSchema), setupTwoFactor);
+router.post('/2fa/enable', authMiddleware, validate(twoFactorEnableSchema), enableTwoFactor);
+router.post('/2fa/disable', authMiddleware, validate(twoFactorDisableSchema), disableTwoFactor);
 
 export default router;

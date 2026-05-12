@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
-import { Recycle, Mail, Lock, User, Leaf, ShieldCheck } from "lucide-react";
+import { Recycle, Mail, Lock, User, Leaf, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { getDashboardPathForRole } from "../../utils/roleRoutes";
@@ -19,14 +19,16 @@ export function SignUpPage() {
     email: "",
     password: "",
     confirmPassword: "",
-    role: "user",
     terms: false
   });
   const [twoFactorToken, setTwoFactorToken] = useState("");
+  const [twoFactorMethod, setTwoFactorMethod] = useState("email");
   const [twoFactorCode, setTwoFactorCode] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const googleClientId = getGoogleClientId();
 
   useEffect(() => {
@@ -49,14 +51,16 @@ export function SignUpPage() {
             try {
               setError("");
               setSuccessMessage("");
-              const authResponse = await continueWithGoogle(
-                response.credential,
-                formData.role
-              );
+              const authResponse = await continueWithGoogle(response.credential);
 
               if ("requiresTwoFactor" in authResponse) {
                 setTwoFactorToken(authResponse.two_factor_token);
-                setSuccessMessage("Check your email for the 6-digit verification code.");
+                setTwoFactorMethod(authResponse.two_factor_method || "email");
+                setSuccessMessage(
+                  authResponse.two_factor_method === "totp"
+                    ? "Enter your authenticator code to continue."
+                    : "Check your email for the 6-digit verification code."
+                );
                 return;
               }
 
@@ -82,7 +86,7 @@ export function SignUpPage() {
     return () => {
       isMounted = false;
     };
-  }, [continueWithGoogle, formData.role, googleClientId, navigate, twoFactorToken]);
+  }, [continueWithGoogle, googleClientId, navigate, twoFactorToken]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -111,11 +115,16 @@ export function SignUpPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await signup(formData.email, formData.name, formData.password, formData.role);
+      const response = await signup(formData.email, formData.name, formData.password);
 
       if ("requiresTwoFactor" in response) {
         setTwoFactorToken(response.two_factor_token);
-        setSuccessMessage("Check your email for the 6-digit verification code.");
+        setTwoFactorMethod(response.two_factor_method || "email");
+        setSuccessMessage(
+          response.two_factor_method === "totp"
+            ? "Enter your authenticator code to continue."
+            : "Check your email for the 6-digit verification code."
+        );
         return;
       }
 
@@ -169,11 +178,13 @@ export function SignUpPage() {
           </Link>
 
           <h1 className="text-3xl mb-2 text-[#19221d]">
-            {twoFactorToken ? "Verify Email" : "Sign Up"}
+            {twoFactorToken ? "Two-Factor Check" : "Sign Up"}
           </h1>
           <p className="text-[#5f6f67] mb-8">
             {twoFactorToken
-              ? "Enter the code sent to your email before opening your dashboard"
+              ? twoFactorMethod === "totp"
+                ? "Enter your authenticator code before opening your dashboard"
+                : "Enter the code sent to your email before opening your dashboard"
               : "Create your account to get started"}
           </p>
 
@@ -258,13 +269,22 @@ export function SignUpPage() {
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5f6f67]" />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={formData.password}
                   onChange={(e) => updateField("password", e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 border-2 border-[#e7ebe6] rounded-xl focus:border-[#336158] focus:outline-none transition-colors bg-white"
+                  className="w-full pl-12 pr-12 py-3 border-2 border-[#e7ebe6] rounded-xl focus:border-[#336158] focus:outline-none transition-colors bg-white"
                   placeholder="••••••••"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((current) => !current)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#5f6f67] transition-colors hover:text-[#336158]"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
               </div>
             </div>
 
@@ -273,40 +293,21 @@ export function SignUpPage() {
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5f6f67]" />
                 <input
-                  type="password"
+                  type={showConfirmPassword ? "text" : "password"}
                   value={formData.confirmPassword}
                   onChange={(e) => updateField("confirmPassword", e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 border-2 border-[#e7ebe6] rounded-xl focus:border-[#336158] focus:outline-none transition-colors bg-white"
+                  className="w-full pl-12 pr-12 py-3 border-2 border-[#e7ebe6] rounded-xl focus:border-[#336158] focus:outline-none transition-colors bg-white"
                   placeholder="••••••••"
                   required
                 />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2 text-[#19221d]">I am a...</label>
-              <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => updateField("role", "user")}
-                  className={`py-3 px-4 rounded-xl border-2 transition-all ${
-                    formData.role === "user"
-                      ? "border-[#336158] bg-[#336158]/10 text-[#19221d]"
-                      : "border-[#e7ebe6] text-[#5f6f67] hover:border-[#336158]"
-                  }`}
+                  onClick={() => setShowConfirmPassword((current) => !current)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#5f6f67] transition-colors hover:text-[#336158]"
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  title={showConfirmPassword ? "Hide password" : "Show password"}
                 >
-                  User
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateField("role", "partner")}
-                  className={`py-3 px-4 rounded-xl border-2 transition-all ${
-                    formData.role === "partner"
-                      ? "border-[#336158] bg-[#336158]/10 text-[#19221d]"
-                      : "border-[#e7ebe6] text-[#5f6f67] hover:border-[#336158]"
-                  }`}
-                >
-                  Partner
+                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
             </div>

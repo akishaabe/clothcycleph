@@ -7,3 +7,11 @@ export const uuidParamSchema = z.object({
 export const userIdParamSchema = z.object({
   userId: z.string().uuid(),
 });
+
+export const submissionIdParamSchema = z.object({
+  submissionId: z.string().uuid(),
+});
+
+export const partnerIdParamSchema = z.object({
+  partnerId: z.string().uuid(),
+});

@@ -32,10 +32,16 @@ export const config = {
     bucketName: process.env.R2_BUCKET_NAME,
   },
   email: {
+    provider: process.env.EMAIL_PROVIDER || 'console',
     resendApiKey: process.env.RESEND_API_KEY,
+    brevoApiKey: process.env.BREVO_API_KEY,
+    sendgridApiKey: process.env.SENDGRID_API_KEY,
     from: process.env.EMAIL_FROM || 'ClothCycle PH <onboarding@resend.dev>',
   },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID,
+  },
+  security: {
+    twoFactorEncryptionKey: process.env.TWO_FACTOR_ENCRYPTION_KEY,
   },
 };

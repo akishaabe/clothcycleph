@@ -7,9 +7,12 @@ import {
   SignupPayload,
   LoginPayload,
   VerifyTwoFactorPayload,
+  ResendTwoFactorPayload,
   ForgotPasswordPayload,
   ResetPasswordPayload,
   GoogleAuthPayload,
+  TwoFactorSetupResponse,
+  TwoFactorStatusResponse,
   UpdateProfilePayload,
   Submission,
   CreateSubmissionPayload,
@@ -24,7 +27,17 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Helper function to get auth token
 const getAuthToken = (): string | null => {
-  return localStorage.getItem('auth_token');
+  return localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token');
+};
+
+const persistAuth = (data: AuthResponse, remember = true) => {
+  const persistentStorage = remember ? localStorage : sessionStorage;
+  const otherStorage = remember ? sessionStorage : localStorage;
+
+  otherStorage.removeItem('auth_token');
+  otherStorage.removeItem('user');
+  persistentStorage.setItem('auth_token', data.token);
+  persistentStorage.setItem('user', JSON.stringify(data.user));
 };
 
 // Helper function to make authenticated requests
@@ -66,14 +79,13 @@ export const authService = {
 
     // Save token to localStorage
     if (data.token) {
-      localStorage.setItem('auth_token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      persistAuth(data, true);
     }
 
     return data;
   },
 
-  async login(payload: LoginPayload): Promise<LoginResponse> {
+  async login(payload: LoginPayload, remember = true): Promise<LoginResponse> {
     const data = await fetchWithAuth('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -81,25 +93,32 @@ export const authService = {
 
     // Save token to localStorage
     if (data.token) {
-      localStorage.setItem('auth_token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      persistAuth(data, remember);
     }
 
     return data;
   },
 
-  async verifyTwoFactor(payload: VerifyTwoFactorPayload): Promise<AuthResponse> {
+  async verifyTwoFactor(payload: VerifyTwoFactorPayload, remember = true): Promise<AuthResponse> {
     const data = await fetchWithAuth('/auth/2fa/verify', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
 
     if (data.token) {
-      localStorage.setItem('auth_token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      persistAuth(data, remember);
     }
 
     return data;
+  },
+
+  async resendTwoFactorCode(
+    payload: ResendTwoFactorPayload
+  ): Promise<{ message: string; requiresTwoFactor: true; two_factor_token: string; two_factor_method?: 'email' | 'totp' }> {
+    return fetchWithAuth('/auth/2fa/resend', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   async continueWithGoogle(payload: GoogleAuthPayload): Promise<GoogleAuthResponse> {
@@ -116,15 +135,33 @@ export const authService = {
     return data;
   },
 
-  async enableTwoFactor(): Promise<{ message: string; dev_code?: string }> {
-    return fetchWithAuth('/auth/2fa/enable', {
-      method: 'POST',
+  async getTwoFactorStatus(): Promise<TwoFactorStatusResponse> {
+    return fetchWithAuth('/auth/2fa/status', {
+      method: 'GET',
     });
   },
 
-  async disableTwoFactor(): Promise<{ message: string }> {
+  async setupTwoFactor(password: string): Promise<TwoFactorSetupResponse> {
+    return fetchWithAuth('/auth/2fa/setup', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+  },
+
+  async enableTwoFactor(
+    password: string,
+    code: string
+  ): Promise<{ message: string; recovery_codes: string[] }> {
+    return fetchWithAuth('/auth/2fa/enable', {
+      method: 'POST',
+      body: JSON.stringify({ password, code }),
+    });
+  },
+
+  async disableTwoFactor(password: string, code?: string): Promise<{ message: string }> {
     return fetchWithAuth('/auth/2fa/disable', {
       method: 'POST',
+      body: JSON.stringify({ password, code }),
     });
   },
 
@@ -158,10 +195,12 @@ export const authService = {
   logout(): void {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user');
+    sessionStorage.removeItem('auth_token');
+    sessionStorage.removeItem('user');
   },
 
   getStoredUser(): User | null {
-    const user = localStorage.getItem('user');
+    const user = localStorage.getItem('user') || sessionStorage.getItem('user');
     return user ? JSON.parse(user) : null;
   },
 

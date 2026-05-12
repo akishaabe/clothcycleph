@@ -1,5 +1,12 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { GoogleAuthResponse, LoginResponse, SignupResponse, User } from '../types/api';
+import {
+  GoogleAuthResponse,
+  LoginResponse,
+  SignupResponse,
+  TwoFactorSetupResponse,
+  TwoFactorStatusResponse,
+  User,
+} from '../types/api';
 import { authService } from '../services/api';
 
 interface AuthContextType {
@@ -7,13 +14,16 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<LoginResponse>;
-  continueWithGoogle: (credential: string, role?: 'user' | 'partner') => Promise<GoogleAuthResponse>;
-  verifyTwoFactor: (twoFactorToken: string, code: string) => Promise<User>;
+  login: (email: string, password: string, remember?: boolean) => Promise<LoginResponse>;
+  continueWithGoogle: (credential: string, role?: 'user') => Promise<GoogleAuthResponse>;
+  verifyTwoFactor: (twoFactorToken: string, code: string, remember?: boolean) => Promise<User>;
+  resendTwoFactorCode: (twoFactorToken: string) => Promise<{ message: string; requiresTwoFactor: true; two_factor_token: string; two_factor_method?: 'email' | 'totp' }>;
   forgotPassword: (email: string) => Promise<{ message: string; reset_token?: string }>;
   resetPassword: (resetToken: string, password: string) => Promise<{ message: string }>;
-  enableTwoFactor: () => Promise<{ message: string; dev_code?: string }>;
-  disableTwoFactor: () => Promise<{ message: string }>;
+  getTwoFactorStatus: () => Promise<TwoFactorStatusResponse>;
+  setupTwoFactor: (password: string) => Promise<TwoFactorSetupResponse>;
+  enableTwoFactor: (password: string, code: string) => Promise<{ message: string; recovery_codes: string[] }>;
+  disableTwoFactor: (password: string, code?: string) => Promise<{ message: string }>;
   signup: (email: string, name: string, password: string, role?: string) => Promise<SignupResponse>;
   logout: () => void;
   updateUser: (user: User) => void;
@@ -31,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
 
     const initializeAuth = async () => {
-      const storedToken = localStorage.getItem('auth_token');
+      const storedToken = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token');
 
       if (storedToken) {
         try {
@@ -40,7 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (isMounted) {
             setToken(storedToken);
             setUser(response.data);
-            localStorage.setItem('user', JSON.stringify(response.data));
+            const storage = localStorage.getItem('auth_token') ? localStorage : sessionStorage;
+            storage.setItem('user', JSON.stringify(response.data));
           }
         } catch {
           authService.logout();
@@ -64,9 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, remember = true) => {
     try {
-      const response = await authService.login({ email, password });
+      const response = await authService.login({ email, password }, remember);
       if ('requiresTwoFactor' in response) {
         return response;
       }
@@ -79,17 +90,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const verifyTwoFactor = async (twoFactorToken: string, code: string) => {
+  const verifyTwoFactor = async (twoFactorToken: string, code: string, remember = true) => {
     const response = await authService.verifyTwoFactor({
       two_factor_token: twoFactorToken,
       code,
-    });
+    }, remember);
     setToken(response.token);
     setUser(response.user);
     return response.user;
   };
 
-  const continueWithGoogle = async (credential: string, role: 'user' | 'partner' = 'user') => {
+  const resendTwoFactorCode = (twoFactorToken: string) => {
+    return authService.resendTwoFactorCode({
+      two_factor_token: twoFactorToken,
+    });
+  };
+
+  const continueWithGoogle = async (credential: string, role: 'user' = 'user') => {
     const response = await authService.continueWithGoogle({ credential, role });
     if ('requiresTwoFactor' in response) {
       return response;
@@ -108,16 +125,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return authService.resetPassword({ token: resetToken, password });
   };
 
-  const enableTwoFactor = async () => {
-    const response = await authService.enableTwoFactor();
+  const getTwoFactorStatus = () => {
+    return authService.getTwoFactorStatus();
+  };
+
+  const setupTwoFactor = (password: string) => {
+    return authService.setupTwoFactor(password);
+  };
+
+  const enableTwoFactor = async (password: string, code: string) => {
+    const response = await authService.enableTwoFactor(password, code);
     if (user) {
       updateUser({ ...user, two_factor_enabled: true });
     }
     return response;
   };
 
-  const disableTwoFactor = async () => {
-    const response = await authService.disableTwoFactor();
+  const disableTwoFactor = async (password: string, code?: string) => {
+    const response = await authService.disableTwoFactor(password, code);
     if (user) {
       updateUser({ ...user, two_factor_enabled: false });
     }
@@ -147,7 +172,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateUser = (updatedUser: User) => {
     setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
+    const storage = localStorage.getItem('auth_token') ? localStorage : sessionStorage;
+    storage.setItem('user', JSON.stringify(updatedUser));
   };
 
   const value = {
@@ -158,8 +184,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     continueWithGoogle,
     verifyTwoFactor,
+    resendTwoFactorCode,
     forgotPassword,
     resetPassword,
+    getTwoFactorStatus,
+    setupTwoFactor,
     enableTwoFactor,
     disableTwoFactor,
     signup,

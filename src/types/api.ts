@@ -5,6 +5,7 @@ export interface User {
   name: string;
   role: 'user' | 'partner' | 'admin';
   two_factor_enabled?: boolean;
+  email_verified_at?: string;
   avatar_url?: string;
   bio?: string;
   phone?: string;
@@ -22,6 +23,7 @@ export interface TwoFactorChallengeResponse {
   message: string;
   requiresTwoFactor: true;
   two_factor_token: string;
+  two_factor_method?: 'email' | 'totp';
   dev_code?: string;
 }
 
@@ -33,7 +35,7 @@ export interface SignupPayload {
   email: string;
   name: string;
   password: string;
-  role?: 'user' | 'partner' | 'admin';
+  role?: 'user';
 }
 
 export interface LoginPayload {
@@ -44,6 +46,22 @@ export interface LoginPayload {
 export interface VerifyTwoFactorPayload {
   two_factor_token: string;
   code: string;
+}
+
+export interface ResendTwoFactorPayload {
+  two_factor_token: string;
+}
+
+export interface TwoFactorSetupResponse {
+  message: string;
+  secret: string;
+  otpauth_url: string;
+}
+
+export interface TwoFactorStatusResponse {
+  enabled: boolean;
+  setup_started: boolean;
+  confirmed_at?: string;
 }
 
 export interface ForgotPasswordPayload {
@@ -57,7 +75,7 @@ export interface ResetPasswordPayload {
 
 export interface GoogleAuthPayload {
   credential: string;
-  role?: 'user' | 'partner';
+  role?: 'user';
 }
 
 export interface UpdateProfilePayload {

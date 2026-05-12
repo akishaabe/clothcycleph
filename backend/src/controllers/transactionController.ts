@@ -138,7 +138,7 @@ export const getTransactionsByPartner = async (req: AuthRequest, res: Response) 
         [partnerId, userId]
       );
 
-      if (partnerCheck.rows.length === 0 && req.user?.role !== 'admin') {
+      if (partnerCheck.rows.length === 0) {
         throw new AppError(403, 'You do not have permission to view these transactions');
       }
     }

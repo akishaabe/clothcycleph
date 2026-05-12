@@ -24,21 +24,45 @@ import "./LoginPage.css";
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { login, continueWithGoogle, verifyTwoFactor, forgotPassword, resetPassword } = useAuth();
+  const { login, continueWithGoogle, verifyTwoFactor, resendTwoFactorCode, forgotPassword, resetPassword } = useAuth();
 
   const googleButtonRef = useRef(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [twoFactorCode, setTwoFactorCode] = useState("");
   const [twoFactorToken, setTwoFactorToken] = useState("");
+  const [twoFactorMethod, setTwoFactorMethod] = useState("email");
   const [authMode, setAuthMode] = useState("login");
   const [resetToken, setResetToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+  const [resendCountdown, setResendCountdown] = useState(0);
   const googleClientId = getGoogleClientId();
+
+  useEffect(() => {
+    if (resendCountdown <= 0) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setResendCountdown((current) => {
+        if (current <= 1) {
+          window.clearInterval(intervalId);
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [resendCountdown]);
 
   useEffect(() => {
     if (!googleClientId || !googleButtonRef.current || twoFactorToken || authMode !== "login") {
@@ -64,7 +88,13 @@ export function LoginPage() {
 
               if ("requiresTwoFactor" in authResponse) {
                 setTwoFactorToken(authResponse.two_factor_token);
-                setSuccessMessage("Check your email for the 6-digit verification code.");
+                setTwoFactorMethod(authResponse.two_factor_method || "email");
+                setSuccessMessage(
+                  authResponse.two_factor_method === "totp"
+                    ? "Enter your authenticator code to continue."
+                    : "Check your email for the 6-digit verification code."
+                );
+                setResendCountdown(authResponse.two_factor_method === "email" ? 15 : 0);
                 return;
               }
 
@@ -100,7 +130,7 @@ export function LoginPage() {
 
     try {
       if (twoFactorToken) {
-        const user = await verifyTwoFactor(twoFactorToken, twoFactorCode);
+        const user = await verifyTwoFactor(twoFactorToken, twoFactorCode, rememberMe);
         navigate(getDashboardPathForRole(user.role));
         return;
       }
@@ -112,25 +142,37 @@ export function LoginPage() {
           setResetToken(response.reset_token);
         }
         setAuthMode("reset");
+        setResendCountdown(15);
         return;
       }
 
       if (authMode === "reset") {
+        if (newPassword !== confirmNewPassword) {
+          throw new Error("New passwords do not match");
+        }
+
         const response = await resetPassword(resetToken, newPassword);
         setSuccessMessage(response.message);
         setPassword("");
         setNewPassword("");
+        setConfirmNewPassword("");
         setResetToken("");
         setAuthMode("login");
         return;
       }
 
-      const response = await login(email, password);
+      const response = await login(email, password, rememberMe);
 
       if ("requiresTwoFactor" in response) {
         setTwoFactorToken(response.two_factor_token);
+        setTwoFactorMethod(response.two_factor_method || "email");
         setPassword("");
-        setSuccessMessage("Check your email for the 6-digit verification code.");
+        setSuccessMessage(
+          response.two_factor_method === "totp"
+            ? "Enter your authenticator code to continue."
+            : "Check your email for the 6-digit verification code."
+        );
+        setResendCountdown(response.two_factor_method === "email" ? 15 : 0);
         return;
       }
 
@@ -145,11 +187,47 @@ export function LoginPage() {
   const returnToLogin = () => {
     setAuthMode("login");
     setTwoFactorToken("");
+    setTwoFactorMethod("email");
     setTwoFactorCode("");
     setResetToken("");
     setNewPassword("");
+    setConfirmNewPassword("");
     setError("");
     setSuccessMessage("");
+    setResendCountdown(0);
+  };
+
+  const handleResend = async () => {
+    if (resendCountdown > 0) {
+      return;
+    }
+
+    setError("");
+    setSuccessMessage("");
+    setIsSubmitting(true);
+
+    try {
+      if (twoFactorToken && twoFactorMethod === "email") {
+        const response = await resendTwoFactorCode(twoFactorToken);
+        setTwoFactorToken(response.two_factor_token);
+        setSuccessMessage(response.message);
+        setResendCountdown(15);
+        return;
+      }
+
+      if (authMode === "reset") {
+        const response = await forgotPassword(email);
+        setSuccessMessage(response.message);
+        if (response.reset_token) {
+          setResetToken(response.reset_token);
+        }
+        setResendCountdown(30);
+      }
+    } catch (resendError) {
+      setError(resendError.message || "Resend failed");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -285,11 +363,13 @@ export function LoginPage() {
 
             <p className="text-[#5f6f67] dark:text-zinc-400 text-lg">
               {twoFactorToken
-                ? "Enter the code generated for this login"
+                ? twoFactorMethod === "totp"
+                  ? "Enter your authenticator code"
+                  : "Enter the code sent to your email"
                 : authMode === "forgot"
                   ? "Request a password reset token"
                   : authMode === "reset"
-                    ? "Choose a new password for your account"
+                    ? "Enter your 6-digit reset code and choose a new password"
                     : "Access your sustainable fashion account"}
             </p>
             </div>
@@ -478,14 +558,16 @@ export function LoginPage() {
                       <KeyRound className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#5f6f67] dark:text-zinc-500" />
                       <input
                         type="text"
+                        inputMode="numeric"
+                        maxLength={6}
                         value={resetToken}
                         onChange={(e) => setResetToken(e.target.value)}
-                        placeholder="Paste reset token"
+                        placeholder="123456"
                         required
                         className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-4 text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
                       />
-                    </div>
                   </div>
+                </div>
                   <div>
                     <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
                       New Password
@@ -493,16 +575,70 @@ export function LoginPage() {
                     <div className="relative">
                       <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#5f6f67] dark:text-zinc-500" />
                       <input
-                        type="password"
+                        type={showNewPassword ? "text" : "password"}
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         placeholder="New password"
                         required
-                        className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-4 text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
+                        className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-12 text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword((current) => !current)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[#5f6f67] transition-colors hover:text-[#336158] dark:text-zinc-500 dark:hover:text-white"
+                        aria-label={showNewPassword ? "Hide password" : "Show password"}
+                        title={showNewPassword ? "Hide password" : "Show password"}
+                      >
+                        {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
+                      Retype New Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#5f6f67] dark:text-zinc-500" />
+                      <input
+                        type={showConfirmNewPassword ? "text" : "password"}
+                        value={confirmNewPassword}
+                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                        placeholder="Retype new password"
+                        required
+                        className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-12 text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmNewPassword((current) => !current)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[#5f6f67] transition-colors hover:text-[#336158] dark:text-zinc-500 dark:hover:text-white"
+                        aria-label={showConfirmNewPassword ? "Hide password" : "Show password"}
+                        title={showConfirmNewPassword ? "Hide password" : "Show password"}
+                      >
+                        {showConfirmNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
                     </div>
                   </div>
                 </>
+              ) : null}
+
+              {(twoFactorToken && twoFactorMethod === "email") || authMode === "reset" ? (
+                <div className="text-sm text-[#5f6f67] dark:text-zinc-400">
+                  {resendCountdown > 0
+                    ? `Didn't receive a code? You can request ${authMode === "reset" ? "a new reset code" : "another code"} again in ${resendCountdown}s.`
+                    : `Didn't receive a code?`}
+                  {resendCountdown === 0 ? (
+                    <>
+                      {" "}
+                      <button
+                        type="button"
+                        onClick={handleResend}
+                        className="text-[#336158] transition-colors hover:text-[#2a4c48] dark:hover:text-white"
+                      >
+                        Request {authMode === "reset" ? "a new reset code" : "another code"}
+                      </button>
+                    </>
+                  ) : null}
+                </div>
               ) : null}
 
               {/* Options */}
@@ -539,6 +675,8 @@ export function LoginPage() {
                 >
                   <input
                     type="checkbox"
+                    checked={rememberMe}
+                    onChange={(event) => setRememberMe(event.target.checked)}
                     className="
                       w-4
                       h-4
@@ -596,7 +734,7 @@ export function LoginPage() {
                   : twoFactorToken
                     ? "Verify Code"
                     : authMode === "forgot"
-                      ? "Send Reset Token"
+                      ? "Send Reset Code"
                       : authMode === "reset"
                         ? "Reset Password"
                         : "Log In"}
