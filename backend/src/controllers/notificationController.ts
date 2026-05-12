@@ -1,0 +1,92 @@
+import { Request, Response } from 'express';
+import { AuthRequest } from '../middleware/auth.js';
+import { AppError } from '../utils/errorHandler.js';
+import {
+  getUserNotifications,
+  getUnreadNotificationCount,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+} from '../services/notificationService.js';
+
+export const getNotifications = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { unread } = req.query;
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    const notifications = await getUserNotifications(userId, unread === 'true');
+
+    res.json({
+      data: notifications,
+      count: notifications.length,
+    });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+};
+
+export const getUnreadCount = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    const count = await getUnreadNotificationCount(userId);
+
+    res.json({ unread_count: count });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+};
+
+export const markAsRead = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    const notification = await markNotificationAsRead(id);
+
+    if (!notification) {
+      throw new AppError(404, 'Notification not found');
+    }
+
+    if (notification.user_id !== userId) {
+      throw new AppError(403, 'You do not have permission to mark this notification');
+    }
+
+    res.json({
+      message: 'Notification marked as read',
+      data: notification,
+    });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+};
+
+export const markAllAsRead = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    const notifications = await markAllNotificationsAsRead(userId);
+
+    res.json({
+      message: 'All notifications marked as read',
+      count: notifications.length,
+    });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+};

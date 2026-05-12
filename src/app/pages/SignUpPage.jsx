@@ -1,14 +1,19 @@
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
-import { Recycle, Mail, Lock, User, Leaf } from "lucide-react";
-import { useState } from "react";
+import { Recycle, Mail, Lock, User, Leaf, ShieldCheck } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { getDashboardPathForRole } from "../../utils/roleRoutes";
+import {
+  getGoogleClientId,
+  loadGoogleIdentityScript,
+} from "../../services/googleIdentity";
 import "./SignUpPage.css";
 
 export function SignUpPage() {
   const navigate = useNavigate();
-  const { signup } = useAuth();
+  const { signup, continueWithGoogle, verifyTwoFactor } = useAuth();
+  const googleButtonRef = useRef(null);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -17,11 +22,85 @@ export function SignUpPage() {
     role: "user",
     terms: false
   });
+  const [twoFactorToken, setTwoFactorToken] = useState("");
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const googleClientId = getGoogleClientId();
+
+  useEffect(() => {
+    if (!googleClientId || !googleButtonRef.current || twoFactorToken) {
+      return;
+    }
+
+    let isMounted = true;
+
+    loadGoogleIdentityScript()
+      .then(() => {
+        if (!isMounted || !window.google || !googleButtonRef.current) {
+          return;
+        }
+
+        googleButtonRef.current.innerHTML = "";
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: async (response) => {
+            try {
+              setError("");
+              setSuccessMessage("");
+              const authResponse = await continueWithGoogle(
+                response.credential,
+                formData.role
+              );
+
+              if ("requiresTwoFactor" in authResponse) {
+                setTwoFactorToken(authResponse.two_factor_token);
+                setSuccessMessage("Check your email for the 6-digit verification code.");
+                return;
+              }
+
+              navigate(getDashboardPathForRole(authResponse.user.role));
+            } catch (googleError) {
+              setError(googleError.message || "Google signup failed");
+            }
+          },
+        });
+        window.google.accounts.id.renderButton(googleButtonRef.current, {
+          theme: "outline",
+          size: "large",
+          width: 360,
+          text: "continue_with",
+        });
+      })
+      .catch((googleError) => {
+        if (isMounted) {
+          setError(googleError.message);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [continueWithGoogle, formData.role, googleClientId, navigate, twoFactorToken]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (twoFactorToken) {
+      setError("");
+      setIsSubmitting(true);
+
+      try {
+        const user = await verifyTwoFactor(twoFactorToken, twoFactorCode);
+        navigate(getDashboardPathForRole(user.role), { state: { entry: "signup" } });
+      } catch (verifyError) {
+        setError(verifyError.message || "Verification failed");
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
 
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match");
@@ -32,8 +111,15 @@ export function SignUpPage() {
     setIsSubmitting(true);
 
     try {
-      const user = await signup(formData.email, formData.name, formData.password, formData.role);
-      navigate(getDashboardPathForRole(user.role), { state: { entry: "signup" } });
+      const response = await signup(formData.email, formData.name, formData.password, formData.role);
+
+      if ("requiresTwoFactor" in response) {
+        setTwoFactorToken(response.two_factor_token);
+        setSuccessMessage("Check your email for the 6-digit verification code.");
+        return;
+      }
+
+      navigate(getDashboardPathForRole(response.user.role), { state: { entry: "signup" } });
     } catch (signupError) {
       setError(signupError.message || "Signup failed");
     } finally {
@@ -82,13 +168,58 @@ export function SignUpPage() {
             <span className="text-xl text-[#19221d] font-gloock">ClothCycle PH</span>
           </Link>
 
-          <h1 className="text-3xl mb-2 text-[#19221d]">Sign Up</h1>
-          <p className="text-[#5f6f67] mb-8">Create your account to get started</p>
+          <h1 className="text-3xl mb-2 text-[#19221d]">
+            {twoFactorToken ? "Verify Email" : "Sign Up"}
+          </h1>
+          <p className="text-[#5f6f67] mb-8">
+            {twoFactorToken
+              ? "Enter the code sent to your email before opening your dashboard"
+              : "Create your account to get started"}
+          </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {error ? (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
+              </div>
+            ) : null}
+
+            {successMessage ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                {successMessage}
+              </div>
+            ) : null}
+
+            {twoFactorToken ? (
+              <div>
+                <label className="block text-sm mb-2 text-[#19221d]">Verification Code</label>
+                <div className="relative">
+                  <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5f6f67]" />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={twoFactorCode}
+                    onChange={(e) => setTwoFactorCode(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 border-2 border-[#e7ebe6] rounded-xl focus:border-[#336158] focus:outline-none transition-colors bg-white"
+                    placeholder="123456"
+                    required
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+            {googleClientId ? (
+              <div className="flex justify-center">
+                <div ref={googleButtonRef} />
+              </div>
+            ) : null}
+
+            {googleClientId ? (
+              <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-[#8a9a91]">
+                <div className="h-px flex-1 bg-[#e7ebe6]" />
+                or
+                <div className="h-px flex-1 bg-[#e7ebe6]" />
               </div>
             ) : null}
 
@@ -205,13 +336,19 @@ export function SignUpPage() {
                 </Link>
               </span>
             </label>
+              </>
+            )}
 
             <button
               type="submit"
               disabled={isSubmitting}
               className="w-full py-3 bg-[#336158] text-white rounded-xl hover:bg-[#2a4c48] transition-all hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {isSubmitting ? "Creating account..." : "Create Account"}
+              {isSubmitting
+                ? "Please wait..."
+                : twoFactorToken
+                  ? "Verify Code"
+                  : "Create Account"}
             </button>
           </form>
 

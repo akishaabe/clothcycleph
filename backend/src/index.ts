@@ -3,16 +3,22 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { config } from './config/env.js';
 import { initializeDatabase } from './models/schema.js';
+import { initializeRedis, closeRedis } from './config/redis.js';
+import { initializeQueues, setupQueueProcessors, closeQueues } from './services/jobQueue.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/auth.js';
 import submissionRoutes from './routes/submissions.js';
 import messageRoutes from './routes/messages.js';
 import uploadRoutes from './routes/upload.js';
+import notificationRoutes from './routes/notifications.js';
+import transactionRoutes from './routes/transactions.js';
 import { initializeSocketServer } from './services/socketService.js';
 
 const app = express();
 const httpServer = createServer(app);
 let databaseStatus: 'starting' | 'connected' | 'error' = 'starting';
+let redisStatus: 'starting' | 'connected' | 'error' = 'starting';
+let queueStatus: 'disabled' | 'initialized' = 'disabled';
 
 // Middleware
 app.use(express.json());
@@ -41,6 +47,8 @@ app.get('/api/health', (req, res) => {
     status: isHealthy ? 'ok' : 'degraded',
     message: 'ClothCycle Backend is running',
     database: databaseStatus,
+    redis: redisStatus,
+    queues: queueStatus,
   });
 });
 
@@ -48,6 +56,8 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/transactions', transactionRoutes);
 app.use('/api/upload', uploadRoutes);
 
 // 404 handler
@@ -86,10 +96,28 @@ async function startServer() {
   try {
     await initializeDatabase();
     databaseStatus = 'connected';
-    console.log('Database initialized');
+    console.log('✅ Database initialized');
   } catch (error) {
     databaseStatus = 'error';
-    console.error('Database initialization failed:', error);
+    console.error('❌ Database initialization failed:', error);
+  }
+
+  // Initialize Redis
+  try {
+    const redis = await initializeRedis();
+    if (redis) {
+      redisStatus = 'connected';
+      initializeQueues();
+      setupQueueProcessors();
+      queueStatus = 'initialized';
+    } else {
+      redisStatus = 'error';
+      queueStatus = 'disabled';
+    }
+  } catch (error) {
+    redisStatus = 'error';
+    queueStatus = 'disabled';
+    console.warn('⚠️ Redis unavailable - running in degraded mode');
   }
 }
 
@@ -122,6 +150,37 @@ function isAllowedCorsOrigin(origin: string) {
 
   return false;
 }
+
+// Graceful shutdown
+async function gracefulShutdown(signal: string) {
+  console.log(`\nReceived ${signal}, starting graceful shutdown...`);
+
+  try {
+    await closeQueues();
+  } catch (error) {
+    console.error('Error closing job queues:', error);
+  }
+
+  try {
+    await closeRedis();
+  } catch (error) {
+    console.error('Error closing Redis:', error);
+  }
+
+  httpServer.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
+
+  // Force exit after 10 seconds if graceful shutdown takes too long
+  setTimeout(() => {
+    console.error('Graceful shutdown timeout, forcing exit');
+    process.exit(1);
+  }, 10000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 startServer();
 

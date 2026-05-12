@@ -12,6 +12,25 @@ export const loginSchema = z.object({
   password: z.string().min(1).max(128),
 });
 
+export const twoFactorVerifySchema = z.object({
+  two_factor_token: z.string().min(1),
+  code: z.string().trim().regex(/^\d{6}$/, 'Code must be 6 digits'),
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email().trim().toLowerCase(),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(32),
+  password: z.string().min(6).max(128),
+});
+
+export const googleAuthSchema = z.object({
+  credential: z.string().min(1),
+  role: z.enum(['user', 'partner']).default('user'),
+});
+
 export const updateProfileSchema = z.object({
   name: z.string().trim().min(1).max(255).optional(),
   avatar_url: z.string().url().max(500).nullable().optional(),

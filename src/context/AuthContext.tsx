@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User } from '../types/api';
+import { GoogleAuthResponse, LoginResponse, SignupResponse, User } from '../types/api';
 import { authService } from '../services/api';
 
 interface AuthContextType {
@@ -7,8 +7,14 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<User>;
-  signup: (email: string, name: string, password: string, role?: string) => Promise<User>;
+  login: (email: string, password: string) => Promise<LoginResponse>;
+  continueWithGoogle: (credential: string, role?: 'user' | 'partner') => Promise<GoogleAuthResponse>;
+  verifyTwoFactor: (twoFactorToken: string, code: string) => Promise<User>;
+  forgotPassword: (email: string) => Promise<{ message: string; reset_token?: string }>;
+  resetPassword: (resetToken: string, password: string) => Promise<{ message: string }>;
+  enableTwoFactor: () => Promise<{ message: string; dev_code?: string }>;
+  disableTwoFactor: () => Promise<{ message: string }>;
+  signup: (email: string, name: string, password: string, role?: string) => Promise<SignupResponse>;
   logout: () => void;
   updateUser: (user: User) => void;
 }
@@ -61,20 +67,73 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       const response = await authService.login({ email, password });
+      if ('requiresTwoFactor' in response) {
+        return response;
+      }
+
       setToken(response.token);
       setUser(response.user);
-      return response.user;
+      return response;
     } catch (error) {
       throw error;
     }
   };
 
+  const verifyTwoFactor = async (twoFactorToken: string, code: string) => {
+    const response = await authService.verifyTwoFactor({
+      two_factor_token: twoFactorToken,
+      code,
+    });
+    setToken(response.token);
+    setUser(response.user);
+    return response.user;
+  };
+
+  const continueWithGoogle = async (credential: string, role: 'user' | 'partner' = 'user') => {
+    const response = await authService.continueWithGoogle({ credential, role });
+    if ('requiresTwoFactor' in response) {
+      return response;
+    }
+
+    setToken(response.token);
+    setUser(response.user);
+    return response;
+  };
+
+  const forgotPassword = (email: string) => {
+    return authService.forgotPassword({ email });
+  };
+
+  const resetPassword = (resetToken: string, password: string) => {
+    return authService.resetPassword({ token: resetToken, password });
+  };
+
+  const enableTwoFactor = async () => {
+    const response = await authService.enableTwoFactor();
+    if (user) {
+      updateUser({ ...user, two_factor_enabled: true });
+    }
+    return response;
+  };
+
+  const disableTwoFactor = async () => {
+    const response = await authService.disableTwoFactor();
+    if (user) {
+      updateUser({ ...user, two_factor_enabled: false });
+    }
+    return response;
+  };
+
   const signup = async (email: string, name: string, password: string, role = 'user') => {
     try {
       const response = await authService.signup({ email, name, password, role: role as any });
+      if ('requiresTwoFactor' in response) {
+        return response;
+      }
+
       setToken(response.token);
       setUser(response.user);
-      return response.user;
+      return response;
     } catch (error) {
       throw error;
     }
@@ -97,6 +156,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
     isAuthenticated: !!token && !!user && !isLoading,
     login,
+    continueWithGoogle,
+    verifyTwoFactor,
+    forgotPassword,
+    resetPassword,
+    enableTwoFactor,
+    disableTwoFactor,
     signup,
     logout,
     updateUser,

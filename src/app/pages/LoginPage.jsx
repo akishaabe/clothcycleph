@@ -8,37 +8,148 @@ import {
   Sparkles,
   Eye,
   EyeOff,
+  KeyRound,
+  ShieldCheck,
 } from "lucide-react";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { getDashboardPathForRole } from "../../utils/roleRoutes";
+import {
+  getGoogleClientId,
+  loadGoogleIdentityScript,
+} from "../../services/googleIdentity";
 
 import "./LoginPage.css";
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, continueWithGoogle, verifyTwoFactor, forgotPassword, resetPassword } = useAuth();
 
+  const googleButtonRef = useRef(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [twoFactorToken, setTwoFactorToken] = useState("");
+  const [authMode, setAuthMode] = useState("login");
+  const [resetToken, setResetToken] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const googleClientId = getGoogleClientId();
+
+  useEffect(() => {
+    if (!googleClientId || !googleButtonRef.current || twoFactorToken || authMode !== "login") {
+      return;
+    }
+
+    let isMounted = true;
+
+    loadGoogleIdentityScript()
+      .then(() => {
+        if (!isMounted || !window.google || !googleButtonRef.current) {
+          return;
+        }
+
+        googleButtonRef.current.innerHTML = "";
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: async (response) => {
+            try {
+              setError("");
+              setSuccessMessage("");
+              const authResponse = await continueWithGoogle(response.credential);
+
+              if ("requiresTwoFactor" in authResponse) {
+                setTwoFactorToken(authResponse.two_factor_token);
+                setSuccessMessage("Check your email for the 6-digit verification code.");
+                return;
+              }
+
+              navigate(getDashboardPathForRole(authResponse.user.role));
+            } catch (googleError) {
+              setError(googleError.message || "Google login failed");
+            }
+          },
+        });
+        window.google.accounts.id.renderButton(googleButtonRef.current, {
+          theme: "outline",
+          size: "large",
+          width: 360,
+          text: "continue_with",
+        });
+      })
+      .catch((googleError) => {
+        if (isMounted) {
+          setError(googleError.message);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [authMode, continueWithGoogle, googleClientId, navigate, twoFactorToken]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setSuccessMessage("");
     setIsSubmitting(true);
 
     try {
-      const user = await login(email, password);
-      navigate(getDashboardPathForRole(user.role));
+      if (twoFactorToken) {
+        const user = await verifyTwoFactor(twoFactorToken, twoFactorCode);
+        navigate(getDashboardPathForRole(user.role));
+        return;
+      }
+
+      if (authMode === "forgot") {
+        const response = await forgotPassword(email);
+        setSuccessMessage(response.message);
+        if (response.reset_token) {
+          setResetToken(response.reset_token);
+        }
+        setAuthMode("reset");
+        return;
+      }
+
+      if (authMode === "reset") {
+        const response = await resetPassword(resetToken, newPassword);
+        setSuccessMessage(response.message);
+        setPassword("");
+        setNewPassword("");
+        setResetToken("");
+        setAuthMode("login");
+        return;
+      }
+
+      const response = await login(email, password);
+
+      if ("requiresTwoFactor" in response) {
+        setTwoFactorToken(response.two_factor_token);
+        setPassword("");
+        setSuccessMessage("Check your email for the 6-digit verification code.");
+        return;
+      }
+
+      navigate(getDashboardPathForRole(response.user.role));
     } catch (loginError) {
-      setError(loginError.message || "Login failed");
+      setError(loginError.message || "Authentication failed");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const returnToLogin = () => {
+    setAuthMode("login");
+    setTwoFactorToken("");
+    setTwoFactorCode("");
+    setResetToken("");
+    setNewPassword("");
+    setError("");
+    setSuccessMessage("");
   };
 
   return (
@@ -163,11 +274,23 @@ export function LoginPage() {
             {/* Heading */}
             <div className="mb-10">
               <h1 className="text-5xl font-light mb-3">
-                Log In
+                {twoFactorToken
+                  ? "Two-Factor Check"
+                  : authMode === "forgot"
+                    ? "Reset Password"
+                    : authMode === "reset"
+                      ? "New Password"
+                      : "Log In"}
               </h1>
 
             <p className="text-[#5f6f67] dark:text-zinc-400 text-lg">
-              Access your sustainable fashion account
+              {twoFactorToken
+                ? "Enter the code generated for this login"
+                : authMode === "forgot"
+                  ? "Request a password reset token"
+                  : authMode === "reset"
+                    ? "Choose a new password for your account"
+                    : "Access your sustainable fashion account"}
             </p>
             </div>
 
@@ -182,7 +305,14 @@ export function LoginPage() {
                 </div>
               ) : null}
 
+              {successMessage ? (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                  {successMessage}
+                </div>
+              ) : null}
+
               {/* Email */}
+              {!twoFactorToken && authMode !== "reset" ? (
               <div>
                 <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
                   Email Address
@@ -235,8 +365,10 @@ export function LoginPage() {
                   />
                 </div>
               </div>
+              ) : null}
 
               {/* Password */}
+              {!twoFactorToken && authMode === "login" ? (
               <div>
                 <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
                   Password
@@ -313,8 +445,86 @@ export function LoginPage() {
                   </button>
                 </div>
               </div>
+              ) : null}
+
+              {twoFactorToken ? (
+                <div>
+                  <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
+                    Verification Code
+                  </label>
+                  <div className="relative">
+                    <ShieldCheck className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#5f6f67] dark:text-zinc-500" />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={twoFactorCode}
+                      onChange={(e) => setTwoFactorCode(e.target.value)}
+                      placeholder="123456"
+                      maxLength={6}
+                      required
+                      className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-4 text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              {authMode === "reset" ? (
+                <>
+                  <div>
+                    <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
+                      Reset Token
+                    </label>
+                    <div className="relative">
+                      <KeyRound className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#5f6f67] dark:text-zinc-500" />
+                      <input
+                        type="text"
+                        value={resetToken}
+                        onChange={(e) => setResetToken(e.target.value)}
+                        placeholder="Paste reset token"
+                        required
+                        className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-4 text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#5f6f67] dark:text-zinc-500" />
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="New password"
+                        required
+                        className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-4 text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : null}
 
               {/* Options */}
+              {!twoFactorToken && authMode === "login" ? (
+                <>
+                  {googleClientId ? (
+                    <div className="flex justify-center">
+                      <div ref={googleButtonRef} />
+                    </div>
+                  ) : null}
+
+                  {googleClientId ? (
+                    <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-[#8a9a91]">
+                      <div className="h-px flex-1 bg-[#e7ebe6]" />
+                      or
+                      <div className="h-px flex-1 bg-[#e7ebe6]" />
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+
+              {!twoFactorToken && authMode === "login" ? (
               <div className="flex items-center justify-between">
                 <label
                   className="
@@ -343,8 +553,13 @@ export function LoginPage() {
                   Remember me
                 </label>
 
-                <a
-                  href="#"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode("forgot");
+                    setError("");
+                    setSuccessMessage("");
+                  }}
                   className="
                     text-sm
                     text-[#336158]
@@ -353,8 +568,9 @@ export function LoginPage() {
                   "
                 >
                   Forgot Password?
-                </a>
+                </button>
               </div>
+              ) : null}
 
               {/* Login Button */}
               <button
@@ -375,8 +591,26 @@ export function LoginPage() {
                   disabled:opacity-70
                 "
               >
-                {isSubmitting ? "Logging in..." : "Log In"}
+                {isSubmitting
+                  ? "Please wait..."
+                  : twoFactorToken
+                    ? "Verify Code"
+                    : authMode === "forgot"
+                      ? "Send Reset Token"
+                      : authMode === "reset"
+                        ? "Reset Password"
+                        : "Log In"}
               </button>
+
+              {(twoFactorToken || authMode !== "login") ? (
+                <button
+                  type="button"
+                  onClick={returnToLogin}
+                  className="w-full text-sm text-[#5f6f67] transition-colors hover:text-[#336158] dark:text-zinc-400 dark:hover:text-white"
+                >
+                  Back to login
+                </button>
+              ) : null}
             </form>
 
             {/* Bottom */}

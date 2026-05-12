@@ -1,8 +1,15 @@
 import {
   User,
   AuthResponse,
+  LoginResponse,
+  SignupResponse,
+  GoogleAuthResponse,
   SignupPayload,
   LoginPayload,
+  VerifyTwoFactorPayload,
+  ForgotPasswordPayload,
+  ResetPasswordPayload,
+  GoogleAuthPayload,
   UpdateProfilePayload,
   Submission,
   CreateSubmissionPayload,
@@ -51,7 +58,7 @@ async function fetchWithAuth(
 // ============= AUTH ENDPOINTS =============
 
 export const authService = {
-  async signup(payload: SignupPayload): Promise<AuthResponse> {
+  async signup(payload: SignupPayload): Promise<SignupResponse> {
     const data = await fetchWithAuth('/auth/signup', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -66,7 +73,7 @@ export const authService = {
     return data;
   },
 
-  async login(payload: LoginPayload): Promise<AuthResponse> {
+  async login(payload: LoginPayload): Promise<LoginResponse> {
     const data = await fetchWithAuth('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -79,6 +86,60 @@ export const authService = {
     }
 
     return data;
+  },
+
+  async verifyTwoFactor(payload: VerifyTwoFactorPayload): Promise<AuthResponse> {
+    const data = await fetchWithAuth('/auth/2fa/verify', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (data.token) {
+      localStorage.setItem('auth_token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+    }
+
+    return data;
+  },
+
+  async continueWithGoogle(payload: GoogleAuthPayload): Promise<GoogleAuthResponse> {
+    const data = await fetchWithAuth('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (data.token) {
+      localStorage.setItem('auth_token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+    }
+
+    return data;
+  },
+
+  async enableTwoFactor(): Promise<{ message: string; dev_code?: string }> {
+    return fetchWithAuth('/auth/2fa/enable', {
+      method: 'POST',
+    });
+  },
+
+  async disableTwoFactor(): Promise<{ message: string }> {
+    return fetchWithAuth('/auth/2fa/disable', {
+      method: 'POST',
+    });
+  },
+
+  async forgotPassword(payload: ForgotPasswordPayload): Promise<{ message: string; reset_token?: string }> {
+    return fetchWithAuth('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async resetPassword(payload: ResetPasswordPayload): Promise<{ message: string }> {
+    return fetchWithAuth('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   async getProfile(): Promise<{ data: User }> {

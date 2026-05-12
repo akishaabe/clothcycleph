@@ -4,6 +4,7 @@ export interface User {
   email: string;
   name: string;
   role: 'user' | 'partner' | 'admin';
+  two_factor_enabled?: boolean;
   avatar_url?: string;
   bio?: string;
   phone?: string;
@@ -17,6 +18,17 @@ export interface AuthResponse {
   token: string;
 }
 
+export interface TwoFactorChallengeResponse {
+  message: string;
+  requiresTwoFactor: true;
+  two_factor_token: string;
+  dev_code?: string;
+}
+
+export type LoginResponse = AuthResponse | TwoFactorChallengeResponse;
+export type SignupResponse = AuthResponse | TwoFactorChallengeResponse;
+export type GoogleAuthResponse = AuthResponse | TwoFactorChallengeResponse;
+
 export interface SignupPayload {
   email: string;
   name: string;
@@ -27,6 +39,25 @@ export interface SignupPayload {
 export interface LoginPayload {
   email: string;
   password: string;
+}
+
+export interface VerifyTwoFactorPayload {
+  two_factor_token: string;
+  code: string;
+}
+
+export interface ForgotPasswordPayload {
+  email: string;
+}
+
+export interface ResetPasswordPayload {
+  token: string;
+  password: string;
+}
+
+export interface GoogleAuthPayload {
+  credential: string;
+  role?: 'user' | 'partner';
 }
 
 export interface UpdateProfilePayload {

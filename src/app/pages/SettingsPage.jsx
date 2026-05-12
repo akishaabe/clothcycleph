@@ -320,9 +320,24 @@ export function SettingsPage() {
                   Change your password to keep your account protected.
                 </p>
                 <div className="flex flex-1 flex-col justify-between gap-5">
-                  {["Current Password", "New Password", "Confirm New Password"].map(
-                    (label) => (
-                      <div key={label}>
+                  <div className="flex items-center justify-between gap-4 rounded-xl border border-[#e7ebe6] bg-[#f8faf6] p-4">
+                    <div>
+                      <div className="text-[#19221d]">Two-Factor Authentication</div>
+                      <div className="text-sm text-[#5f6f67]">
+                        Email verification is required for every login and signup.
+                      </div>
+                    </div>
+                    <div className="rounded-full bg-[#336158]/10 px-4 py-2 text-sm text-[#336158]">
+                      Required
+                    </div>
+                  </div>
+
+                  {[
+                    ["Current Password", "currentPassword"],
+                    ["New Password", "newPassword"],
+                    ["Confirm New Password", "confirmPassword"],
+                  ].map(([label, field]) => (
+                      <div key={field}>
                         <label className="block text-sm mb-2 text-[#19221d]">
                           {label}
                         </label>
@@ -331,6 +346,13 @@ export function SettingsPage() {
                           <input
                             type="password"
                             placeholder="••••••••"
+                            value={security[field]}
+                            onChange={(event) =>
+                              setSecurity({
+                                ...security,
+                                [field]: event.target.value,
+                              })
+                            }
                             className={inputClass}
                           />
                         </div>
@@ -339,12 +361,7 @@ export function SettingsPage() {
                   )}
 
                   <button
-                    onClick={() =>
-                      showSaveMessage(
-                        "success",
-                        "Changes were successfully saved."
-                      )
-                    }
+                    onClick={handleSecuritySave}
                     className={actionButtonClass}
                   >
                     <Save className="w-5 h-5" />
