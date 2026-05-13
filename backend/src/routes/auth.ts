@@ -13,6 +13,7 @@ import {
   forgotPassword,
   resetPassword,
   continueWithGoogle,
+  changePassword,
 } from '../controllers/authController.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
@@ -28,6 +29,7 @@ import {
   twoFactorEnableSchema,
   twoFactorDisableSchema,
   updateProfileSchema,
+  changePasswordSchema,
 } from '../schemas/auth.js';
 
 const router = Router();
@@ -44,6 +46,7 @@ router.post('/reset-password', validate(resetPasswordSchema), resetPassword);
 // Protected routes
 router.get('/profile', authMiddleware, getProfile);
 router.put('/profile', authMiddleware, validate(updateProfileSchema), updateProfile);
+router.put('/password', authMiddleware, validate(changePasswordSchema), changePassword);
 router.get('/2fa/status', authMiddleware, getTwoFactorStatus);
 router.get('/2fa/setup', authMiddleware, setupTwoFactor);
 router.post('/2fa/setup', authMiddleware, validate(twoFactorSetupSchema), setupTwoFactor);

@@ -39,6 +39,11 @@ function titleCase(value?: string | null) {
     .join(' ');
 }
 
+function csvCell(value: unknown) {
+  const normalized = value === null || value === undefined ? '' : String(value);
+  return `"${normalized.replace(/"/g, '""')}"`;
+}
+
 function buildBrief(submission: any, recommendation: any) {
   const details = submission.details || {};
   const burnTest = submission.burn_test || {};
@@ -108,7 +113,10 @@ async function getSubmissionForUser(submissionId: string, userId: string, role?:
 export const listPartners = async (_req: AuthRequest, res: Response) => {
   try {
     const result = await query(
-      `SELECT id, name, description, logo_url, email, phone, address, website, service_types, contact_person, rating, verified
+      `SELECT
+         id, name, description, logo_url, email, phone, address, website,
+         service_types, contact_person, rating, verified,
+         capacity_notes, accepted_service_types, accepts_clean_only, pickup_areas
        FROM partners
        WHERE COALESCE(status, 'active') IN ('active', 'pending')
        ORDER BY verified DESC, rating DESC, name ASC`
@@ -255,7 +263,7 @@ export const sendRecommendationToPartner = async (req: AuthRequest, res: Respons
           messageId,
           userId,
           partnerUserId,
-          `New DSS request: ${submission.submission_name || submission.item_type}\nPathway: ${titleCase(recommended_pathway)}\nBrief: ${brief}`,
+          `New submission request from me! I want to ${recommended_pathway} this item.`,
           submission_id,
           transactionId,
           `/partner?request=${transactionId}`,
@@ -533,6 +541,87 @@ export const getDssAuditRuns = async (req: AuthRequest, res: Response) => {
     );
 
     res.json({ data: result.rows, count: result.rows.length });
+  } catch (error) {
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};
+
+export const exportDssAuditReport = async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      throw new AppError(403, 'Only admins can export DSS audit runs');
+    }
+
+    const result = await query(
+      `SELECT
+         r.created_at,
+         r.engine_version,
+         rr.recommended_pathway,
+         rr.rank,
+         rr.score,
+         rr.confidence,
+         rr.explanation,
+         s.submission_name,
+         s.item_type,
+         p.name AS partner_name,
+         u.name AS requested_by_name,
+         rr.output_payload
+       FROM recommendation_results rr
+       JOIN recommendation_runs r ON r.id = rr.run_id
+       LEFT JOIN submissions s ON s.id = rr.submission_id
+       LEFT JOIN partners p ON p.id = rr.partner_id
+       LEFT JOIN users u ON u.id = r.requested_by_user_id
+       ORDER BY r.created_at DESC
+       LIMIT 500`
+    );
+
+    const header = [
+      'created_at',
+      'engine_version',
+      'recommended_pathway',
+      'rank',
+      'score',
+      'confidence',
+      'submission_name',
+      'item_type',
+      'partner_name',
+      'requested_by_name',
+      'explanation',
+      'matched_rules',
+      'missed_rules',
+    ];
+
+    const rows = result.rows.map((row) => {
+      const checks = row.output_payload?.rule_checks || [];
+      const matched = checks
+        .filter((check: any) => check.matched)
+        .map((check: any) => check.question)
+        .join('; ');
+      const missed = checks
+        .filter((check: any) => !check.matched)
+        .map((check: any) => `${check.question} expected ${check.expected}, selected ${check.selected}`)
+        .join('; ');
+
+      return [
+        row.created_at?.toISOString?.() || row.created_at,
+        row.engine_version,
+        row.recommended_pathway,
+        row.rank,
+        row.score,
+        row.confidence,
+        row.submission_name,
+        row.item_type,
+        row.partner_name,
+        row.requested_by_name,
+        row.explanation,
+        matched,
+        missed,
+      ].map(csvCell).join(',');
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="clothcycle-dss-audit.csv"');
+    res.send([header.join(','), ...rows].join('\n'));
   } catch (error) {
     res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
   }

@@ -50,7 +50,7 @@ export async function sendPasswordResetLink(to: string, resetCode: string) {
         <h2>Reset your ClothCycle PH password</h2>
         <p>Use this code in the app to reset your password:</p>
         <p style="font-size: 28px; letter-spacing: 6px; font-weight: 700;">${resetCode}</p>
-        <p>This token expires in 30 minutes. If this was not you, ignore this email.</p>
+        <p>This code expires in 30 minutes. If this was not you, ignore this email.</p>
       </div>
     `,
   });

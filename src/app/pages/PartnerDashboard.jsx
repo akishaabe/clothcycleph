@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Recycle, Package, Clock, CheckCircle, XCircle, Bell, User, BarChart3, Settings, LogOut, MessageSquare, Eye, Loader2, RefreshCw, X, Search } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { dssService } from "../../services/api";
+import { dssService, messageService, notificationService } from "../../services/api";
 import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
 
 const platformData = [
@@ -64,6 +64,13 @@ export function PartnerDashboard() {
   const [requestError, setRequestError] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [badgeCounts, setBadgeCounts] = useState({ messages: 0, notifications: 0 });
+  const [ruleRequest, setRuleRequest] = useState({
+    rule_area: "Partner preferences",
+    requested_change: "",
+    reason: "",
+  });
+  const [ruleRequestMessage, setRuleRequestMessage] = useState("");
 
   const loadRequests = async () => {
     setIsLoadingRequests(true);
@@ -84,6 +91,36 @@ export function PartnerDashboard() {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
+    async function loadBadges() {
+      try {
+        const [messagesResponse, notificationsResponse] = await Promise.all([
+          messageService.getUnreadCount(),
+          notificationService.getUnreadCount(),
+        ]);
+
+        if (isMounted) {
+          setBadgeCounts({
+            messages: Number(messagesResponse.unread_count || 0),
+            notifications: Number(notificationsResponse.unread_count || 0),
+          });
+        }
+      } catch {
+        if (isMounted) {
+          setBadgeCounts({ messages: 0, notifications: 0 });
+        }
+      }
+    }
+
+    loadBadges();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const requestId = searchParams.get("request");
 
     if (!requestId || requests.length === 0) {
@@ -93,7 +130,7 @@ export function PartnerDashboard() {
     const request = requests.find((item) => item.id === requestId);
     if (request) {
       setSelectedRequest(request);
-      setStatusNote(request.notes || "");
+      setStatusNote("");
       requestsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [searchParams, requests]);
@@ -132,23 +169,38 @@ export function PartnerDashboard() {
     });
   }, [requests, activeFilter, searchQuery]);
 
-  const updateRequestStatus = async (request, status) => {
+  const updateRequestStatus = async (request, status, noteOverride) => {
     setIsUpdatingStatus(true);
     setRequestError("");
+    const noteToSend = noteOverride ?? statusNote;
 
     try {
       await dssService.updateRequestStatus(request.id, {
         status,
-        notes: statusNote || undefined,
+        notes: noteToSend || undefined,
       });
       await loadRequests();
       setSelectedRequest((current) =>
-        current?.id === request.id ? { ...current, status, notes: statusNote || current.notes } : current,
+        current?.id === request.id ? { ...current, status, notes: noteToSend || current.notes } : current,
       );
+      setStatusNote("");
     } catch (error) {
       setRequestError(error.message || "Unable to update request status.");
     } finally {
       setIsUpdatingStatus(false);
+    }
+  };
+
+  const submitRuleRequest = async (event) => {
+    event.preventDefault();
+    setRuleRequestMessage("");
+
+    try {
+      const response = await dssService.requestRuleChange(ruleRequest);
+      setRuleRequestMessage(response.message || "Preference request submitted for admin review.");
+      setRuleRequest((current) => ({ ...current, requested_change: "", reason: "" }));
+    } catch (error) {
+      setRuleRequestMessage(error.message || "Unable to submit preference request.");
     }
   };
 
@@ -177,11 +229,13 @@ export function PartnerDashboard() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Link to="/messages?theme=partner" className="w-10 h-10 rounded-full bg-[#eff6ff] flex items-center justify-center hover:bg-[#dbeafe] transition-colors" aria-label="Open messages" title="Messages">
+            <Link to="/messages?theme=partner" className="relative w-10 h-10 rounded-full bg-[#eff6ff] flex items-center justify-center hover:bg-[#dbeafe] transition-colors" aria-label="Open messages" title="Messages">
               <MessageSquare className="w-5 h-5 text-[#41668f]" />
+              {badgeCounts.messages > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />}
             </Link>
-            <Link to="/notifications?theme=partner" className="w-10 h-10 rounded-full bg-[#eff6ff] flex items-center justify-center hover:bg-[#dbeafe] transition-colors">
+            <Link to="/notifications?theme=partner" className="relative w-10 h-10 rounded-full bg-[#eff6ff] flex items-center justify-center hover:bg-[#dbeafe] transition-colors">
               <Bell className="w-5 h-5 text-[#41668f]" />
+              {badgeCounts.notifications > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />}
             </Link>
             <div className="relative">
               <button
@@ -408,7 +462,7 @@ export function PartnerDashboard() {
                         <button
                           onClick={() => {
                             setSelectedRequest(request);
-                            setStatusNote(request.notes || "");
+                            setStatusNote("");
                           }}
                           className="w-8 h-8 rounded-lg bg-[#eff6ff] flex items-center justify-center hover:bg-[#dbeafe] transition-colors"
                           title="View"
@@ -416,14 +470,14 @@ export function PartnerDashboard() {
                           <Eye className="w-4 h-4 text-[#41668f]" />
                         </button>
                         <button
-                          onClick={() => updateRequestStatus(request, "accepted")}
+                          onClick={() => updateRequestStatus(request, "accepted", "")}
                           className="w-8 h-8 rounded-lg bg-[#4f6f9f]/20 flex items-center justify-center hover:bg-[#4f6f9f]/30 transition-colors"
                           title="Accept"
                         >
                           <CheckCircle className="w-4 h-4 text-[#4f6f9f]" />
                         </button>
                         <button
-                          onClick={() => updateRequestStatus(request, "declined")}
+                          onClick={() => updateRequestStatus(request, "declined", "")}
                           className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center hover:bg-red-200 transition-colors"
                           title="Decline"
                         >
@@ -437,6 +491,63 @@ export function PartnerDashboard() {
             </table>
           </div>
         </motion.div>
+
+        <motion.form
+          onSubmit={submitRuleRequest}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="mt-8 rounded-2xl bg-white p-6 shadow-lg"
+        >
+          <h3 className="text-xl text-[#10233f]">Request partner rule or preference changes</h3>
+          <p className="mt-1 text-sm text-[#41668f]">
+            Tell admins what your organization can accept so DSS partner matching can improve without changing rules silently.
+          </p>
+          <div className="mt-5 grid gap-4 lg:grid-cols-[240px_1fr]">
+            <label className="block">
+              <span className="mb-2 block text-sm text-[#41668f]">Area</span>
+              <select
+                value={ruleRequest.rule_area}
+                onChange={(event) => setRuleRequest((current) => ({ ...current, rule_area: event.target.value }))}
+                className="w-full rounded-xl border border-[#d6e6f8] bg-[#fbfdff] px-4 py-3 text-sm text-[#10233f] outline-none focus:border-[#4f6f9f]"
+              >
+                <option>Partner preferences</option>
+                <option>Accepted pathways</option>
+                <option>Pickup areas</option>
+                <option>Cleanliness requirements</option>
+                <option>Capacity notes</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-sm text-[#41668f]">Requested change</span>
+              <input
+                value={ruleRequest.requested_change}
+                onChange={(event) => setRuleRequest((current) => ({ ...current, requested_change: event.target.value }))}
+                required
+                className="w-full rounded-xl border border-[#d6e6f8] bg-[#fbfdff] px-4 py-3 text-sm text-[#10233f] outline-none focus:border-[#4f6f9f]"
+                placeholder="Example: Accept donation and upcycle only for clean cotton textiles in Quezon City."
+              />
+            </label>
+            <label className="block lg:col-span-2">
+              <span className="mb-2 block text-sm text-[#41668f]">Reason</span>
+              <textarea
+                value={ruleRequest.reason}
+                onChange={(event) => setRuleRequest((current) => ({ ...current, reason: event.target.value }))}
+                rows={3}
+                className="w-full resize-none rounded-xl border border-[#d6e6f8] bg-[#fbfdff] px-4 py-3 text-sm text-[#10233f] outline-none focus:border-[#4f6f9f]"
+                placeholder="Add capacity, location, or material-handling context for admins."
+              />
+            </label>
+          </div>
+          {ruleRequestMessage && (
+            <div className="mt-4 rounded-xl bg-[#eff6ff] px-4 py-3 text-sm text-[#41668f]">
+              {ruleRequestMessage}
+            </div>
+          )}
+          <button className="mt-4 rounded-xl bg-[#4f6f9f] px-5 py-3 text-sm font-semibold text-white hover:bg-[#3f5f8f]">
+            Send to admins
+          </button>
+        </motion.form>
       </div>
 
       {selectedRequest && (
@@ -503,6 +614,19 @@ export function PartnerDashboard() {
                   </div>
                 </div>
 
+                {selectedRequest.photos?.length > 0 && (
+                  <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6">
+                    <h3 className="mb-4 text-xl font-semibold text-[#10233f]">Uploaded photos</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {selectedRequest.photos.map((photo) => (
+                        <a key={photo} href={photo} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-[#d6e6f8] bg-[#eff6ff]">
+                          <img src={photo} alt="" className="aspect-square w-full object-cover" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6">
                   <h3 className="mb-2 text-2xl font-semibold text-[#10233f]">Partner decision and message to user</h3>
                   <p className="mb-4 text-sm leading-6 text-[#41668f]">
@@ -514,9 +638,9 @@ export function PartnerDashboard() {
                   <textarea
                     value={statusNote}
                     onChange={(event) => setStatusNote(event.target.value)}
-                    rows={4}
+                    rows={7}
                     placeholder="Example: Accepted for donation. Please pack clean items separately and bring them on Friday afternoon."
-                    className="mb-3 w-full resize-none rounded-xl border border-[#d6e6f8] p-3 text-sm text-[#10233f] outline-none focus:border-[#4f6f9f]"
+                    className="mb-3 w-full resize-y rounded-xl border border-[#d6e6f8] p-4 text-base leading-7 text-[#10233f] outline-none focus:border-[#4f6f9f]"
                   />
                   <div className="grid gap-2 sm:grid-cols-3">
                     {[

@@ -343,11 +343,19 @@ export function MessagesPage() {
   };
 
   const openMessageAction = (message) => {
-    if (!message.action_url) {
+    const actionUrl =
+      currentUser?.role === "partner"
+        ? message.metadata?.partner_action_url
+        : currentUser?.role === "user"
+          ? message.metadata?.user_action_url
+          : null;
+    const url = actionUrl || message.action_url;
+
+    if (!url) {
       return;
     }
 
-    navigate(message.action_url);
+    navigate(url);
   };
 
   if (isAuthLoading && !isPreview) {
@@ -402,8 +410,8 @@ export function MessagesPage() {
       </nav>
 
       <main className="mx-auto max-w-[1650px] p-6 xl:p-8">
-        <section className="messages-shell grid min-h-[820px] overflow-hidden rounded-[28px] border shadow-[0_18px_54px_rgba(25,34,29,0.1)] lg:grid-cols-[470px_1fr]">
-          <aside className="messages-sidebar border-r">
+        <section className="messages-shell grid h-[calc(100vh-150px)] min-h-[620px] overflow-hidden rounded-[28px] border shadow-[0_18px_54px_rgba(25,34,29,0.1)] lg:grid-cols-[430px_1fr]">
+          <aside className="messages-sidebar flex min-h-0 flex-col border-r">
             <div className="border-b p-6">
               <div className="mb-4 flex items-center justify-between">
                 <div>
@@ -428,7 +436,7 @@ export function MessagesPage() {
               </div>
             </div>
 
-            <div className="divide-y">
+            <div className="min-h-0 flex-1 divide-y overflow-y-auto">
               {visibleConversations.map((conversation) => (
                 <button
                   key={conversation.other_user_id}
@@ -437,8 +445,16 @@ export function MessagesPage() {
                     conversation.other_user_id === activeUserId ? "is-active" : ""
                   }`}
                 >
-                  <div className="messages-avatar flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-xl">
-                    {conversation.other_user_name.charAt(0)}
+                  <div className="messages-avatar flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-lg">
+                    {conversation.other_user_avatar_url ? (
+                      <img
+                        src={conversation.other_user_avatar_url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      conversation.other_user_name.charAt(0)
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-3">
@@ -505,7 +521,7 @@ export function MessagesPage() {
             </div>
           </aside>
 
-          <section className="messages-chat flex min-h-[820px] flex-col">
+          <section className="messages-chat flex min-h-0 flex-col">
             {activeParticipant ? (
               <>
                 <header className="flex flex-col gap-3 border-b p-7 md:flex-row md:items-center md:justify-between">
@@ -531,7 +547,7 @@ export function MessagesPage() {
                   </div>
                 )}
 
-                <div className="flex-1 space-y-6 overflow-y-auto p-7">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5 md:p-6">
                   {activeMessages.length === 0 && (
                     <div className="messages-muted flex h-full items-center justify-center text-center">
                       No messages yet. Send the first note to coordinate a transaction or inquiry.
@@ -547,21 +563,21 @@ export function MessagesPage() {
                         className={`flex ${isMine ? "justify-end" : "justify-start"}`}
                       >
                         <div
-                          className={`messages-bubble max-w-[82%] rounded-2xl px-6 py-5 ${
+                          className={`messages-bubble max-w-[78%] rounded-2xl px-4 py-3 ${
                             isMine ? "is-mine" : "is-theirs"
                           }`}
                         >
-                          <p className="text-lg leading-8">{message.content}</p>
+                          <p className="text-sm leading-6 md:text-base">{message.content}</p>
                           {message.action_url && (
                             <button
                               type="button"
                               onClick={() => openMessageAction(message)}
-                              className="mt-4 rounded-xl bg-white/90 px-4 py-2 text-base font-semibold text-[#336158] shadow-sm transition-colors hover:bg-white"
+                              className="mt-3 rounded-xl bg-white/90 px-3 py-2 text-sm font-semibold text-[#336158] shadow-sm transition-colors hover:bg-white"
                             >
                               View request
                             </button>
                           )}
-                          <div className="mt-3 flex items-center justify-end gap-1 text-base opacity-80">
+                          <div className="mt-2 flex items-center justify-end gap-1 text-xs opacity-80">
                             {formatMessageTime(message.created_at)}
                             {isMine && <Check className="h-3.5 w-3.5" />}
                           </div>

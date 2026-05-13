@@ -4,6 +4,7 @@ import {
   sendMessage,
   getMessages,
   getConversations,
+  getUnreadMessageCount,
   markMessageAsRead,
 } from '../controllers/messageController.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -17,6 +18,7 @@ const router = Router();
 router.get('/contacts', authMiddleware, getMessageContacts);
 router.post('/', authMiddleware, validate(sendMessageSchema), sendMessage);
 router.get('/conversations', authMiddleware, getConversations);
+router.get('/unread-count', authMiddleware, getUnreadMessageCount);
 router.get('/:userId', authMiddleware, validate(userIdParamSchema, 'params'), getMessages);
 router.put('/:id/read', authMiddleware, validate(uuidParamSchema, 'params'), markMessageAsRead);
 

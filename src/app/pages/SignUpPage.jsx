@@ -9,6 +9,7 @@ import {
   loadGoogleIdentityScript,
 } from "../../services/googleIdentity";
 import "./SignUpPage.css";
+import { isStrongPassword, PasswordChecklist } from "../../utils/passwordPolicy";
 
 export function SignUpPage() {
   const navigate = useNavigate();
@@ -110,6 +111,11 @@ export function SignUpPage() {
 
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match");
+      return;
+    }
+
+    if (!isStrongPassword(formData.password)) {
+      setError("Password does not meet the required strength rules.");
       return;
     }
 
@@ -292,6 +298,10 @@ export function SignUpPage() {
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              <PasswordChecklist
+                password={formData.password}
+                confirmPassword={formData.confirmPassword}
+              />
             </div>
 
             <div>

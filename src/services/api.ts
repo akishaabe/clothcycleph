@@ -212,6 +212,17 @@ export const authService = {
     sessionStorage.removeItem('user');
   },
 
+  async changePassword(payload: {
+    current_password: string;
+    new_password: string;
+    confirm_password: string;
+  }): Promise<{ message: string }> {
+    return fetchWithAuth('/auth/password', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
   getStoredUser(): User | null {
     const user = localStorage.getItem('user') || sessionStorage.getItem('user');
     return user ? JSON.parse(user) : null;
@@ -336,6 +347,27 @@ export const dssService = {
     });
   },
 
+  async exportAuditReport(): Promise<Blob> {
+    const token = getAuthToken();
+    const headers: HeadersInit = {};
+
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_URL}/dss/audit/export`, {
+      method: 'GET',
+      headers,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Audit export failed');
+    }
+
+    return response.blob();
+  },
+
   async requestRuleChange(payload: {
     rule_area: string;
     requested_change: string;
@@ -370,6 +402,12 @@ export const messageService = {
     });
   },
 
+  async getUnreadCount(): Promise<{ unread_count: number }> {
+    return fetchWithAuth('/messages/unread-count', {
+      method: 'GET',
+    });
+  },
+
   async getMessages(userId: string): Promise<{ data: Message[]; count: number }> {
     return fetchWithAuth(`/messages/${userId}`, {
       method: 'GET',
@@ -380,6 +418,24 @@ export const messageService = {
     return fetchWithAuth(`/messages/${id}/read`, {
       method: 'PUT',
     });
+  },
+};
+
+export const notificationService = {
+  async getNotifications(): Promise<{ data: any[]; count: number }> {
+    return fetchWithAuth('/notifications', { method: 'GET' });
+  },
+
+  async getUnreadCount(): Promise<{ unread_count: number }> {
+    return fetchWithAuth('/notifications/count', { method: 'GET' });
+  },
+
+  async markAsRead(id: string): Promise<{ message: string; data: any }> {
+    return fetchWithAuth(`/notifications/${id}/read`, { method: 'PUT' });
+  },
+
+  async markAllAsRead(): Promise<{ message: string; count: number }> {
+    return fetchWithAuth('/notifications/read-all', { method: 'PUT' });
   },
 };
 

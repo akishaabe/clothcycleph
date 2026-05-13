@@ -754,8 +754,9 @@ export const resetPassword = async (req: Request, res: Response) => {
   const client = await getClient();
 
   try {
-    const { token, password } = req.body;
-    const tokenHash = hashToken(token.trim());
+    const { code, token, password } = req.body;
+    const resetCode = (code || token).trim();
+    const tokenHash = hashToken(resetCode);
 
     const tokenResult = await client.query(
       `SELECT *
@@ -767,7 +768,7 @@ export const resetPassword = async (req: Request, res: Response) => {
     );
 
     if (tokenResult.rows.length === 0) {
-      throw new AppError(400, 'Invalid or expired reset token');
+      throw new AppError(400, 'Invalid or expired reset code');
     }
 
     const passwordHash = await hashPassword(password);
@@ -809,7 +810,7 @@ export const getProfile = async (req: Request, res: Response) => {
     }
 
     const result = await query(
-      'SELECT id, email, name, role, avatar_url, bio, phone, address, two_factor_enabled, created_at FROM users WHERE id = $1',
+      'SELECT id, email, name, role, avatar_url, bio, phone, address, two_factor_enabled, email_verified_at, created_at FROM users WHERE id = $1',
       [userId]
     );
 
@@ -826,29 +827,83 @@ export const getProfile = async (req: Request, res: Response) => {
 export const updateProfile = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { name, avatar_url, bio, phone, address } = req.body;
+    const { name, email, avatar_url, bio, phone, address, password } = req.body;
 
     if (!userId) {
       throw new AppError(401, 'User not authenticated');
     }
 
+    const currentResult = await query('SELECT * FROM users WHERE id = $1', [userId]);
+
+    if (currentResult.rows.length === 0) {
+      throw new AppError(404, 'User not found');
+    }
+
+    const currentUser = currentResult.rows[0];
+    const isSensitiveChange =
+      (email && email !== currentUser.email) ||
+      (phone !== undefined && phone !== currentUser.phone);
+
+    if (isSensitiveChange) {
+      if (!password) {
+        throw new AppError(400, 'Password is required to change email or phone number');
+      }
+
+      const isValidPassword = await comparePassword(password, currentUser.password_hash);
+      if (!isValidPassword) {
+        throw new AppError(401, 'Invalid password');
+      }
+    }
+
     const result = await query(
       `UPDATE users 
        SET name = COALESCE($2, name), 
-           avatar_url = COALESCE($3, avatar_url),
-           bio = COALESCE($4, bio),
-           phone = COALESCE($5, phone),
-           address = COALESCE($6, address),
+           email = COALESCE($3, email),
+           avatar_url = COALESCE($4, avatar_url),
+           bio = COALESCE($5, bio),
+           phone = COALESCE($6, phone),
+           address = COALESCE($7, address),
            updated_at = NOW()
        WHERE id = $1
        RETURNING id, email, name, role, avatar_url, bio, phone, address, two_factor_enabled`,
-      [userId, name, avatar_url, bio, phone, address]
+      [userId, name, email, avatar_url, bio, phone, address]
     );
 
     res.json({
       message: 'Profile updated successfully',
       data: result.rows[0],
     });
+  } catch (error) {
+    sendAuthError(res, error);
+  }
+};
+
+export const changePassword = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { current_password, new_password } = req.body;
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    const result = await query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+    if (result.rows.length === 0) {
+      throw new AppError(404, 'User not found');
+    }
+
+    const isValidPassword = await comparePassword(current_password, result.rows[0].password_hash);
+    if (!isValidPassword) {
+      throw new AppError(401, 'Invalid current password');
+    }
+
+    const passwordHash = await hashPassword(new_password);
+    await query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [
+      passwordHash,
+      userId,
+    ]);
+
+    res.json({ message: 'Password changed successfully' });
   } catch (error) {
     sendAuthError(res, error);
   }
