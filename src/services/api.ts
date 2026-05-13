@@ -25,6 +25,7 @@ import {
   DssPreview,
   DssRequest,
   SendDssRecommendationPayload,
+  DssAuditRun,
 } from '../types/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -316,6 +317,23 @@ export const dssService = {
     payload: { message?: string } = {}
   ): Promise<{ message: string; data: DssRequest }> {
     return fetchWithAuth(`/dss/requests/${requestId}/remind`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getAuditRuns(): Promise<{ data: DssAuditRun[]; count: number }> {
+    return fetchWithAuth('/dss/audit', {
+      method: 'GET',
+    });
+  },
+
+  async requestRuleChange(payload: {
+    rule_area: string;
+    requested_change: string;
+    reason?: string;
+  }): Promise<{ message: string; data: unknown }> {
+    return fetchWithAuth('/dss/rule-change-requests', {
       method: 'POST',
       body: JSON.stringify(payload),
     });

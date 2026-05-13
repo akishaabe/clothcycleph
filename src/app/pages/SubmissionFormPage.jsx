@@ -14,6 +14,7 @@ import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useFileUpload } from "../../hooks/useFileUpload";
 import { useSubmissions } from "../../hooks/useSubmissions";
+import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
 import "./SubmissionFormPage.css";
 
 const itemTypes = [
@@ -285,8 +286,10 @@ export function SubmissionFormPage() {
   const [submitError, setSubmitError] = useState("");
   const [imagePreviews, setImagePreviews] = useState([]);
   const [showBurnTestResult, setShowBurnTestResult] = useState(false);
+  const [isReviewEditing, setIsReviewEditing] = useState(false);
 
   const [formData, setFormData] = useState({
+    submissionName: "",
     itemTypes: [],
     otherItemType: "",
     condition: "",
@@ -300,6 +303,7 @@ export function SubmissionFormPage() {
     fabricDescription: [],
     action: selectedService,
     buybackInterest: "",
+    upcycleRequest: "",
     description: "",
     imageFiles: [],
 
@@ -332,6 +336,7 @@ export function SubmissionFormPage() {
       ...prev,
       action,
       buybackInterest: action === "Upcycle" ? prev.buybackInterest : "",
+      upcycleRequest: action === "Upcycle" ? prev.upcycleRequest : "",
     }));
   };
 
@@ -418,6 +423,7 @@ export function SubmissionFormPage() {
           : formData.fabricDescription.join(", ");
 
       const createdSubmission = await createSubmission({
+        submission_name: formData.submissionName || null,
         item_type: toSubmissionItemType(),
         condition: formData.condition,
         fabric: fabricSummary,
@@ -429,6 +435,7 @@ export function SubmissionFormPage() {
         buyback_interest:
           formData.action === "Upcycle" && formData.buybackInterest === "Yes",
         action: formData.action,
+        upcycle_request: formData.upcycleRequest || null,
         details: {
           item_types: formData.itemTypes,
           other_item_type: formData.otherItemType || null,
@@ -453,6 +460,7 @@ export function SubmissionFormPage() {
       });
 
       setStep(6);
+      setIsReviewEditing(false);
 
       setTimeout(() => {
         navigate(`/dss/${createdSubmission.id}`);
@@ -507,36 +515,60 @@ export function SubmissionFormPage() {
   const isStepFourComplete =
     isBurnTestComplete &&
     formData.action &&
-    (formData.action !== "Upcycle" || formData.buybackInterest);
+    (formData.action !== "Upcycle" ||
+      (formData.buybackInterest &&
+        (formData.buybackInterest !== "Yes" || formData.upcycleRequest.trim())));
 
   const burnTestResult = analyzeBurnTestAnswers(formData);
 
   const reviewRows = [
-    ["Burn Test", formData.burnTestChoice],
-    ["Moment Flame", formData.burnTestMoment.join(", ")],
-    ["While in Flames", formData.burnTestFlames.join(", ")],
-    ["Without Flame", formData.burnTestNoFlame.join(", ")],
-    ["Smell", formData.burnTestSmell],
-    ["Ash Characteristics", formData.burnTestAshes.join(", ")],
-    ["Item Type", formData.itemTypes.join(", ")],
-    ["Condition", formData.condition],
-    ["Cleanliness", formData.cleanliness],
-    ["Quantity", `${formData.quantity} items`],
-    ["Fabric Type Known", formData.knowsFabricType],
-    [
-      "Fabric Type",
+    { label: "Submission Name", value: formData.submissionName, step: 2 },
+    { label: "Burn Test", value: formData.burnTestChoice, step: 1 },
+    { label: "Moment Flame", value: formData.burnTestMoment.join(", "), step: 1 },
+    { label: "While in Flames", value: formData.burnTestFlames.join(", "), step: 1 },
+    { label: "Without Flame", value: formData.burnTestNoFlame.join(", "), step: 1 },
+    { label: "Smell", value: formData.burnTestSmell, step: 1 },
+    { label: "Ash Characteristics", value: formData.burnTestAshes.join(", "), step: 1 },
+    { label: "Item Type", value: formData.itemTypes.join(", "), step: 2 },
+    { label: "Condition", value: formData.condition, step: 2 },
+    { label: "Cleanliness", value: formData.cleanliness, step: 2 },
+    { label: "Quantity", value: `${formData.quantity} items`, step: 2 },
+    { label: "Fabric Type Known", value: formData.knowsFabricType, step: 3 },
+    {
+      label: "Fabric Type",
+      step: 3,
+      value:
       formData.knowsFabricType === "Yes"
         ? formData.fabricTypes.join(", ")
         : formData.fabricDescription.join(", "),
-    ],
-    ["Fabric Identified By", formData.fabricIdentification.join(", ")],
-    ["Brand", formData.noBrandVisible ? "No brand visible" : formData.brand],
-    ["Intended Pathway", formData.action],
-    ["Buyback Interest", formData.buybackInterest],
-  ].filter(([, value]) => value);
+    },
+    { label: "Fabric Identified By", value: formData.fabricIdentification.join(", "), step: 3 },
+    { label: "Brand", value: formData.noBrandVisible ? "No brand visible" : formData.brand, step: 3 },
+    { label: "Intended Pathway", value: formData.action, step: 4 },
+    { label: "Buyback Interest", value: formData.buybackInterest, step: 4 },
+    { label: "Upcycle Request", value: formData.upcycleRequest, step: 4 },
+  ].filter(({ value }) => value);
+
+  if (step === 6) {
+    return (
+      <BrandLoadingScreen
+        title="Generating your path..."
+        message="Hang tight, the DSS engine is generating its recommendations."
+        detail="We are preparing your fabric clues, item details, and partner-ready brief."
+      />
+    );
+  }
 
   return (
     <div className="submission-page app-darkable-page min-h-screen bg-gradient-to-br from-[#f5f5f0] to-[#e8ebe4]">
+      {isReviewEditing && step !== 5 && (
+        <button
+          onClick={() => setStep(5)}
+          className="fixed bottom-6 right-6 z-40 rounded-full bg-[#336158] px-5 py-3 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(25,34,29,0.22)] hover:bg-[#2a4c48]"
+        >
+          Back to review
+        </button>
+      )}
       <nav className="bg-white border-b border-[#d4d8d0] px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
@@ -620,8 +652,8 @@ export function SubmissionFormPage() {
                 <QuestionBlock label="Burn test fabric result">
                   <div className="rounded-2xl border border-[#d4d8d0] bg-[#f5f5f0] p-5">
                     <p className="mb-4 text-[#5a6f5a]">
-                      Your fabric might be one of these based on the burn test
-                      logic sheet.
+                      Your fabric might be one of these based on DSS burn-test
+                      rules.
                     </p>
 
                     <div className="grid gap-3 md:grid-cols-3">
@@ -867,6 +899,19 @@ export function SubmissionFormPage() {
             <div className="space-y-7">
               <h7 className="text-2xl text-[#2d4a2d]">Item Details</h7>
 
+              <QuestionBlock label="Name this submission (Optional)">
+                <input
+                  type="text"
+                  value={formData.submissionName}
+                  onChange={(event) =>
+                    updateField("submissionName", event.target.value)
+                  }
+                  className="w-full rounded-xl border-2 border-[#d4d8d0] bg-white px-4 py-3 focus:border-[#6b8e6b]"
+                  placeholder="Example: Denim jacket for upcycling"
+                  maxLength={160}
+                />
+              </QuestionBlock>
+
               <QuestionBlock label="What type of item/s are you submitting?">
                 <div className="grid md:grid-cols-2 gap-3">
                   {itemTypes.map((type) => (
@@ -979,6 +1024,19 @@ export function SubmissionFormPage() {
 
               {formData.knowsFabricType === "Yes" && (
                 <>
+                  {formData.burnTestChoice === "Yes" &&
+                    formData.fabricTypes.length === 0 && (
+                      <div className="rounded-xl border border-[#d4a574] bg-[#fff8e8] px-4 py-3 text-sm text-[#7a5427]">
+                        Burn test clue: your fabric might be{" "}
+                        <span className="font-semibold">
+                          {burnTestResult
+                            .map((result) => result.fiber)
+                            .join(", ")}
+                        </span>
+                        . Use this as a guide when selecting fabric type.
+                      </div>
+                    )}
+
                   <QuestionBlock label="What is the fabric type?">
                     <FabricChecklist
                       selected={formData.fabricTypes}
@@ -1088,19 +1146,35 @@ export function SubmissionFormPage() {
               </QuestionBlock>
 
               {formData.action === "Upcycle" && (
-                <QuestionBlock label="Are you interested in a buyback option (selling the upcycled item)?">
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    {["Yes", "No"].map((answer) => (
-                      <RadioOption
-                        key={answer}
-                        name="buybackInterest"
-                        label={answer}
-                        checked={formData.buybackInterest === answer}
-                        onChange={() => updateField("buybackInterest", answer)}
+                <>
+                  <QuestionBlock label="Are you interested in a buyback option (selling the upcycled item)?">
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {["Yes", "No"].map((answer) => (
+                        <RadioOption
+                          key={answer}
+                          name="buybackInterest"
+                          label={answer}
+                          checked={formData.buybackInterest === answer}
+                          onChange={() => updateField("buybackInterest", answer)}
+                        />
+                      ))}
+                    </div>
+                  </QuestionBlock>
+
+                  {formData.buybackInterest === "Yes" && (
+                    <QuestionBlock label="What would you like this item to become?">
+                      <textarea
+                        value={formData.upcycleRequest}
+                        onChange={(event) =>
+                          updateField("upcycleRequest", event.target.value)
+                        }
+                        className="w-full resize-none rounded-xl border-2 border-[#d4d8d0] bg-white px-4 py-3 focus:border-[#6b8e6b]"
+                        placeholder="Example: tote bag, pouch, patchwork piece, repaired jacket..."
+                        rows={3}
                       />
-                    ))}
-                  </div>
-                </QuestionBlock>
+                    </QuestionBlock>
+                  )}
+                </>
               )}
 
               <QuestionBlock label="Description (Optional)">
@@ -1191,10 +1265,28 @@ export function SubmissionFormPage() {
               </h2>
 
               <div className="space-y-4">
-                {reviewRows.map(([label, value]) => (
-                  <div key={label} className="p-4 bg-[#f5f5f0] rounded-xl">
-                    <div className="text-sm text-[#5a6f5a] mb-1">{label}</div>
-                    <div className="text-[#2d4a2d]">{value}</div>
+                {reviewRows.map(({ label, value, step: rowStep }) => (
+                  <div
+                    key={label}
+                    className="flex items-start justify-between gap-4 rounded-xl bg-[#f5f5f0] p-4"
+                  >
+                    <div>
+                      <div className="text-sm text-[#5a6f5a] mb-1">{label}</div>
+                      <div className="text-[#2d4a2d]">{value}</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (rowStep === 1) {
+                          setShowBurnTestResult(false);
+                        }
+
+                        setIsReviewEditing(true);
+                        setStep(rowStep);
+                      }}
+                      className="shrink-0 rounded-lg border border-[#d4d8d0] bg-white px-3 py-1.5 text-sm text-[#5a6f5a] hover:border-[#6b8e6b]"
+                    >
+                      Edit
+                    </button>
                   </div>
                 ))}
 
@@ -1212,7 +1304,10 @@ export function SubmissionFormPage() {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setStep(4)}
+                  onClick={() => {
+                    setIsReviewEditing(false);
+                    setStep(4);
+                  }}
                   className="flex-1 py-3 bg-white text-[#6b8e6b] border-2 border-[#6b8e6b] rounded-xl hover:bg-[#f5f5f0] transition-all"
                 >
                   Back

@@ -16,6 +16,7 @@ export const createSubmission = async (req: Request, res: Response) => {
   try {
     const {
       item_type,
+      submission_name,
       condition,
       fabric,
       cleanliness,
@@ -25,6 +26,7 @@ export const createSubmission = async (req: Request, res: Response) => {
       quantity,
       buyback_interest,
       action,
+      upcycle_request,
       scheduled_at,
       details,
       burn_test,
@@ -52,13 +54,15 @@ export const createSubmission = async (req: Request, res: Response) => {
          description,
          photos,
          status,
+         submission_name,
          service_type,
          quantity,
          buyback_interest,
          action,
+         upcycle_request,
          scheduled_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::json[], $9, $10, $11, $12, $13, $14)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::json[], $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING *`,
       [
         id,
@@ -70,10 +74,12 @@ export const createSubmission = async (req: Request, res: Response) => {
         description,
         photoJsonValues,
         'pending',
+        submission_name ?? null,
         service_type ?? null,
         quantity ?? 1,
         buyback_interest ?? false,
         action ?? null,
+        upcycle_request ?? null,
         scheduled_at ?? null,
       ]
     );

@@ -4,7 +4,7 @@ import { getClient, query } from '../config/database.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../utils/errorHandler.js';
 import { enqueueNotification } from '../services/jobQueue.js';
-import { analyzeBurnTest, buildPathwayRecommendations } from '../services/dssEngine.js';
+import { analyzeBurnTest, buildPathwayRecommendations, DSS_ENGINE_VERSION } from '../services/dssEngine.js';
 
 const statusLabels: Record<string, string> = {
   pending: 'Pending',
@@ -44,6 +44,7 @@ function buildBrief(submission: any, recommendation: any) {
   const burnTest = submission.burn_test || {};
   const lines = [
     `Recommended pathway: ${titleCase(recommendation.recommended_pathway)} (${Math.round(recommendation.confidence * 100)}% confidence)`,
+    `Submission name: ${submission.submission_name || submission.item_type}`,
     `Item: ${submission.item_type}`,
     `Quantity: ${submission.quantity || 1}`,
     `Condition: ${submission.condition}`,
@@ -67,6 +68,10 @@ function buildBrief(submission: any, recommendation: any) {
 
   if (submission.description) {
     lines.push(`User note: ${submission.description}`);
+  }
+
+  if (submission.upcycle_request) {
+    lines.push(`Upcycle request: ${submission.upcycle_request}`);
   }
 
   lines.push(`Recommendation note: ${recommendation.explanation}`);
@@ -155,9 +160,10 @@ export const sendRecommendationToPartner = async (req: AuthRequest, res: Respons
     const submission = await getSubmissionForUser(submission_id, userId, req.user?.role);
 
     const partnerResult = await query(
-      `SELECT id, name, user_id
-       FROM partners
-       WHERE id = $1 AND COALESCE(status, 'active') IN ('active', 'pending')`,
+      `SELECT p.id, p.name, p.user_id, p.email, COALESCE(p.user_id, u.id) AS resolved_user_id
+       FROM partners p
+       LEFT JOIN users u ON lower(u.email) = lower(p.email)
+       WHERE p.id = $1 AND COALESCE(p.status, 'active') IN ('active', 'pending')`,
       [partner_id]
     );
 
@@ -184,8 +190,8 @@ export const sendRecommendationToPartner = async (req: AuthRequest, res: Respons
         runId,
         submission_id,
         userId,
-        'dss-preview',
-        'handoff-v1',
+        'dss',
+        DSS_ENGINE_VERSION,
         JSON.stringify({ selected_partner_id: partner_id, selected_pathway: recommended_pathway }),
         JSON.stringify(submission),
       ]
@@ -209,7 +215,13 @@ export const sendRecommendationToPartner = async (req: AuthRequest, res: Respons
         recommendation.confidence,
         recommendation.explanation,
         brief,
-        JSON.stringify({ recommendation, brief, burn_test_analysis: analyzeBurnTest(submission.burn_test) }),
+        JSON.stringify({
+          engine_version: DSS_ENGINE_VERSION,
+          recommendation,
+          brief,
+          burn_test_analysis: analyzeBurnTest(submission.burn_test),
+          rule_checks: recommendation.checks || [],
+        }),
       ]
     );
 
@@ -230,12 +242,40 @@ export const sendRecommendationToPartner = async (req: AuthRequest, res: Respons
       [partner_id, recommended_pathway, submission_id]
     );
 
+    const partnerUserId = partner.resolved_user_id || partner.user_id;
+    if (partnerUserId) {
+      const messageId = uuidv4();
+      await client.query(
+        `INSERT INTO messages (
+           id, from_user_id, to_user_id, content,
+           related_submission_id, related_transaction_id, action_url, metadata
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          messageId,
+          userId,
+          partnerUserId,
+          `New DSS request: ${submission.submission_name || submission.item_type}\nPathway: ${titleCase(recommended_pathway)}\nBrief: ${brief}`,
+          submission_id,
+          transactionId,
+          `/partner?request=${transactionId}`,
+          JSON.stringify({
+            kind: 'dss_request',
+            submission_id,
+            transaction_id: transactionId,
+            user_action_url: `/dss/${submission_id}?request=${transactionId}`,
+            partner_action_url: `/partner?request=${transactionId}`,
+          }),
+        ]
+      );
+    }
+
     await client.query('COMMIT');
     transactionStarted = false;
 
-    if (partner.user_id) {
+    if (partnerUserId) {
       await enqueueNotification(
-        partner.user_id,
+        partnerUserId,
         'partner_update',
         'New textile request',
         `A user sent a ${titleCase(recommended_pathway)} request for your review.`,
@@ -284,6 +324,7 @@ export const getUserDssRequests = async (req: AuthRequest, res: Response) => {
          p.name AS partner_name,
          p.email AS partner_email,
          s.item_type,
+         s.submission_name,
          s.quantity,
          s.condition,
          s.cleanliness,
@@ -328,11 +369,13 @@ export const getPartnerDssRequests = async (req: AuthRequest, res: Response) => 
       `SELECT
          t.*,
          s.item_type,
+         s.submission_name,
          s.quantity,
          s.condition,
          s.cleanliness,
          s.fabric,
          s.description,
+         s.upcycle_request,
          s.photos,
          row_to_json(sd) AS details,
          row_to_json(bt) AS burn_test,
@@ -414,6 +457,30 @@ export const updateDssRequestStatus = async (req: AuthRequest, res: Response) =>
       [req.body.status, req.body.notes || null, req.params.id]
     );
 
+    const userActionUrl = `/dss/${transaction.submission_id}?request=${transaction.id}`;
+    await query(
+      `INSERT INTO messages (
+         id, from_user_id, to_user_id, content,
+         related_submission_id, related_transaction_id, action_url, metadata
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        uuidv4(),
+        userId,
+        transaction.from_user_id,
+        `Partner decision: ${statusLabels[req.body.status] || req.body.status}\n${req.body.notes ? `Message to user: ${req.body.notes}` : 'No additional message provided.'}`,
+        transaction.submission_id,
+        transaction.id,
+        userActionUrl,
+        JSON.stringify({
+          kind: 'dss_status_update',
+          status: req.body.status,
+          submission_id: transaction.submission_id,
+          transaction_id: transaction.id,
+        }),
+      ]
+    );
+
     await enqueueNotification(
       transaction.from_user_id,
       req.body.status === 'declined' ? 'submission_rejected' : 'submission_approved',
@@ -426,6 +493,85 @@ export const updateDssRequestStatus = async (req: AuthRequest, res: Response) =>
       message: 'Request status updated',
       data: result.rows[0],
     });
+  } catch (error) {
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};
+
+export const getDssAuditRuns = async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      throw new AppError(403, 'Only admins can view DSS audit runs');
+    }
+
+    const result = await query(
+      `SELECT
+         rr.id AS result_id,
+         rr.recommended_pathway,
+         rr.rank,
+         rr.score,
+         rr.confidence,
+         rr.explanation,
+         rr.output_payload,
+         r.id AS run_id,
+         r.engine_name,
+         r.engine_version,
+         r.criteria,
+         r.input_snapshot,
+         r.created_at,
+         s.submission_name,
+         s.item_type,
+         p.name AS partner_name,
+         u.name AS requested_by_name
+       FROM recommendation_results rr
+       JOIN recommendation_runs r ON r.id = rr.run_id
+       LEFT JOIN submissions s ON s.id = rr.submission_id
+       LEFT JOIN partners p ON p.id = rr.partner_id
+       LEFT JOIN users u ON u.id = r.requested_by_user_id
+       ORDER BY r.created_at DESC
+       LIMIT 50`
+    );
+
+    res.json({ data: result.rows, count: result.rows.length });
+  } catch (error) {
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};
+
+export const createPartnerRuleChangeRequest = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    const partnerResult = await query('SELECT id FROM partners WHERE user_id = $1 OR lower(email) = lower($2)', [
+      userId,
+      req.user?.email,
+    ]);
+
+    if (partnerResult.rows.length === 0 && req.user?.role !== 'admin') {
+      throw new AppError(404, 'Partner profile not found');
+    }
+
+    const result = await query(
+      `INSERT INTO partner_rule_change_requests (
+         id, partner_id, requested_by_user_id, rule_area, requested_change, reason
+       )
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [
+        uuidv4(),
+        partnerResult.rows[0]?.id || null,
+        userId,
+        req.body.rule_area,
+        req.body.requested_change,
+        req.body.reason || null,
+      ]
+    );
+
+    res.status(201).json({ message: 'Rule change request submitted for admin review', data: result.rows[0] });
   } catch (error) {
     res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
   }

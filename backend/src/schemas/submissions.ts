@@ -5,6 +5,7 @@ const optionalStringArraySchema = z.array(z.string().trim().min(1)).default([]);
 const nullableTrimmedStringSchema = z.string().trim().nullable().optional();
 
 export const createSubmissionSchema = z.object({
+  submission_name: z.string().trim().max(160).nullable().optional(),
   item_type: z.string().trim().min(1).max(100),
   condition: z.string().trim().min(1).max(100),
   fabric: z.string().trim().max(100).nullable().optional(),
@@ -15,6 +16,7 @@ export const createSubmissionSchema = z.object({
   quantity: z.coerce.number().int().positive().nullable().optional(),
   buyback_interest: z.boolean().default(false),
   action: z.string().trim().max(100).nullable().optional(),
+  upcycle_request: z.string().trim().max(1000).nullable().optional(),
   scheduled_at: z.coerce.date().nullable().optional(),
   details: z
     .object({

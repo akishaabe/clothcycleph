@@ -90,6 +90,7 @@ export interface UpdateProfilePayload {
 export interface Submission {
   id: string;
   user_id: string;
+  submission_name?: string;
   item_type: string;
   condition: string;
   fabric?: string;
@@ -103,6 +104,7 @@ export interface Submission {
   quantity?: number;
   buyback_interest?: boolean;
   action?: string;
+  upcycle_request?: string;
   scheduled_at?: string;
   details?: SubmissionDetails | null;
   burn_test?: BurnTestDetails | null;
@@ -135,6 +137,7 @@ export interface BurnTestDetails {
 
 export interface CreateSubmissionPayload {
   item_type: string;
+  submission_name?: string | null;
   condition: string;
   fabric?: string;
   cleanliness?: string;
@@ -144,6 +147,7 @@ export interface CreateSubmissionPayload {
   quantity?: number;
   buyback_interest?: boolean;
   action?: string;
+  upcycle_request?: string | null;
   scheduled_at?: string | null;
   details?: SubmissionDetails;
   burn_test?: BurnTestDetails;
@@ -216,12 +220,14 @@ export interface DssRequest {
   partner_email?: string;
   user_name?: string;
   user_email?: string;
+  submission_name?: string;
   item_type?: string;
   quantity?: number;
   condition?: string;
   cleanliness?: string;
   fabric?: string;
   description?: string;
+  upcycle_request?: string;
   photos?: string[];
   details?: SubmissionDetails | null;
   burn_test?: BurnTestDetails | null;
@@ -242,6 +248,31 @@ export interface SendDssRecommendationPayload {
   brief: string;
 }
 
+export interface DssAuditRun {
+  result_id: string;
+  run_id: string;
+  engine_name: string;
+  engine_version: string;
+  recommended_pathway: string;
+  rank: number;
+  score: number;
+  confidence: number;
+  explanation: string;
+  output_payload?: {
+    rule_checks?: Array<{
+      question: string;
+      matched: boolean;
+      expected: string;
+      selected: string;
+    }>;
+  };
+  submission_name?: string;
+  item_type?: string;
+  partner_name?: string;
+  requested_by_name?: string;
+  created_at: string;
+}
+
 // Message types
 export interface Message {
   id: string;
@@ -249,6 +280,10 @@ export interface Message {
   to_user_id: string;
   content: string;
   read: boolean;
+  related_submission_id?: string;
+  related_transaction_id?: string;
+  action_url?: string;
+  metadata?: Record<string, unknown>;
   created_at: string;
 }
 

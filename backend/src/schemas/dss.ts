@@ -15,3 +15,9 @@ export const updateDssRequestStatusSchema = z.object({
 export const remindDssRequestSchema = z.object({
   message: z.string().trim().max(1000).optional(),
 });
+
+export const partnerRuleChangeRequestSchema = z.object({
+  rule_area: z.string().trim().min(1).max(100),
+  requested_change: z.string().trim().min(1).max(2000),
+  reason: z.string().trim().max(1000).optional(),
+});
