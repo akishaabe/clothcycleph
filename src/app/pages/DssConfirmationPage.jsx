@@ -7,6 +7,8 @@ import {
   CheckCircle,
   ClipboardList,
   Loader2,
+  MapPin,
+  Navigation,
   Recycle,
   Send,
   Sparkles,
@@ -50,6 +52,8 @@ export function DssConfirmationPage() {
   const [requests, setRequests] = useState([]);
   const [selectedPathway, setSelectedPathway] = useState("");
   const [selectedPartnerId, setSelectedPartnerId] = useState("");
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationMessage, setLocationMessage] = useState("");
   const [brief, setBrief] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
@@ -65,10 +69,10 @@ export function DssConfirmationPage() {
       setError("");
 
       try {
-        const [previewResponse, partnersResponse, requestsResponse] =
+        const browserLocation = await getBrowserLocation();
+        const [previewResponse, requestsResponse] =
           await Promise.all([
             dssService.getSubmissionPreview(submissionId),
-            dssService.listPartners(),
             dssService.getUserRequests(),
           ]);
 
@@ -78,10 +82,26 @@ export function DssConfirmationPage() {
 
         const nextPreview = previewResponse.data;
         const topRecommendation = nextPreview.recommendations[0];
+        const partnersResponse = await dssService.listPartners({
+          lat: browserLocation?.lat,
+          lng: browserLocation?.lng,
+          pathway: topRecommendation?.recommended_pathway,
+          radiusKm: 120,
+        });
+
+        if (!isMounted) {
+          return;
+        }
 
         setPreview(nextPreview);
         setPartners(partnersResponse.data);
         setRequests(requestsResponse.data);
+        setUserLocation(browserLocation);
+        setLocationMessage(
+          browserLocation
+            ? "Partners are ranked by distance from your current location."
+            : "Location access is off. Partners are ranked by verification and rating.",
+        );
         setSelectedPathway(topRecommendation?.recommended_pathway || "");
         setBrief(nextPreview.brief || "");
       } catch (loadError) {
@@ -148,6 +168,28 @@ export function DssConfirmationPage() {
         `Recommendation note: ${recommendation.explanation}`,
       ].filter(Boolean).join("\n");
     });
+  };
+
+  const refreshNearbyPartners = async () => {
+    setError("");
+    try {
+      const browserLocation = await getBrowserLocation(true);
+      setUserLocation(browserLocation);
+      const response = await dssService.listPartners({
+        lat: browserLocation?.lat,
+        lng: browserLocation?.lng,
+        pathway: selectedPathway,
+        radiusKm: 120,
+      });
+      setPartners(response.data);
+      setLocationMessage(
+        browserLocation
+          ? "Partners are ranked by distance from your current location."
+          : "Location access is off. Partners are ranked by verification and rating.",
+      );
+    } catch (locationError) {
+      setError(locationError.message || "Unable to refresh nearby partners.");
+    }
   };
 
   const handleSend = async () => {
@@ -364,10 +406,30 @@ export function DssConfirmationPage() {
             </div>
 
             <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)]">
-              <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
-                <Building2 className="h-5 w-5 text-[#336158]" />
-                Choose partner
-              </h2>
+              <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <h2 className="flex items-center gap-2 text-xl font-semibold">
+                  <Building2 className="h-5 w-5 text-[#336158]" />
+                  Choose partner
+                </h2>
+                <button
+                  onClick={refreshNearbyPartners}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#dce4da] px-3 py-2 text-sm text-[#5f6f67] hover:bg-[#f3f5f2]"
+                >
+                  <Navigation className="h-4 w-4" />
+                  Rank nearby
+                </button>
+              </div>
+              {locationMessage && (
+                <div className="mb-4 rounded-xl bg-[#f7faf5] px-4 py-3 text-sm text-[#5f6f67]">
+                  {locationMessage}
+                </div>
+              )}
+              <PartnerMap
+                partners={partnerOptions}
+                selectedPartnerId={selectedPartnerId}
+                onSelect={setSelectedPartnerId}
+                userLocation={userLocation}
+              />
               <div className="grid gap-3 md:grid-cols-2">
                 {partnerOptions.map((partner) => (
                   <button
@@ -394,6 +456,15 @@ export function DssConfirmationPage() {
                         {partner.pickup_areas && <div>Pickup areas: {partner.pickup_areas}</div>}
                         {partner.accepts_clean_only && <div>Clean textiles only</div>}
                         {partner.capacity_notes && <div>{partner.capacity_notes}</div>}
+                    <div className="mt-2 flex items-center gap-2 text-sm text-[#5f6f67]">
+                      <MapPin className="h-4 w-4 text-[#336158]" />
+                      {partner.distance_km != null
+                        ? `${partner.distance_km} km away`
+                        : partner.address || "Location pending"}
+                    </div>
+                    {partner.gis_rank_reason && (
+                      <div className="mt-2 text-xs text-[#6d7c73]">
+                        {partner.gis_rank_reason}
                       </div>
                     )}
                   </button>
@@ -497,6 +568,103 @@ export function DssConfirmationPage() {
           </aside>
         </section>
       </main>
+    </div>
+  );
+}
+
+function getBrowserLocation(force = false) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      resolve(null);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      },
+      (error) => {
+        if (force) {
+          reject(new Error(error.message || "Location permission was not granted."));
+          return;
+        }
+        resolve(null);
+      },
+      { enableHighAccuracy: false, timeout: 5000, maximumAge: 10 * 60 * 1000 },
+    );
+  });
+}
+
+function PartnerMap({ partners, selectedPartnerId, onSelect, userLocation }) {
+  const plottedPartners = partners.filter(
+    (partner) => partner.latitude != null && partner.longitude != null,
+  );
+  const coordinates = [
+    ...plottedPartners.map((partner) => ({
+      lat: Number(partner.latitude),
+      lng: Number(partner.longitude),
+    })),
+    ...(userLocation ? [userLocation] : []),
+  ];
+
+  if (coordinates.length === 0) {
+    return null;
+  }
+
+  const bounds = coordinates.reduce(
+    (nextBounds, point) => ({
+      minLat: Math.min(nextBounds.minLat, point.lat),
+      maxLat: Math.max(nextBounds.maxLat, point.lat),
+      minLng: Math.min(nextBounds.minLng, point.lng),
+      maxLng: Math.max(nextBounds.maxLng, point.lng),
+    }),
+    {
+      minLat: coordinates[0].lat,
+      maxLat: coordinates[0].lat,
+      minLng: coordinates[0].lng,
+      maxLng: coordinates[0].lng,
+    },
+  );
+
+  const toPosition = (lat, lng) => {
+    const latSpan = Math.max(bounds.maxLat - bounds.minLat, 0.08);
+    const lngSpan = Math.max(bounds.maxLng - bounds.minLng, 0.08);
+    return {
+      top: `${8 + ((bounds.maxLat - lat) / latSpan) * 84}%`,
+      left: `${8 + ((lng - bounds.minLng) / lngSpan) * 84}%`,
+    };
+  };
+
+  return (
+    <div className="relative mb-4 h-64 overflow-hidden rounded-2xl border border-[#dce4da] bg-[#eef5ea]">
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(51,97,88,0.08)_1px,transparent_1px),linear-gradient(rgba(51,97,88,0.08)_1px,transparent_1px)] bg-[length:36px_36px]" />
+      {userLocation && (
+        <div
+          className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
+          style={toPosition(userLocation.lat, userLocation.lng)}
+          title="Your location"
+        >
+          <div className="h-4 w-4 rounded-full border-2 border-white bg-[#10233f] shadow-lg" />
+        </div>
+      )}
+      {plottedPartners.map((partner) => (
+        <button
+          key={partner.id}
+          onClick={() => onSelect(partner.id)}
+          className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-lg transition-transform hover:scale-110 ${
+            selectedPartnerId === partner.id ? "h-5 w-5 bg-[#336158]" : "h-4 w-4 bg-[#7ea186]"
+          }`}
+          style={toPosition(Number(partner.latitude), Number(partner.longitude))}
+          title={partner.name}
+          aria-label={`Select ${partner.name}`}
+        />
+      ))}
+      <div className="absolute bottom-3 left-3 rounded-xl bg-white/90 px-3 py-2 text-xs text-[#5f6f67] shadow-sm">
+        Dark marker: you. Green markers: partners.
+      </div>
     </div>
   );
 }

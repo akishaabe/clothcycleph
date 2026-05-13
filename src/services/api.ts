@@ -261,8 +261,27 @@ export const submissionService = {
 // ============= DSS ENDPOINTS =============
 
 export const dssService = {
-  async listPartners(): Promise<{ data: Partner[]; count: number }> {
-    return fetchWithAuth('/dss/partners', {
+  async listPartners(options: { lat?: number; lng?: number; pathway?: string; radiusKm?: number } = {}): Promise<{ data: Partner[]; count: number }> {
+    const params = new URLSearchParams();
+    if (options.lat != null) params.set('lat', String(options.lat));
+    if (options.lng != null) params.set('lng', String(options.lng));
+    if (options.pathway) params.set('pathway', options.pathway);
+    if (options.radiusKm != null) params.set('radius_km', String(options.radiusKm));
+
+    return fetchWithAuth(`/dss/partners${params.toString() ? `?${params.toString()}` : ''}`, {
+      method: 'GET',
+    });
+  },
+
+  async listNearbyPartners(options: { lat: number; lng: number; pathway?: string; radiusKm?: number }): Promise<{ data: Partner[]; count: number }> {
+    const params = new URLSearchParams({
+      lat: String(options.lat),
+      lng: String(options.lng),
+    });
+    if (options.pathway) params.set('pathway', options.pathway);
+    if (options.radiusKm != null) params.set('radius_km', String(options.radiusKm));
+
+    return fetchWithAuth(`/gis/partners?${params.toString()}`, {
       method: 'GET',
     });
   },

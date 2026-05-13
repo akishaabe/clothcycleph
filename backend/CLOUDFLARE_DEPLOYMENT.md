@@ -1,217 +1,116 @@
-# Cloudflare Workers & D1 Deployment Guide
+# Cloudflare Workers and D1 Deployment Guide
 
-## Overview
+ClothCycle's backend API is now implemented in the Cloudflare Worker at `src/worker.ts`. The Worker uses Hono, D1 for relational data, and R2 for uploads. The Express server remains in the repository as a legacy/local backend, but deployed Cloudflare traffic no longer depends on an Express fallback proxy.
 
-ClothCycle has been migrated to run on Cloudflare Workers with D1 (SQLite) database. This guide explains the deployment process.
+## Ported Worker Endpoints
 
-### What's Been Done
-
-✅ **Worker Setup**
-- `backend/src/worker.ts` - Hono-based API gateway running auth endpoints on D1
-- Auth endpoints fully ported: signup, login, 2FA verify, profile get/update
-- Fallback proxy for other endpoints (until fully ported)
-
-✅ **D1 Database**
-- `backend/src/db/d1-schema.sql` - SQLite schema for D1
-- `backend/src/config/d1.ts` - D1 client module with query helpers
-- `backend/src/services/authD1Service.ts` - Auth logic ported to D1
-
-✅ **R2 Storage**
-- Already configured in existing `r2Service.ts`
-- Uses Cloudflare's S3-compatible API
-
-✅ **Configuration**
-- `backend/wrangler.toml` - Updated with D1 and R2 bindings
-
----
+- `GET /api/health`
+- `POST /api/auth/signup`
+- `POST /api/auth/login`
+- `POST /api/auth/google`
+- `POST /api/auth/2fa/verify`
+- `POST /api/auth/2fa/resend`
+- `GET /api/auth/2fa/status`
+- `POST /api/auth/2fa/setup`
+- `POST /api/auth/2fa/enable`
+- `POST /api/auth/2fa/disable`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
+- `GET /api/auth/profile`
+- `PUT /api/auth/profile`
+- `POST /api/submissions`
+- `GET /api/submissions`
+- `GET /api/submissions/:id`
+- `PUT /api/submissions/:id/status`
+- `GET /api/gis/partners`
+- `GET /api/dss/partners`
+- `GET /api/dss/submissions/:submissionId`
+- `POST /api/dss/send`
+- `GET /api/dss/requests/user`
+- `GET /api/dss/requests/partner`
+- `POST /api/dss/requests/:id/remind`
+- `PUT /api/dss/requests/:id/status`
+- `GET /api/messages/contacts`
+- `GET /api/messages/conversations`
+- `GET /api/messages/:userId`
+- `POST /api/messages`
+- `PUT /api/messages/:id/read`
+- `POST /api/upload`
+- `GET /api/notifications`
+- `GET /api/notifications/count`
+- `PUT /api/notifications/:id/read`
+- `PUT /api/notifications/read-all`
+- `POST /api/transactions`
+- `GET /api/transactions/submission/:submissionId`
+- `GET /api/transactions/user`
+- `GET /api/transactions/partner/:partnerId`
+- `PUT /api/transactions/:id`
 
 ## Deployment Steps
 
-### 1. Create D1 Database on Cloudflare
+1. Create the D1 database.
 
 ```bash
-# Create a new D1 database
 npx wrangler d1 create clothcycle
-
-# This will output a database_id - copy it
 ```
 
-Then update `wrangler.toml`:
+2. Copy the returned `database_id` into `wrangler.toml`.
+
 ```toml
 [[d1_databases]]
 binding = "DB"
 database_name = "clothcycle"
-database_id = "your-database-id-here"
+database_id = "your-database-id"
 ```
 
-### 2. Initialize the D1 Schema
+3. Apply the D1 schema from the backend directory.
 
 ```bash
-# Apply the D1 schema to your database
 npx wrangler d1 execute clothcycle --file ./src/db/d1-schema.sql
 ```
 
-Verify the schema was created:
+4. Create or bind the R2 bucket named in `wrangler.toml`.
+
 ```bash
-npx wrangler d1 execute clothcycle --command "SELECT name FROM sqlite_master WHERE type='table';"
+npx wrangler r2 bucket create clothcycle-uploads
 ```
 
-### 3. Build the Worker
+5. Set production secrets in Cloudflare. Do not keep real secrets in `wrangler.toml`.
 
 ```bash
-# From backend directory
-npm run build
-# or
+npx wrangler secret put JWT_SECRET
+npx wrangler secret put TWO_FACTOR_ENCRYPTION_KEY
+npx wrangler secret put SENDGRID_API_KEY
+```
+
+6. Build and deploy.
+
+```bash
 npm run worker:build
+npm run deploy
 ```
 
-### 4. Deploy the Worker
+7. Point the frontend to the Worker.
+
+```env
+VITE_API_URL=https://clothcycle-api.your-subdomain.workers.dev/api
+```
+
+## Local Worker Development
 
 ```bash
-# Deploy to Cloudflare Workers
-npx wrangler deploy
-
-# Output will show your worker URL, e.g.:
-# https://clothcycle-api.yourusername.workers.dev/api/health
-```
-
-### 5. Test the Worker
-
-```bash
-# Test health endpoint
-curl https://clothcycle-api.yourusername.workers.dev/api/health
-
-# Test signup
-curl -X POST https://clothcycle-api.yourusername.workers.dev/api/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","name":"Test User","password":"Password123!"}'
-```
-
-### 6. Update Frontend API Endpoint
-
-In `src/services/api.ts`, update the API base URL:
-
-```typescript
-const API_BASE_URL = 'https://clothcycle-api.yourusername.workers.dev/api';
-```
-
-Or use environment variable:
-```typescript
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://clothcycle-api.yourusername.workers.dev/api';
-```
-
-Update `.env`:
-```
-VITE_API_URL=https://clothcycle-api.yourusername.workers.dev/api
-```
-
-### 7. Deploy Frontend
-
-```bash
-# From root directory
-npm run build
-npm run preview
-# Or deploy to your hosting (Vercel, Netlify, etc.)
-```
-
----
-
-## Local Development
-
-For local testing before deployment:
-
-### Start the Worker Locally
-
-```bash
-# From backend directory
+cd backend
 npx wrangler dev
-
-# Worker will run at http://localhost:8787/api
 ```
 
-### Update Frontend for Local Dev
+Use this frontend setting for local Worker testing:
 
-In `.env` or `src/services/api.ts`:
-```
+```env
 VITE_API_URL=http://localhost:8787/api
 ```
 
----
+## Notes
 
-## Current Status
-
-### ✅ Ported to D1
-- Auth: signup, login, 2FA verification
-- Auth: profile get, profile update
-- User management with security features
-- Rate limiting
-- Auth event logging
-
-### 🔄 In Progress
-- Message endpoints
-- Submission endpoints
-- Notification endpoints
-- Transaction endpoints
-- Upload endpoints
-
-### ⚠️ Fallback Proxy
-- Unmigrated endpoints proxy to Express backend (if BACKEND_ORIGIN is set)
-- Set `BACKEND_ORIGIN=https://your-express-backend.com` in `wrangler.toml`
-
----
-
-## Environment Variables
-
-Set these in `wrangler.toml` or Cloudflare Dashboard:
-
-```toml
-[vars]
-EMAIL_PROVIDER = "sendgrid"  # or "brevo", "console"
-BREVO_API_KEY = "your-brevo-key"
-SENDGRID_API_KEY = "your-sendgrid-key"
-EMAIL_FROM = "noreply@clothcycleph.com"
-JWT_SECRET = "your-jwt-secret"
-TWO_FACTOR_ENCRYPTION_KEY = "your-encryption-key"
-BACKEND_ORIGIN = "https://express-backend.example.com"  # For fallback proxy
-```
-
----
-
-## Next Steps
-
-1. **Port Remaining Endpoints** - Create D1 versions of submission, message, notification, and transaction controllers
-2. **Remove Express Proxy** - Once all endpoints are ported, remove the fallback proxy
-3. **Migrate Data** - Set up data migration from PostgreSQL to D1
-4. **Edge Locations** - Deploy to multiple regions for better global performance
-5. **Analytics** - Set up Cloudflare analytics and monitoring
-
----
-
-## Troubleshooting
-
-### "DB binding is undefined"
-- Ensure D1 database is bound in `wrangler.toml`
-- Run `npx wrangler d1 create clothcycle` if not created
-
-### "Table does not exist"
-- Verify schema was applied: `npx wrangler d1 execute clothcycle --command "SELECT name FROM sqlite_master WHERE type='table';"`
-- Re-apply schema if needed: `npx wrangler d1 execute clothcycle --file ./src/db/d1-schema.sql`
-
-### "CORS errors"
-- CORS is configured in `worker.ts` but verify origin is allowed
-- Check `c.req.header('origin')` in cors middleware
-
-### Worker deployment fails
-- Run `npm run worker:build` to check TypeScript errors
-- Ensure `wrangler.toml` is valid
-- Check `npm run build` passes
-
----
-
-## Resources
-
-- [Cloudflare Workers Documentation](https://developers.cloudflare.com/workers/)
-- [D1 Database Guide](https://developers.cloudflare.com/d1/)
-- [R2 Object Storage](https://developers.cloudflare.com/r2/)
-- [Hono Framework](https://hono.dev/)
-- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)
+- `BACKEND_ORIGIN` is no longer used because the Worker does not proxy to Express.
+- Queue-backed jobs were replaced with direct D1 side effects for migrated routes, such as creating notifications when transactions change.
+- GIS partner discovery uses partner coordinates in D1 and returns `distance_km` plus rank reasoning when `lat` and `lng` are supplied.

@@ -1,0 +1,519 @@
+import { D1Database, executeD1, generateD1UUID, queryD1, queryD1First } from '../config/d1.js';
+import { analyzeBurnTest, buildPathwayRecommendations } from './dssEngine.js';
+import { createNotificationD1 } from './d1NotificationService.js';
+import { listPartnerLocationsD1, PartnerSearchOptions } from './d1GisService.js';
+
+const statusLabels: Record<string, string> = {
+  pending: 'Pending',
+  accepted: 'Accepted',
+  declined: 'Declined',
+  completed: 'Completed',
+};
+
+export async function listDssPartnersD1(db: D1Database, options: PartnerSearchOptions = {}) {
+  return listPartnerLocationsD1(db, options);
+}
+
+export async function getSubmissionDssD1(db: D1Database, submissionId: string, userId: string, role?: string) {
+  const submission = await getSubmissionForUserD1(db, submissionId, userId, role);
+  const recommendations = buildPathwayRecommendations(submission);
+  const burn_test_analysis = analyzeBurnTest(submission.burn_test);
+
+  return {
+    submission,
+    recommendations,
+    burn_test_analysis,
+    brief: buildBrief(submission, recommendations[0]),
+  };
+}
+
+export async function sendRecommendationToPartnerD1(
+  db: D1Database,
+  userId: string,
+  role: string | undefined,
+  payload: {
+    submission_id: string;
+    partner_id: string;
+    recommended_pathway: 'recycle' | 'donate' | 'upcycle' | 'buyback';
+    brief: string;
+  }
+) {
+  const submission = await getSubmissionForUserD1(db, payload.submission_id, userId, role);
+  const partner = await queryD1First(
+    db,
+    `SELECT id, name, user_id
+     FROM partners
+     WHERE id = ? AND COALESCE(status, 'active') IN ('active', 'pending')`,
+    [payload.partner_id]
+  );
+
+  if (!partner) {
+    throw new Error('Partner not found');
+  }
+
+  const recommendations = buildPathwayRecommendations(submission);
+  const recommendation =
+    recommendations.find((item) => item.recommended_pathway === payload.recommended_pathway) || recommendations[0];
+
+  const runId = generateD1UUID();
+  await executeD1(
+    db,
+    `INSERT INTO recommendation_runs (
+       id, submission_id, requested_by_user_id, engine_name, engine_version,
+       status, criteria, input_snapshot, completed_at
+     )
+     VALUES (?, ?, ?, ?, ?, 'completed', ?, ?, CURRENT_TIMESTAMP)`,
+    [
+      runId,
+      payload.submission_id,
+      userId,
+      'dss-preview',
+      'handoff-v1',
+      JSON.stringify({ selected_partner_id: payload.partner_id, selected_pathway: payload.recommended_pathway }),
+      JSON.stringify(submission),
+    ]
+  );
+
+  const resultId = generateD1UUID();
+  await executeD1(
+    db,
+    `INSERT INTO recommendation_results (
+       id, run_id, submission_id, partner_id, recommended_pathway,
+       rank, score, confidence, explanation, details, output_payload, selected
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    [
+      resultId,
+      runId,
+      payload.submission_id,
+      payload.partner_id,
+      payload.recommended_pathway,
+      recommendation.rank,
+      recommendation.score,
+      recommendation.confidence,
+      recommendation.explanation,
+      payload.brief,
+      JSON.stringify({ recommendation, brief: payload.brief, burn_test_analysis: analyzeBurnTest(submission.burn_test) }),
+    ]
+  );
+
+  const transactionId = generateD1UUID();
+  const transaction = await executeD1(
+    db,
+    `INSERT INTO transactions (
+       id, submission_id, from_user_id, to_partner_id, type, status, notes
+     )
+     VALUES (?, ?, ?, ?, ?, 'pending', ?)
+     RETURNING *`,
+    [transactionId, payload.submission_id, userId, payload.partner_id, payload.recommended_pathway, payload.brief]
+  );
+
+  await executeD1(
+    db,
+    `UPDATE submissions
+     SET assigned_partner_id = ?, service_type = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [payload.partner_id, payload.recommended_pathway, payload.submission_id]
+  );
+
+  if (partner.user_id) {
+    await createNotificationD1(db, {
+      userId: partner.user_id,
+      type: 'partner_update',
+      title: 'New textile request',
+      body: `A user sent a ${titleCase(payload.recommended_pathway)} request for your review.`,
+      data: { submissionId: payload.submission_id, transactionId },
+    });
+  }
+
+  await createNotificationD1(db, {
+    userId,
+    type: 'partner_update',
+    title: 'Request sent to partner',
+    body: `Your textile brief was sent to ${partner.name}.`,
+    data: { submissionId: payload.submission_id, transactionId },
+  });
+
+  return {
+    transaction: transaction.results?.[0] ?? null,
+    recommendation_result_id: resultId,
+    recommendation_run_id: runId,
+  };
+}
+
+export async function getUserDssRequestsD1(db: D1Database, userId: string) {
+  const result = await queryD1(
+    db,
+    `SELECT
+       t.*,
+       p.name AS partner_name,
+       p.email AS partner_email,
+       p.latitude AS partner_latitude,
+       p.longitude AS partner_longitude,
+       s.item_type,
+       s.quantity,
+       s.condition,
+       s.cleanliness,
+       rr.confidence,
+       rr.explanation
+     FROM transactions t
+     JOIN partners p ON p.id = t.to_partner_id
+     JOIN submissions s ON s.id = t.submission_id
+     LEFT JOIN recommendation_results rr ON rr.submission_id = s.id AND rr.partner_id = p.id AND rr.selected = 1
+     WHERE t.from_user_id = ?
+     ORDER BY t.created_at DESC`,
+    [userId]
+  );
+
+  return { ...result, results: result.results?.map(normalizeRequest) };
+}
+
+export async function getPartnerDssRequestsD1(db: D1Database, userId: string, email: string | undefined, role?: string) {
+  const partner = await queryD1First(db, 'SELECT id FROM partners WHERE user_id = ? OR lower(email) = lower(?)', [
+    userId,
+    email || '',
+  ]);
+
+  if (!partner && role !== 'admin') {
+    throw new Error('Partner profile not found');
+  }
+
+  const whereClause = role === 'admin' ? '' : 'WHERE t.to_partner_id = ?';
+  const params = role === 'admin' ? [] : [partner.id];
+  const result = await queryD1(
+    db,
+    `SELECT
+       t.*,
+       s.item_type,
+       s.quantity,
+       s.condition,
+       s.cleanliness,
+       s.fabric,
+       s.description,
+       s.photos,
+       sd.item_types,
+       sd.other_item_type,
+       sd.knows_fabric_type,
+       sd.fabric_types,
+       sd.fabric_identification,
+       sd.brand,
+       sd.no_brand_visible,
+       sd.fabric_description,
+       bt.performed AS burn_performed,
+       bt.page AS burn_page,
+       bt.moment AS burn_moment,
+       bt.flames AS burn_flames,
+       bt.no_flame AS burn_no_flame,
+       bt.smell AS burn_smell,
+       bt.ashes AS burn_ashes,
+       u.name AS user_name,
+       u.email AS user_email,
+       rr.confidence,
+       rr.explanation,
+       rr.output_payload
+     FROM transactions t
+     JOIN submissions s ON s.id = t.submission_id
+     JOIN users u ON u.id = t.from_user_id
+     LEFT JOIN submission_details sd ON sd.submission_id = s.id
+     LEFT JOIN burn_tests bt ON bt.id = (
+       SELECT id FROM burn_tests WHERE submission_id = s.id ORDER BY created_at DESC LIMIT 1
+     )
+     LEFT JOIN recommendation_results rr ON rr.submission_id = s.id AND rr.partner_id = t.to_partner_id AND rr.selected = 1
+     ${whereClause}
+     ORDER BY t.created_at DESC`,
+    params
+  );
+
+  return { ...result, results: result.results?.map(normalizePartnerRequest) };
+}
+
+export async function updateDssRequestStatusD1(
+  db: D1Database,
+  userId: string,
+  email: string | undefined,
+  role: string | undefined,
+  requestId: string,
+  status: string,
+  notes?: string
+) {
+  const transaction = await queryD1First(
+    db,
+    `SELECT t.*, p.user_id AS partner_user_id, p.email AS partner_email
+     FROM transactions t
+     JOIN partners p ON p.id = t.to_partner_id
+     WHERE t.id = ?`,
+    [requestId]
+  );
+
+  if (!transaction) {
+    throw new Error('Request not found');
+  }
+
+  if (
+    role !== 'admin' &&
+    transaction.partner_user_id !== userId &&
+    normalizeText(transaction.partner_email) !== normalizeText(email)
+  ) {
+    throw new Error('You do not have permission to update this request');
+  }
+
+  const result = await executeD1(
+    db,
+    `UPDATE transactions
+     SET status = ?, notes = COALESCE(?, notes), updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?
+     RETURNING *`,
+    [status, notes || null, requestId]
+  );
+
+  await createNotificationD1(db, {
+    userId: transaction.from_user_id,
+    type: status === 'declined' ? 'submission_rejected' : 'submission_approved',
+    title: `Partner ${status === 'declined' ? 'declined' : 'accepted'} your request`,
+    body: `Your ${titleCase(transaction.type)} request is now ${statusLabels[status] || status}.`,
+    data: { submissionId: transaction.submission_id, transactionId: transaction.id, status },
+  });
+
+  return result.results?.[0] ?? null;
+}
+
+export async function remindDssRequestD1(
+  db: D1Database,
+  userId: string,
+  requestId: string,
+  message?: string
+) {
+  const request = await queryD1First(
+    db,
+    `SELECT t.*, p.name AS partner_name, p.user_id AS partner_user_id
+     FROM transactions t
+     JOIN partners p ON p.id = t.to_partner_id
+     WHERE t.id = ? AND t.from_user_id = ?`,
+    [requestId, userId]
+  );
+
+  if (!request) {
+    throw new Error('Request not found');
+  }
+
+  if (request.status !== 'pending') {
+    throw new Error('Only pending requests can receive reminders');
+  }
+
+  const result = await executeD1(
+    db,
+    `UPDATE transactions
+     SET updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?
+     RETURNING *`,
+    [requestId]
+  );
+
+  if (request.partner_user_id) {
+    await createNotificationD1(db, {
+      userId: request.partner_user_id,
+      type: 'partner_update',
+      title: 'Reminder: textile request pending',
+      body: message || `A user is waiting for your response to a ${titleCase(request.type)} request.`,
+      data: { submissionId: request.submission_id, transactionId: request.id },
+    });
+  }
+
+  return {
+    partnerName: request.partner_name,
+    request: result.results?.[0] ?? null,
+  };
+}
+
+async function getSubmissionForUserD1(db: D1Database, submissionId: string, userId: string, role?: string) {
+  const submission = await queryD1First(
+    db,
+    `SELECT
+       s.*,
+       sd.item_types,
+       sd.other_item_type,
+       sd.knows_fabric_type,
+       sd.fabric_types,
+       sd.fabric_identification,
+       sd.brand,
+       sd.no_brand_visible,
+       sd.fabric_description,
+       bt.performed AS burn_performed,
+       bt.page AS burn_page,
+       bt.moment AS burn_moment,
+       bt.flames AS burn_flames,
+       bt.no_flame AS burn_no_flame,
+       bt.smell AS burn_smell,
+       bt.ashes AS burn_ashes
+     FROM submissions s
+     LEFT JOIN submission_details sd ON sd.submission_id = s.id
+     LEFT JOIN burn_tests bt ON bt.id = (
+       SELECT id FROM burn_tests WHERE submission_id = s.id ORDER BY created_at DESC LIMIT 1
+     )
+     WHERE s.id = ? AND (s.user_id = ? OR ? = 'admin')`,
+    [submissionId, userId, role || '']
+  );
+
+  if (!submission) {
+    throw new Error('Submission not found');
+  }
+
+  return normalizeSubmissionForDss(submission);
+}
+
+function normalizeSubmissionForDss(row: any) {
+  return {
+    ...row,
+    photos: parseJsonArray(row.photos),
+    quantity: row.quantity == null ? 1 : Number(row.quantity),
+    buyback_interest: Boolean(row.buyback_interest),
+    details: {
+      item_types: parseJsonArray(row.item_types),
+      other_item_type: row.other_item_type,
+      condition: row.condition,
+      cleanliness: row.cleanliness,
+      knows_fabric_type: Boolean(row.knows_fabric_type),
+      fabric_types: parseJsonArray(row.fabric_types),
+      fabric_identification: parseJsonArray(row.fabric_identification),
+      brand: row.brand,
+      no_brand_visible: Boolean(row.no_brand_visible),
+      fabric_description: parseJsonArray(row.fabric_description),
+    },
+    burn_test: {
+      performed: Boolean(row.burn_performed),
+      page: row.burn_page,
+      moment: parseJsonArray(row.burn_moment),
+      flames: parseJsonArray(row.burn_flames),
+      no_flame: parseJsonArray(row.burn_no_flame),
+      smell: row.burn_smell,
+      ashes: parseJsonArray(row.burn_ashes),
+    },
+  };
+}
+
+function normalizeRequest(row: any) {
+  return {
+    ...row,
+    confidence: row.confidence == null ? null : Number(row.confidence),
+    partner_latitude: row.partner_latitude == null ? null : Number(row.partner_latitude),
+    partner_longitude: row.partner_longitude == null ? null : Number(row.partner_longitude),
+  };
+}
+
+function normalizePartnerRequest(row: any) {
+  return {
+    ...normalizeRequest(row),
+    photos: parseJsonArray(row.photos),
+    output_payload: parseJsonObject(row.output_payload),
+    status_label: statusLabels[row.status] || row.status,
+    details: {
+      item_types: parseJsonArray(row.item_types),
+      item_types_list: parseJsonArray(row.item_types),
+      other_item_type: row.other_item_type,
+      knows_fabric_type: Boolean(row.knows_fabric_type),
+      fabric_types: parseJsonArray(row.fabric_types),
+      fabric_types_list: parseJsonArray(row.fabric_types),
+      fabric_identification: parseJsonArray(row.fabric_identification),
+      brand: row.brand,
+      no_brand_visible: Boolean(row.no_brand_visible),
+      fabric_description: parseJsonArray(row.fabric_description),
+      fabric_description_list: parseJsonArray(row.fabric_description),
+    },
+    burn_test: {
+      performed: Boolean(row.burn_performed),
+      page: row.burn_page,
+      moment: parseJsonArray(row.burn_moment),
+      flames: parseJsonArray(row.burn_flames),
+      no_flame: parseJsonArray(row.burn_no_flame),
+      smell: row.burn_smell,
+      ashes: parseJsonArray(row.burn_ashes),
+    },
+  };
+}
+
+function buildBrief(submission: any, recommendation: any) {
+  const details = submission.details || {};
+  const burnTest = submission.burn_test || {};
+  const lines = [
+    `Recommended pathway: ${titleCase(recommendation.recommended_pathway)} (${Math.round(recommendation.confidence * 100)}% confidence)`,
+    `Item: ${submission.item_type}`,
+    `Quantity: ${submission.quantity || 1}`,
+    `Condition: ${submission.condition}`,
+    `Cleanliness: ${submission.cleanliness || 'Not specified'}`,
+    `Fabric: ${submission.fabric || details.fabric_types?.join(', ') || details.fabric_description?.join(', ') || 'Not specified'}`,
+    `Fabric identified by: ${details.fabric_identification?.join(', ') || 'Not specified'}`,
+    `Brand: ${details.no_brand_visible ? 'No brand visible' : details.brand || 'Not specified'}`,
+    `Burn test: ${burnTest.performed ? 'Performed' : 'Not performed'}`,
+  ];
+
+  if (burnTest.performed) {
+    lines.push(`Burn observations: ${[
+      burnTest.moment?.join(', '),
+      burnTest.flames?.join(', '),
+      burnTest.no_flame?.join(', '),
+      burnTest.smell,
+      burnTest.ashes?.join(', '),
+    ].filter(Boolean).join(' | ')}`);
+    lines.push(`Burn-test fabric result: ${recommendation.burn_test_result || 'No clear match'}`);
+  }
+
+  if (submission.description) {
+    lines.push(`User note: ${submission.description}`);
+  }
+
+  lines.push(`Recommendation note: ${recommendation.explanation}`);
+  return lines.join('\n');
+}
+
+function splitText(value?: string | null) {
+  return value ? value.split(',').map((item) => item.trim()).filter(Boolean) : [];
+}
+
+function parseJsonArray(value: unknown) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value !== 'string' || value.length === 0) {
+    return splitText(value as string);
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : splitText(value);
+  } catch {
+    return splitText(value);
+  }
+}
+
+function parseJsonObject(value: unknown) {
+  if (value && typeof value === 'object') {
+    return value;
+  }
+
+  if (typeof value !== 'string' || value.length === 0) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeText(value?: string | null) {
+  return (value || '').toLowerCase().trim();
+}
+
+function titleCase(value?: string | null) {
+  if (!value) {
+    return 'Not specified';
+  }
+
+  return value
+    .split(' ')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}

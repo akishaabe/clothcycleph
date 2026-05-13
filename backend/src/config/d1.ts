@@ -38,11 +38,7 @@ export async function queryD1<T = any>(
   sql: string,
   params: any[] = []
 ): Promise<D1Result<T>> {
-  const statement = db.prepare(sql);
-
-  if (params.length > 0) {
-    statement.bind(...params);
-  }
+  const statement = bindParams(db.prepare(sql), params);
 
   return statement.all<T>();
 }
@@ -55,11 +51,7 @@ export async function queryD1First<T = any>(
   sql: string,
   params: any[] = []
 ): Promise<T | undefined> {
-  const statement = db.prepare(sql);
-
-  if (params.length > 0) {
-    statement.bind(...params);
-  }
+  const statement = bindParams(db.prepare(sql), params);
 
   return statement.first<T>();
 }
@@ -72,13 +64,17 @@ export async function executeD1<T = any>(
   sql: string,
   params: any[] = []
 ): Promise<D1Result<T>> {
-  const statement = db.prepare(sql);
+  const statement = bindParams(db.prepare(sql), params);
 
-  if (params.length > 0) {
-    statement.bind(...params);
+  if (/\bRETURNING\b/i.test(sql)) {
+    return statement.all<T>();
   }
 
   return statement.run();
+}
+
+function bindParams(statement: D1PreparedStatement, params: any[]) {
+  return params.length > 0 ? statement.bind(...params) : statement;
 }
 
 /**
