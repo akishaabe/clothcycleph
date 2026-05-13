@@ -17,12 +17,13 @@ interface AuthContextType {
   login: (email: string, password: string, remember?: boolean) => Promise<LoginResponse>;
   continueWithGoogle: (credential: string, role?: 'user') => Promise<GoogleAuthResponse>;
   verifyTwoFactor: (twoFactorToken: string, code: string, remember?: boolean) => Promise<User>;
-  resendTwoFactorCode: (twoFactorToken: string) => Promise<{ message: string; requiresTwoFactor: true; two_factor_token: string; two_factor_method?: 'email' | 'totp' }>;
+  resendTwoFactorCode: (twoFactorToken: string) => Promise<{ message: string; requiresTwoFactor: true; two_factor_token: string; two_factor_method?: 'email' | 'totp' | 'sms'; dev_code?: string }>;
   forgotPassword: (email: string) => Promise<{ message: string; reset_token?: string }>;
   resetPassword: (resetToken: string, password: string) => Promise<{ message: string }>;
   getTwoFactorStatus: () => Promise<TwoFactorStatusResponse>;
-  setupTwoFactor: (password: string) => Promise<TwoFactorSetupResponse>;
-  enableTwoFactor: (password: string, code: string) => Promise<{ message: string; recovery_codes: string[] }>;
+  setupTwoFactor: (password: string, method?: 'totp' | 'sms', phone?: string) => Promise<TwoFactorSetupResponse>;
+  enableTwoFactor: (password: string, code: string, method?: 'totp' | 'sms') => Promise<{ message: string; recovery_codes: string[] }>;
+  sendSmsTwoFactorCode: () => Promise<{ message: string; dev_code?: string }>;
   disableTwoFactor: (password: string, code?: string) => Promise<{ message: string }>;
   signup: (email: string, name: string, password: string, role?: string) => Promise<SignupResponse>;
   logout: () => void;
@@ -129,16 +130,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return authService.getTwoFactorStatus();
   };
 
-  const setupTwoFactor = (password: string) => {
-    return authService.setupTwoFactor(password);
+  const setupTwoFactor = (password: string, method: 'totp' | 'sms' = 'totp', phone?: string) => {
+    return authService.setupTwoFactor(password, method, phone);
   };
 
-  const enableTwoFactor = async (password: string, code: string) => {
-    const response = await authService.enableTwoFactor(password, code);
+  const enableTwoFactor = async (password: string, code: string, method?: 'totp' | 'sms') => {
+    const response = await authService.enableTwoFactor(password, code, method);
     if (user) {
       updateUser({ ...user, two_factor_enabled: true });
     }
     return response;
+  };
+
+  const sendSmsTwoFactorCode = () => {
+    return authService.sendSmsTwoFactorCode();
   };
 
   const disableTwoFactor = async (password: string, code?: string) => {
@@ -190,6 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getTwoFactorStatus,
     setupTwoFactor,
     enableTwoFactor,
+    sendSmsTwoFactorCode,
     disableTwoFactor,
     signup,
     logout,

@@ -92,9 +92,11 @@ export function LoginPage() {
                 setSuccessMessage(
                   authResponse.two_factor_method === "totp"
                     ? "Enter your authenticator code to continue."
-                    : "Check your email for the 6-digit verification code."
+                    : authResponse.two_factor_method === "sms"
+                      ? `Check your phone for the 6-digit verification code.${authResponse.dev_code ? ` Dev code: ${authResponse.dev_code}` : ""}`
+                      : "Check your email for the 6-digit verification code."
                 );
-                setResendCountdown(authResponse.two_factor_method === "email" ? 15 : 0);
+                setResendCountdown(["email", "sms"].includes(authResponse.two_factor_method || "") ? 15 : 0);
                 return;
               }
 
@@ -170,9 +172,11 @@ export function LoginPage() {
         setSuccessMessage(
           response.two_factor_method === "totp"
             ? "Enter your authenticator code to continue."
-            : "Check your email for the 6-digit verification code."
+            : response.two_factor_method === "sms"
+              ? `Check your phone for the 6-digit verification code.${response.dev_code ? ` Dev code: ${response.dev_code}` : ""}`
+              : "Check your email for the 6-digit verification code."
         );
-        setResendCountdown(response.two_factor_method === "email" ? 15 : 0);
+        setResendCountdown(["email", "sms"].includes(response.two_factor_method || "") ? 15 : 0);
         return;
       }
 
@@ -207,10 +211,13 @@ export function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      if (twoFactorToken && twoFactorMethod === "email") {
+      if (twoFactorToken && ["email", "sms"].includes(twoFactorMethod)) {
         const response = await resendTwoFactorCode(twoFactorToken);
         setTwoFactorToken(response.two_factor_token);
-        setSuccessMessage(response.message);
+        setTwoFactorMethod(response.two_factor_method || twoFactorMethod);
+        setSuccessMessage(
+          response.dev_code ? `${response.message} Dev code: ${response.dev_code}` : response.message
+        );
         setResendCountdown(15);
         return;
       }
@@ -365,7 +372,9 @@ export function LoginPage() {
               {twoFactorToken
                 ? twoFactorMethod === "totp"
                   ? "Enter your authenticator code"
-                  : "Enter the code sent to your email"
+                  : twoFactorMethod === "sms"
+                    ? "Enter the code sent to your phone"
+                    : "Enter the code sent to your email"
                 : authMode === "forgot"
                   ? "Request a password reset token"
                   : authMode === "reset"
@@ -621,7 +630,7 @@ export function LoginPage() {
                 </>
               ) : null}
 
-              {(twoFactorToken && twoFactorMethod === "email") || authMode === "reset" ? (
+              {(twoFactorToken && ["email", "sms"].includes(twoFactorMethod)) || authMode === "reset" ? (
                 <div className="text-sm text-[#5f6f67] dark:text-zinc-400">
                   {resendCountdown > 0
                     ? `Didn't receive a code? You can request ${authMode === "reset" ? "a new reset code" : "another code"} again in ${resendCountdown}s.`

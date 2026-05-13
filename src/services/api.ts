@@ -119,7 +119,7 @@ export const authService = {
 
   async resendTwoFactorCode(
     payload: ResendTwoFactorPayload
-  ): Promise<{ message: string; requiresTwoFactor: true; two_factor_token: string; two_factor_method?: 'email' | 'totp' }> {
+  ): Promise<{ message: string; requiresTwoFactor: true; two_factor_token: string; two_factor_method?: 'email' | 'totp' | 'sms'; dev_code?: string }> {
     return fetchWithAuth('/auth/2fa/resend', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -146,20 +146,28 @@ export const authService = {
     });
   },
 
-  async setupTwoFactor(password: string): Promise<TwoFactorSetupResponse> {
+  async setupTwoFactor(password: string, method: 'totp' | 'sms' = 'totp', phone?: string): Promise<TwoFactorSetupResponse> {
     return fetchWithAuth('/auth/2fa/setup', {
       method: 'POST',
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ password, method, phone }),
     });
   },
 
   async enableTwoFactor(
     password: string,
-    code: string
+    code: string,
+    method?: 'totp' | 'sms'
   ): Promise<{ message: string; recovery_codes: string[] }> {
     return fetchWithAuth('/auth/2fa/enable', {
       method: 'POST',
-      body: JSON.stringify({ password, code }),
+      body: JSON.stringify({ password, code, method }),
+    });
+  },
+
+  async sendSmsTwoFactorCode(): Promise<{ message: string; dev_code?: string }> {
+    return fetchWithAuth('/auth/2fa/sms/send', {
+      method: 'POST',
+      body: JSON.stringify({}),
     });
   },
 

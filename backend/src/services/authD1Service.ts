@@ -10,7 +10,13 @@ import {
   encryptSecret,
   decryptSecret,
 } from '../utils/workerTotp.js';
-import { sendTwoFactorCode, sendPasswordResetLink, EmailProvider } from './workerEmailService.js';
+import {
+  sendTwoFactorCode,
+  sendPasswordResetLink,
+  sendSmsTwoFactorCode,
+  EmailProvider,
+  SmsProvider,
+} from './workerEmailService.js';
 
 export interface AuthUser {
   id: string;
@@ -22,6 +28,7 @@ export interface AuthUser {
   phone?: string;
   address?: string;
   two_factor_enabled: boolean;
+  two_factor_method?: 'totp' | 'sms';
   email_verified_at?: string;
 }
 
@@ -31,6 +38,10 @@ export interface AuthD1Options {
   emailProvider?: EmailProvider;
   emailApiKey?: string;
   emailFrom?: string;
+  smsProvider?: SmsProvider;
+  twilioAccountSid?: string;
+  twilioAuthToken?: string;
+  twilioFromNumber?: string;
   appUrl?: string;
   googleClientId?: string;
   exposeDevSecrets?: boolean;
@@ -42,7 +53,7 @@ export async function signupD1(
   name: string,
   password: string,
   options: AuthD1Options
-): Promise<{ twoFactorToken: string; requiresTwoFactor: boolean; twoFactorMethod: 'email' | 'totp' }> {
+): Promise<{ twoFactorToken: string; requiresTwoFactor: boolean; twoFactorMethod: 'email' | 'totp' | 'sms'; devCode?: string }> {
   const existingUser = await queryD1First(db, 'SELECT id FROM users WHERE email = ?', [email]);
   if (existingUser) {
     throw new Error('User already exists');
@@ -63,6 +74,7 @@ export async function signupD1(
     twoFactorToken: challenge.twoFactorToken,
     requiresTwoFactor: true,
     twoFactorMethod: 'email',
+    devCode: challenge.devCode,
   };
 }
 
@@ -78,7 +90,8 @@ export async function loginD1(
   token?: string;
   twoFactorToken?: string;
   requiresTwoFactor?: boolean;
-  twoFactorMethod?: 'email' | 'totp';
+  twoFactorMethod?: 'email' | 'totp' | 'sms';
+  devCode?: string;
 }> {
   const user = await queryD1First(db, 'SELECT * FROM users WHERE email = ?', [email]);
   if (!user) {
@@ -113,15 +126,19 @@ export async function loginD1(
       requiresTwoFactor: true,
       twoFactorToken: challenge.twoFactorToken,
       twoFactorMethod: 'email',
+      devCode: challenge.devCode,
     };
   }
 
-  if (user.two_factor_enabled && user.two_factor_secret_encrypted && user.two_factor_confirmed_at) {
-    const challenge = await createTotpChallenge(user, options.jwtSecret);
+  if (user.two_factor_enabled && user.two_factor_confirmed_at) {
+    const method = user.two_factor_method === 'sms' ? 'sms' : 'totp';
+    const challenge =
+      method === 'sms' ? await createSmsChallenge(db, user, options) : await createTotpChallenge(user, options.jwtSecret);
     return {
       requiresTwoFactor: true,
       twoFactorToken: challenge.twoFactorToken,
-      twoFactorMethod: 'totp',
+      twoFactorMethod: method,
+      devCode: (challenge as { devCode?: string }).devCode,
     };
   }
 
@@ -141,7 +158,8 @@ export async function continueWithGoogleD1(
   token?: string;
   requiresTwoFactor?: boolean;
   twoFactorToken?: string;
-  twoFactorMethod?: 'email' | 'totp';
+  twoFactorMethod?: 'email' | 'totp' | 'sms';
+  devCode?: string;
 }> {
   if (!options.googleClientId) {
     throw new Error('Google login is not configured');
@@ -166,12 +184,15 @@ export async function continueWithGoogleD1(
     await executeD1(db, `UPDATE users SET email_verified_at = CURRENT_TIMESTAMP WHERE id = ?`, [user.id]);
   }
 
-  if (user.two_factor_enabled && user.two_factor_secret_encrypted && user.two_factor_confirmed_at) {
-    const challenge = await createTotpChallenge(user, options.jwtSecret);
+  if (user.two_factor_enabled && user.two_factor_confirmed_at) {
+    const method = user.two_factor_method === 'sms' ? 'sms' : 'totp';
+    const challenge =
+      method === 'sms' ? await createSmsChallenge(db, user, options) : await createTotpChallenge(user, options.jwtSecret);
     return {
       requiresTwoFactor: true,
       twoFactorToken: challenge.twoFactorToken,
-      twoFactorMethod: 'totp',
+      twoFactorMethod: method,
+      devCode: (challenge as { devCode?: string }).devCode,
     };
   }
 
@@ -221,6 +242,29 @@ export async function verifyTwoFactorD1(
        WHERE id = ?`,
       [user.id]
     );
+  } else if (decoded.method === 'sms') {
+    if (!user.two_factor_code_hash || !user.two_factor_code_expires_at) {
+      throw new Error('Verification code has expired');
+    }
+
+    if (new Date() > new Date(user.two_factor_code_expires_at)) {
+      throw new Error('Verification code has expired');
+    }
+
+    const isValidSmsCode = await comparePassword(code, user.two_factor_code_hash);
+    if (!isValidSmsCode) {
+      throw new Error('Invalid two-factor code');
+    }
+
+    await executeD1(
+      db,
+      `UPDATE users
+       SET two_factor_code_hash = NULL,
+           two_factor_code_expires_at = NULL,
+           last_login_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [user.id]
+    );
   } else {
     if (!user.two_factor_enabled || !user.two_factor_secret_encrypted) {
       throw new Error('Two-factor authentication is not enabled');
@@ -244,24 +288,53 @@ export async function resendTwoFactorCodeD1(
   db: D1Database,
   twoFactorToken: string,
   options: AuthD1Options
-): Promise<{ twoFactorToken: string }> {
+): Promise<{ twoFactorToken: string; twoFactorMethod: 'email' | 'sms'; devCode?: string }> {
   const decoded = await verifyJwt(twoFactorToken, options.jwtSecret);
-  if (decoded.purpose !== 'email_verification' && decoded.method !== 'email') {
-    throw new Error('This verification flow cannot resend email codes');
+  if (decoded.purpose !== 'email_verification' && decoded.method !== 'email' && decoded.method !== 'sms') {
+    throw new Error('This verification flow cannot resend codes');
   }
 
-  const user = await queryD1First(db, 'SELECT id, email, role FROM users WHERE id = ?', [decoded.id as string]);
+  const user = await queryD1First(db, 'SELECT id, email, role, phone FROM users WHERE id = ?', [decoded.id as string]);
   if (!user) {
     throw new Error('User not found');
   }
 
-  return createEmailVerificationChallenge(db, user, options);
+  if (decoded.method === 'sms') {
+    const challenge = await createSmsChallenge(db, user, options);
+    return { ...challenge, twoFactorMethod: 'sms' };
+  }
+
+  const challenge = await createEmailVerificationChallenge(db, user, options);
+  return { ...challenge, twoFactorMethod: 'email' };
+}
+
+export async function sendAuthenticatedSmsTwoFactorCodeD1(
+  db: D1Database,
+  userId: string,
+  options: AuthD1Options
+): Promise<{ message: string; devCode?: string }> {
+  const user = await queryD1First(db, 'SELECT id, email, role, phone, two_factor_method, two_factor_enabled FROM users WHERE id = ?', [
+    userId,
+  ]);
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  if (user.two_factor_method !== 'sms' || !user.two_factor_enabled) {
+    throw new Error('SMS two-factor authentication is not enabled');
+  }
+
+  const challenge = await createSmsChallenge(db, user, options);
+  return {
+    message: 'A verification code has been sent by SMS.',
+    devCode: challenge.devCode,
+  };
 }
 
 export async function getTwoFactorStatusD1(db: D1Database, userId: string) {
   const user = await queryD1First(
     db,
-    `SELECT two_factor_enabled, two_factor_secret_encrypted, two_factor_confirmed_at FROM users WHERE id = ?`,
+    `SELECT two_factor_enabled, two_factor_method, two_factor_secret_encrypted, two_factor_confirmed_at, phone FROM users WHERE id = ?`,
     [userId]
   );
   if (!user) {
@@ -269,13 +342,22 @@ export async function getTwoFactorStatusD1(db: D1Database, userId: string) {
   }
   return {
     enabled: Boolean(user.two_factor_enabled && user.two_factor_confirmed_at),
-    setup_started: Boolean(user.two_factor_secret_encrypted),
+    method: user.two_factor_method || 'totp',
+    setup_started: Boolean(user.two_factor_secret_encrypted || user.two_factor_method === 'sms'),
     confirmed_at: user.two_factor_confirmed_at,
+    phone: user.phone,
   };
 }
 
-export async function setupTwoFactorD1(db: D1Database, userId: string, password: string, options: AuthD1Options) {
-  const user = await queryD1First(db, 'SELECT id, email, password_hash FROM users WHERE id = ?', [userId]);
+export async function setupTwoFactorD1(
+  db: D1Database,
+  userId: string,
+  password: string,
+  options: AuthD1Options,
+  method: 'totp' | 'sms' = 'totp',
+  phone?: string
+) {
+  const user = await queryD1First(db, 'SELECT id, email, phone, password_hash FROM users WHERE id = ?', [userId]);
   if (!user) {
     throw new Error('User not found');
   }
@@ -283,6 +365,40 @@ export async function setupTwoFactorD1(db: D1Database, userId: string, password:
   const isValidPassword = await comparePassword(password, user.password_hash);
   if (!isValidPassword) {
     throw new Error('Invalid password');
+  }
+
+  if (method === 'sms') {
+    const normalizedPhone = normalizePhone(phone || user.phone);
+    if (!normalizedPhone) {
+      throw new Error('A phone number is required to set up SMS 2FA');
+    }
+
+    await executeD1(
+      db,
+      `UPDATE users
+       SET two_factor_enabled = 0,
+           two_factor_method = 'sms',
+           phone = ?,
+           two_factor_secret_encrypted = NULL,
+           two_factor_confirmed_at = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [normalizedPhone, userId]
+    );
+
+    const challenge = await createSmsChallenge(
+      db,
+      { id: user.id, email: user.email, role: 'user', phone: normalizedPhone },
+      options
+    );
+
+    return {
+      message: 'Enter the 6-digit code sent by SMS to confirm setup.',
+      method: 'sms' as const,
+      masked_phone: maskPhone(normalizedPhone),
+      two_factor_token: challenge.twoFactorToken,
+      dev_code: challenge.devCode,
+    };
   }
 
   const secret = generateTotpSecret();
@@ -292,6 +408,7 @@ export async function setupTwoFactorD1(db: D1Database, userId: string, password:
     db,
     `UPDATE users
      SET two_factor_enabled = 0,
+         two_factor_method = 'totp',
          two_factor_secret_encrypted = ?,
          two_factor_confirmed_at = NULL,
          updated_at = CURRENT_TIMESTAMP
@@ -301,14 +418,15 @@ export async function setupTwoFactorD1(db: D1Database, userId: string, password:
 
   return {
     message: 'Scan this secret in your authenticator app, then confirm with a 6-digit code.',
+    method: 'totp' as const,
     secret,
     otpauth_url: buildOtpAuthUrl(user.email, 'ClothCycle', secret),
   };
 }
 
 export async function enableTwoFactorD1(db: D1Database, userId: string, password: string, code: string, options: AuthD1Options) {
-  const user = await queryD1First(db, 'SELECT password_hash, two_factor_secret_encrypted FROM users WHERE id = ?', [userId]);
-  if (!user || !user.two_factor_secret_encrypted) {
+  const user = await queryD1First(db, 'SELECT password_hash, two_factor_method, two_factor_secret_encrypted, two_factor_code_hash, two_factor_code_expires_at FROM users WHERE id = ?', [userId]);
+  if (!user || (user.two_factor_method !== 'sms' && !user.two_factor_secret_encrypted)) {
     throw new Error('Start two-factor setup before enabling it');
   }
 
@@ -317,8 +435,15 @@ export async function enableTwoFactorD1(db: D1Database, userId: string, password
     throw new Error('Invalid password');
   }
 
-  const secret = await decryptSecret(user.two_factor_secret_encrypted, options.totpEncryptionKey);
-  const isValidCode = await verifyTotpCode(secret, code);
+  const isValidCode =
+    user.two_factor_method === 'sms'
+      ? Boolean(
+          user.two_factor_code_hash &&
+            user.two_factor_code_expires_at &&
+            new Date() <= new Date(user.two_factor_code_expires_at) &&
+            (await comparePassword(code, user.two_factor_code_hash))
+        )
+      : await verifyTotpCode(await decryptSecret(user.two_factor_secret_encrypted, options.totpEncryptionKey), code);
   if (!isValidCode) {
     throw new Error('Invalid two-factor code');
   }
@@ -328,6 +453,8 @@ export async function enableTwoFactorD1(db: D1Database, userId: string, password
     `UPDATE users
      SET two_factor_enabled = 1,
          two_factor_confirmed_at = CURRENT_TIMESTAMP,
+         two_factor_code_hash = NULL,
+         two_factor_code_expires_at = NULL,
          updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`,
     [userId]
@@ -340,7 +467,7 @@ export async function enableTwoFactorD1(db: D1Database, userId: string, password
 }
 
 export async function disableTwoFactorD1(db: D1Database, userId: string, password: string, code: string | undefined, options: AuthD1Options) {
-  const user = await queryD1First(db, 'SELECT password_hash, two_factor_secret_encrypted, two_factor_enabled FROM users WHERE id = ?', [userId]);
+  const user = await queryD1First(db, 'SELECT password_hash, two_factor_method, two_factor_secret_encrypted, two_factor_enabled, two_factor_code_hash, two_factor_code_expires_at FROM users WHERE id = ?', [userId]);
   if (!user) {
     throw new Error('User not found');
   }
@@ -350,12 +477,19 @@ export async function disableTwoFactorD1(db: D1Database, userId: string, passwor
     throw new Error('Invalid password');
   }
 
-  if (user.two_factor_enabled && user.two_factor_secret_encrypted) {
+  if (user.two_factor_enabled) {
     if (!code) {
       throw new Error('Two-factor code is required to disable 2FA');
     }
-    const secret = await decryptSecret(user.two_factor_secret_encrypted, options.totpEncryptionKey);
-    const isValidCode = await verifyTotpCode(secret, code);
+    const isValidCode =
+      user.two_factor_method === 'sms'
+        ? Boolean(
+            user.two_factor_code_hash &&
+              user.two_factor_code_expires_at &&
+              new Date() <= new Date(user.two_factor_code_expires_at) &&
+              (await comparePassword(code, user.two_factor_code_hash))
+          )
+        : await verifyTotpCode(await decryptSecret(user.two_factor_secret_encrypted, options.totpEncryptionKey), code);
     if (!isValidCode) {
       throw new Error('Invalid two-factor code');
     }
@@ -365,6 +499,7 @@ export async function disableTwoFactorD1(db: D1Database, userId: string, passwor
     db,
     `UPDATE users
      SET two_factor_enabled = 0,
+         two_factor_method = 'totp',
          two_factor_secret_encrypted = NULL,
          two_factor_confirmed_at = NULL,
          two_factor_code_hash = NULL,
@@ -429,7 +564,7 @@ export async function resetPasswordD1(db: D1Database, token: string, password: s
 export async function getProfileD1(db: D1Database, userId: string): Promise<AuthUser> {
   const user = await queryD1First(
     db,
-    'SELECT id, email, name, role, avatar_url, bio, phone, address, two_factor_enabled, email_verified_at FROM users WHERE id = ?',
+    'SELECT id, email, name, role, avatar_url, bio, phone, address, two_factor_enabled, two_factor_method, email_verified_at FROM users WHERE id = ?',
     [userId]
   );
 
@@ -456,7 +591,7 @@ export async function updateProfileD1(
          address = COALESCE(?, address),
          updated_at = CURRENT_TIMESTAMP
      WHERE id = ?
-     RETURNING id, email, name, role, avatar_url, bio, phone, address, two_factor_enabled, email_verified_at`,
+     RETURNING id, email, name, role, avatar_url, bio, phone, address, two_factor_enabled, two_factor_method, email_verified_at`,
     [name, avatar_url, bio, phone, address, userId]
   );
 
@@ -471,7 +606,7 @@ async function createEmailVerificationChallenge(
   db: D1Database,
   user: { id: string; email: string; role: string },
   options: AuthD1Options
-): Promise<{ twoFactorToken: string }> {
+): Promise<{ twoFactorToken: string; devCode?: string }> {
   const code = generateNumericCode();
   const codeHash = await hashPassword(code);
 
@@ -503,7 +638,7 @@ async function createEmailVerificationChallenge(
     options.jwtSecret
   );
 
-  return { twoFactorToken };
+  return { twoFactorToken, devCode: options.exposeDevSecrets ? code : undefined };
 }
 
 async function createTotpChallenge(user: { id: string; email: string; role: string }, jwtSecret: string): Promise<{ twoFactorToken: string }> {
@@ -519,6 +654,59 @@ async function createTotpChallenge(user: { id: string; email: string; role: stri
   );
 
   return { twoFactorToken };
+}
+
+async function createSmsChallenge(
+  db: D1Database,
+  user: { id: string; email: string; role: string; phone?: string | null },
+  options: AuthD1Options
+): Promise<{ twoFactorToken: string; devCode?: string }> {
+  const phone = normalizePhone(user.phone);
+  if (!phone) {
+    throw new Error('A verified phone number is required for SMS 2FA');
+  }
+
+  const code = generateNumericCode();
+  const codeHash = await hashPassword(code);
+
+  await executeD1(
+    db,
+    `UPDATE users
+     SET two_factor_code_hash = ?,
+         two_factor_code_expires_at = datetime('now', '+10 minutes')
+     WHERE id = ?`,
+    [codeHash, user.id]
+  );
+
+  if (options.smsProvider) {
+    await sendSmsTwoFactorCode(
+      options.smsProvider,
+      {
+        accountSid: options.twilioAccountSid,
+        authToken: options.twilioAuthToken,
+        fromNumber: options.twilioFromNumber,
+      },
+      phone,
+      code
+    );
+  }
+
+  if (options.exposeDevSecrets) {
+    console.log(`Dev SMS 2FA code for ${phone}: ${code}`);
+  }
+
+  const twoFactorToken = await signJwt(
+    {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      purpose: 'two_factor',
+      method: 'sms',
+    },
+    options.jwtSecret
+  );
+
+  return { twoFactorToken, devCode: options.exposeDevSecrets ? code : undefined };
 }
 
 async function generateAuthToken(payload: Record<string, unknown>, options: AuthD1Options) {
@@ -568,6 +756,24 @@ function toAuthUser(user: any): AuthUser {
     phone: user.phone,
     address: user.address,
     two_factor_enabled: Boolean(user.two_factor_enabled && user.two_factor_confirmed_at),
+    two_factor_method: user.two_factor_method || 'totp',
     email_verified_at: user.email_verified_at,
   };
+}
+
+function normalizePhone(phone?: string | null) {
+  const trimmed = (phone || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  if (!/^\+[1-9]\d{7,14}$/.test(trimmed)) {
+    throw new Error('Phone number must use E.164 format, for example +639171234567');
+  }
+
+  return trimmed;
+}
+
+function maskPhone(phone: string) {
+  return phone.replace(/^\+?(\d{2})(.*)(\d{4})$/, '+$1******$3');
 }

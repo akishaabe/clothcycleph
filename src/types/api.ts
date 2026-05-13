@@ -5,6 +5,7 @@ export interface User {
   name: string;
   role: 'user' | 'partner' | 'admin';
   two_factor_enabled?: boolean;
+  two_factor_method?: 'totp' | 'sms';
   email_verified_at?: string;
   avatar_url?: string;
   bio?: string;
@@ -23,7 +24,7 @@ export interface TwoFactorChallengeResponse {
   message: string;
   requiresTwoFactor: true;
   two_factor_token: string;
-  two_factor_method?: 'email' | 'totp';
+  two_factor_method?: 'email' | 'totp' | 'sms';
   dev_code?: string;
 }
 
@@ -54,13 +55,19 @@ export interface ResendTwoFactorPayload {
 
 export interface TwoFactorSetupResponse {
   message: string;
-  secret: string;
-  otpauth_url: string;
+  method: 'totp' | 'sms';
+  secret?: string;
+  otpauth_url?: string;
+  masked_phone?: string;
+  two_factor_token?: string;
+  dev_code?: string;
 }
 
 export interface TwoFactorStatusResponse {
   enabled: boolean;
   setup_started: boolean;
+  method?: 'totp' | 'sms';
+  phone?: string;
   confirmed_at?: string;
 }
 
