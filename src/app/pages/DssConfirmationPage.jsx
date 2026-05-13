@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
@@ -43,6 +43,8 @@ function formatDate(value) {
 export function DssConfirmationPage() {
   const { submissionId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const highlightedRequestId = searchParams.get("request");
   const [preview, setPreview] = useState(null);
   const [partners, setPartners] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -327,6 +329,27 @@ export function DssConfirmationPage() {
                         <p className="mt-1 text-sm leading-6 text-[#5f6f67]">
                           {recommendation.explanation}
                         </p>
+                        {recommendation.checks?.length > 0 && (
+                          <details className="mt-3 rounded-xl border border-[#e1e7df] bg-white/80 px-4 py-3 text-sm text-[#5f6f67]">
+                            <summary className="cursor-pointer font-semibold text-[#336158]">
+                              Why this was recommended
+                            </summary>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {recommendation.checks.map((check) => (
+                                <span
+                                  key={`${recommendation.recommended_pathway}-${check.question}`}
+                                  className={`rounded-full px-3 py-1 text-xs ${
+                                    check.matched
+                                      ? "bg-[#edf7ed] text-[#336158]"
+                                      : "bg-[#fff8e8] text-[#7a5427]"
+                                  }`}
+                                >
+                                  {check.question}: {check.matched ? "matched" : "not matched"}
+                                </span>
+                              ))}
+                            </div>
+                          </details>
+                        )}
                       </div>
                       <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-center text-sm text-[#336158]">
                         <div className="font-bold">
@@ -365,6 +388,14 @@ export function DssConfirmationPage() {
                     <div className="mt-3 text-xs uppercase tracking-wide text-[#336158]">
                       {partner.service_types || "General textile partner"}
                     </div>
+                    {(partner.accepted_service_types || partner.pickup_areas || partner.capacity_notes) && (
+                      <div className="mt-3 space-y-1 text-xs text-[#5f6f67]">
+                        {partner.accepted_service_types && <div>Accepts: {partner.accepted_service_types}</div>}
+                        {partner.pickup_areas && <div>Pickup areas: {partner.pickup_areas}</div>}
+                        {partner.accepts_clean_only && <div>Clean textiles only</div>}
+                        {partner.capacity_notes && <div>{partner.capacity_notes}</div>}
+                      </div>
+                    )}
                   </button>
                 ))}
               </div>
@@ -421,7 +452,11 @@ export function DssConfirmationPage() {
                 {requests.map((request) => (
                   <div
                     key={request.id}
-                    className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4"
+                    className={`rounded-2xl border bg-[#fbfcfa] p-4 ${
+                      highlightedRequestId === request.id
+                        ? "border-[#336158] ring-2 ring-[#336158]/20"
+                        : "border-[#e1e7df]"
+                    }`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="font-semibold text-[#19221d]">

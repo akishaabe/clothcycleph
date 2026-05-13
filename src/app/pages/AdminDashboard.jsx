@@ -20,9 +20,10 @@ import {
   Trash2,
   X,
   Save,
+  Download,
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { dssService } from "../../services/api";
+import { dssService, messageService, notificationService } from "../../services/api";
 
 const systemData = [
   { date: "01 May", users: 1200, admins: 15, partners: 45 },
@@ -114,15 +115,28 @@ export function AdminDashboard() {
   const [formData, setFormData] = useState(emptyForm);
   const [dssAuditRuns, setDssAuditRuns] = useState([]);
   const [dssAuditError, setDssAuditError] = useState("");
+  const [systemHealth, setSystemHealth] = useState({
+    value: "Checking",
+    trend: "Loading",
+  });
+  const [badgeCounts, setBadgeCounts] = useState({ messages: 0, notifications: 0 });
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadDssAudit() {
       try {
-        const response = await dssService.getAuditRuns();
+        const [response, messagesResponse, notificationsResponse] = await Promise.all([
+          dssService.getAuditRuns(),
+          messageService.getUnreadCount(),
+          notificationService.getUnreadCount(),
+        ]);
         if (isMounted) {
           setDssAuditRuns(response.data);
+          setBadgeCounts({
+            messages: Number(messagesResponse.unread_count || 0),
+            notifications: Number(notificationsResponse.unread_count || 0),
+          });
         }
       } catch (error) {
         if (isMounted) {
@@ -132,6 +146,35 @@ export function AdminDashboard() {
     }
 
     loadDssAudit();
+
+    async function loadHealth() {
+      try {
+        const apiBase = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+        const response = await fetch(`${apiBase}/health`);
+        const data = await response.json();
+
+        if (isMounted) {
+          const services = [data.database, data.redis, data.queues].filter(Boolean);
+          const healthyCount = services.filter((service) =>
+            ["connected", "initialized", "disabled"].includes(service)
+          ).length;
+          const percentage = services.length
+            ? Math.round((healthyCount / services.length) * 100)
+            : response.ok ? 100 : 0;
+
+          setSystemHealth({
+            value: `${percentage}%`,
+            trend: data.status === "ok" ? "Online" : "Degraded",
+          });
+        }
+      } catch {
+        if (isMounted) {
+          setSystemHealth({ value: "0%", trend: "Offline" });
+        }
+      }
+    }
+
+    loadHealth();
 
     return () => {
       isMounted = false;
@@ -265,6 +308,22 @@ export function AdminDashboard() {
     setSuspendTarget(null);
   };
 
+  const handleExportAudit = async () => {
+    try {
+      const blob = await dssService.exportAuditReport();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "clothcycle-dss-audit.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setDssAuditError(error.message || "Unable to export DSS audit report.");
+    }
+  };
+
   return (
     <div className="admin-dashboard app-darkable-page min-h-screen bg-[radial-gradient(circle_at_top_left,_#e5e7eb,_transparent_28%),linear-gradient(135deg,#f7f7f7,#ffffff,#eeeeee)]">
       {/* Top Navigation */}
@@ -282,11 +341,13 @@ export function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Link to="/messages?theme=admin" className="w-10 h-10 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center hover:bg-gray-200 transition-colors" aria-label="Open messages" title="Messages">
+            <Link to="/messages?theme=admin" className="relative w-10 h-10 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center hover:bg-gray-200 transition-colors" aria-label="Open messages" title="Messages">
               <MessageSquare className="w-5 h-5 text-gray-700" />
+              {badgeCounts.messages > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />}
             </Link>
-            <Link to="/notifications?theme=admin" className="w-10 h-10 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center hover:bg-gray-200 transition-colors">
+            <Link to="/notifications?theme=admin" className="relative w-10 h-10 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center hover:bg-gray-200 transition-colors">
               <Bell className="w-5 h-5 text-gray-700" />
+              {badgeCounts.notifications > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />}
             </Link>
             <div className="relative">
               <button
@@ -345,7 +406,7 @@ export function AdminDashboard() {
             { icon: Users, label: "Users", value: roleCounts.User, trend: "+120", color: "#111827" },
             { icon: Shield, label: "Admins", value: roleCounts.Admin, trend: "+3", color: "#374151" },
             { icon: Building2, label: "Partners", value: roleCounts.Partner, trend: "+8", color: "#4b5563" },
-            { icon: Activity, label: "System Health", value: "98.5%", trend: "Optimal", color: "#6b7280" }
+            { icon: Activity, label: "System Health", value: systemHealth.value, trend: systemHealth.trend, color: "#6b7280" }
           ].map((metric, index) => (
             <motion.div
               key={metric.label}
@@ -424,9 +485,13 @@ export function AdminDashboard() {
                 and partner handoff context.
               </p>
             </div>
-            <span className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-700">
-              dssEngine-v1
-            </span>
+            <button
+              onClick={handleExportAudit}
+              className="inline-flex items-center gap-2 rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+            >
+              <Download className="h-4 w-4" />
+              Export audit CSV
+            </button>
           </div>
 
           {dssAuditError && (

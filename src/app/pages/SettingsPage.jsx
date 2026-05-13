@@ -15,8 +15,10 @@ import {
   CheckCircle2,
   AlertTriangle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { useFileUpload } from "../../hooks/useFileUpload";
+import { isStrongPassword, PasswordChecklist } from "../../utils/passwordPolicy";
 import "./SettingsPage.css";
 
 const panelClass =
@@ -32,8 +34,9 @@ const actionButtonClass =
   "inline-flex min-w-[190px] items-center justify-center gap-2 px-6 py-3 bg-[#336158] text-white rounded-xl hover:bg-[#2a4c48] transition-all hover:shadow-lg";
 
 export function SettingsPage() {
-  const { getTwoFactorStatus, setupTwoFactor, enableTwoFactor, disableTwoFactor } =
+  const { user, updateProfile, changePassword, getTwoFactorStatus, setupTwoFactor, enableTwoFactor, disableTwoFactor } =
     useAuth();
+  const { uploadFile, isLoading: isPhotoUploading } = useFileUpload();
   const [searchParams] = useSearchParams();
   const settingsTheme = ["partner", "admin"].includes(searchParams.get("theme"))
     ? searchParams.get("theme")
@@ -47,12 +50,16 @@ export function SettingsPage() {
 
   const [activeTab, setActiveTab] = useState("profile");
   const [savedProfile, setSavedProfile] = useState({
-    name: " ",
-    email: " ",
-    phone: " ",
+    name: user?.name || "",
+    email: user?.email || "",
+    phone: user?.phone || "",
+    address: user?.address || "",
+    bio: user?.bio || "",
   });
   const [profile, setProfile] = useState(savedProfile);
-  const [profilePhoto, setProfilePhoto] = useState("");
+  const [profilePhoto, setProfilePhoto] = useState(user?.avatar_url || "");
+  const [profilePassword, setProfilePassword] = useState("");
+  const messageRef = useRef(null);
   const [saveMessage, setSaveMessage] = useState(null);
   const [security, setSecurity] = useState({
     currentPassword: "",
@@ -88,24 +95,68 @@ export function SettingsPage() {
     getTwoFactorStatus().then(setTwoFactorStatus).catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    const nextProfile = {
+      name: user?.name || "",
+      email: user?.email || "",
+      phone: user?.phone || "",
+      address: user?.address || "",
+      bio: user?.bio || "",
+    };
+    setSavedProfile(nextProfile);
+    setProfile(nextProfile);
+    setProfilePhoto(user?.avatar_url || "");
+  }, [user]);
+
   const showSaveMessage = (type, text) => {
     setSaveMessage({ type, text });
+    window.setTimeout(() => {
+      messageRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
   };
 
-  const handleProfileSave = () => {
-    if (!profile.name.trim() || !profile.email.trim() || !profile.phone.trim()) {
+  const handleProfileSave = async () => {
+    if (!profile.name.trim() || !profile.email.trim()) {
       showSaveMessage(
         "error",
-        "Changes were not saved. Please complete all profile fields."
+        "Changes were not saved. Please complete your name and email."
       );
       return;
     }
 
-    setSavedProfile(profile);
-    showSaveMessage("success", "Changes were successfully saved.");
+    const needsPassword =
+      profile.email !== savedProfile.email || profile.phone !== savedProfile.phone;
+
+    if (needsPassword && !profilePassword) {
+      showSaveMessage("error", "Enter your password to change email or phone number.");
+      return;
+    }
+
+    try {
+      const updated = await updateProfile({
+        name: profile.name,
+        email: profile.email,
+        phone: profile.phone || null,
+        address: profile.address || null,
+        bio: profile.bio || null,
+        avatar_url: profilePhoto || null,
+        password: needsPassword ? profilePassword : undefined,
+      });
+      setSavedProfile({
+        name: updated.name || "",
+        email: updated.email || "",
+        phone: updated.phone || "",
+        address: updated.address || "",
+        bio: updated.bio || "",
+      });
+      setProfilePassword("");
+      showSaveMessage("success", "Profile changes were saved.");
+    } catch (error) {
+      showSaveMessage("error", error.message || "Profile update failed.");
+    }
   };
 
-  const handleSecuritySave = () => {
+  const handleSecuritySave = async () => {
     if (
       !security.currentPassword ||
       !security.newPassword ||
@@ -126,7 +177,22 @@ export function SettingsPage() {
       return;
     }
 
-    showSaveMessage("success", "Changes were successfully saved.");
+    if (!isStrongPassword(security.newPassword)) {
+      showSaveMessage("error", "New password does not meet the strength requirements.");
+      return;
+    }
+
+    try {
+      await changePassword(
+        security.currentPassword,
+        security.newPassword,
+        security.confirmPassword
+      );
+      setSecurity({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      showSaveMessage("success", "Password was changed successfully.");
+    } catch (error) {
+      showSaveMessage("error", error.message || "Password update failed.");
+    }
   };
 
   const refreshTwoFactorStatus = async () => {
@@ -254,10 +320,47 @@ export function SettingsPage() {
     showSaveMessage("success", "Recovery codes downloaded.");
   };
 
-  const handlePhotoChange = (event) => {
+  const resizeProfilePhoto = (file) =>
+    new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 500;
+        canvas.height = 500;
+        const context = canvas.getContext("2d");
+        const side = Math.min(image.width, image.height);
+        const sx = (image.width - side) / 2;
+        const sy = (image.height - side) / 2;
+        context.drawImage(image, sx, sy, side, side, 0, 0, 500, 500);
+        canvas.toBlob(
+          (blob) =>
+            blob
+              ? resolve(new File([blob], "profile-photo.webp", { type: "image/webp" }))
+              : reject(new Error("Could not resize photo")),
+          "image/webp",
+          0.9,
+        );
+      };
+      image.onerror = () => reject(new Error("Could not read photo"));
+      image.src = URL.createObjectURL(file);
+    });
+
+  const handlePhotoChange = async (event) => {
     const file = event.target.files?.[0];
-    if (file) {
-      setProfilePhoto(URL.createObjectURL(file));
+    if (!file) {
+      return;
+    }
+
+    try {
+      const resizedFile = await resizeProfilePhoto(file);
+      const url = await uploadFile(resizedFile);
+      if (url) {
+        setProfilePhoto(url);
+        await updateProfile({ avatar_url: url });
+        showSaveMessage("success", "Profile photo updated at 500x500px.");
+      }
+    } catch (error) {
+      showSaveMessage("error", error.message || "Photo upload failed.");
     }
   };
 
@@ -318,6 +421,7 @@ export function SettingsPage() {
 
         {saveMessage && (
           <div
+            ref={messageRef}
             className={`mb-6 rounded-2xl border px-5 py-4 text-sm ${
               saveMessage.type === "success"
                 ? "border-[#b9d3bd] bg-[#eef7ef] text-[#2f5f3a]"
@@ -357,7 +461,7 @@ export function SettingsPage() {
               htmlFor="profile-photo"
               className="profile-photo-button mt-4 inline-flex cursor-pointer rounded-full border border-[#6b7280] bg-[#9ca3af] px-5 py-2 text-white transition-colors hover:bg-[#6b7280]"
             >
-              Change Photo
+              {isPhotoUploading ? "Uploading..." : "Change Photo"}
             </label>
             <input
               id="profile-photo"
@@ -419,6 +523,55 @@ export function SettingsPage() {
                       />
                     </div>
                   </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm text-[#19221d]">
+                      Address
+                    </label>
+                    <input
+                      type="text"
+                      value={profile.address}
+                      onChange={(event) =>
+                        setProfile({ ...profile, address: event.target.value })
+                      }
+                      className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white px-4 py-3 text-[#19221d] transition-colors focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/15"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm text-[#19221d]">
+                      Bio
+                    </label>
+                    <textarea
+                      value={profile.bio}
+                      onChange={(event) =>
+                        setProfile({ ...profile, bio: event.target.value })
+                      }
+                      rows={3}
+                      className="w-full resize-none rounded-xl border-2 border-[#e7ebe6] bg-white px-4 py-3 text-[#19221d] transition-colors focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/15"
+                    />
+                  </div>
+
+                  {(profile.email !== savedProfile.email ||
+                    profile.phone !== savedProfile.phone) && (
+                    <div>
+                      <label className="mb-2 block text-sm text-[#19221d]">
+                        Confirm Password
+                      </label>
+                      <div className="relative">
+                        <Lock className={iconClass} />
+                        <input
+                          type="password"
+                          value={profilePassword}
+                          onChange={(event) =>
+                            setProfilePassword(event.target.value)
+                          }
+                          className={inputClass}
+                          placeholder="Required for email or phone changes"
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   <div>
                     <label className="mb-2 block text-sm text-[#19221d]">
@@ -798,10 +951,16 @@ export function SettingsPage() {
                             })
                           }
                           className={inputClass}
-                        />
-                      </div>
+                      />
                     </div>
-                  ))}
+                    {field === "newPassword" && (
+                      <PasswordChecklist
+                        password={security.newPassword}
+                        confirmPassword={security.confirmPassword}
+                      />
+                    )}
+                  </div>
+                ))}
 
                   <button
                     onClick={handleSecuritySave}

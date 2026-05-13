@@ -21,6 +21,7 @@ import {
 } from "../../services/googleIdentity";
 
 import "./LoginPage.css";
+import { isStrongPassword, PasswordChecklist } from "../../utils/passwordPolicy";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -33,6 +34,7 @@ export function LoginPage() {
   const [twoFactorToken, setTwoFactorToken] = useState("");
   const [twoFactorMethod, setTwoFactorMethod] = useState("email");
   const [authMode, setAuthMode] = useState("login");
+  const [resetStep, setResetStep] = useState("code");
   const [resetToken, setResetToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -142,13 +144,27 @@ export function LoginPage() {
           setResetToken(response.reset_token);
         }
         setAuthMode("reset");
+        setResetStep("code");
         setResendCountdown(15);
         return;
       }
 
       if (authMode === "reset") {
+        if (resetStep === "code") {
+          if (!/^\d{6}$/.test(resetToken)) {
+            throw new Error("Enter the 6-digit reset code first.");
+          }
+          setResetStep("password");
+          setSuccessMessage("Code entered. Choose a new password.");
+          return;
+        }
+
         if (newPassword !== confirmNewPassword) {
           throw new Error("New passwords do not match");
+        }
+
+        if (!isStrongPassword(newPassword)) {
+          throw new Error("New password does not meet the strength requirements.");
         }
 
         const response = await resetPassword(resetToken, newPassword);
@@ -192,6 +208,7 @@ export function LoginPage() {
     setResetToken("");
     setNewPassword("");
     setConfirmNewPassword("");
+    setResetStep("code");
     setError("");
     setSuccessMessage("");
     setResendCountdown(0);
@@ -367,9 +384,11 @@ export function LoginPage() {
                   ? "Enter your authenticator code"
                   : "Enter the code sent to your email"
                 : authMode === "forgot"
-                  ? "Request a password reset token"
+                  ? "Request a password reset code"
                   : authMode === "reset"
-                    ? "Enter your 6-digit reset code and choose a new password"
+                    ? resetStep === "code"
+                      ? "Enter your 6-digit reset code first"
+                      : "Choose and confirm your new password"
                     : "Access your sustainable fashion account"}
             </p>
             </div>
@@ -552,7 +571,7 @@ export function LoginPage() {
                 <>
                   <div>
                     <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
-                      Reset Token
+                      Reset Code
                     </label>
                     <div className="relative">
                       <KeyRound className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#5f6f67] dark:text-zinc-500" />
@@ -568,6 +587,8 @@ export function LoginPage() {
                       />
                   </div>
                 </div>
+                  {resetStep === "password" ? (
+                    <>
                   <div>
                     <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
                       New Password
@@ -592,6 +613,10 @@ export function LoginPage() {
                         {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                       </button>
                     </div>
+                    <PasswordChecklist
+                      password={newPassword}
+                      confirmPassword={confirmNewPassword}
+                    />
                   </div>
                   <div>
                     <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
@@ -618,6 +643,8 @@ export function LoginPage() {
                       </button>
                     </div>
                   </div>
+                    </>
+                  ) : null}
                 </>
               ) : null}
 
@@ -736,7 +763,9 @@ export function LoginPage() {
                     : authMode === "forgot"
                       ? "Send Reset Code"
                       : authMode === "reset"
-                        ? "Reset Password"
+                        ? resetStep === "code"
+                          ? "Continue"
+                          : "Reset Password"
                         : "Log In"}
               </button>
 

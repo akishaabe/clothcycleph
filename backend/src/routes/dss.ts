@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getPartnerDssRequests,
   getDssAuditRuns,
+  exportDssAuditReport,
   getSubmissionDss,
   getUserDssRequests,
   listPartners,
@@ -19,6 +20,7 @@ const router = Router();
 
 router.get('/partners', authMiddleware, listPartners);
 router.get('/audit', authMiddleware, getDssAuditRuns);
+router.get('/audit/export', authMiddleware, exportDssAuditReport);
 router.post('/rule-change-requests', authMiddleware, validate(partnerRuleChangeRequestSchema), createPartnerRuleChangeRequest);
 router.get('/submissions/:submissionId', authMiddleware, validate(submissionIdParamSchema, 'params'), getSubmissionDss);
 router.post('/send', authMiddleware, validate(sendDssRecommendationSchema), sendRecommendationToPartner);

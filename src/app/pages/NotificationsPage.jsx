@@ -1,31 +1,9 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Bell, CheckCircle2, PackageCheck, Recycle } from "lucide-react";
 import { motion } from "motion/react";
+import { useEffect, useState } from "react";
+import { notificationService } from "../../services/api";
 import "./NotificationsPage.css";
-
-const notifications = [
-  {
-    icon: PackageCheck,
-    title: "Submission received",
-    message: "Your textile submission SUB-047 has been added for review.",
-    time: "Today, 9:30 AM",
-    unread: true,
-  },
-  {
-    icon: CheckCircle2,
-    title: "Request approved",
-    message: "Your donation request was approved by a ClothCycle partner.",
-    time: "Yesterday, 4:15 PM",
-    unread: true,
-  },
-  {
-    icon: Recycle,
-    title: "Recycling milestone",
-    message: "You helped divert 125 textile items from waste streams.",
-    time: "May 6, 2026",
-    unread: false,
-  },
-];
 
 export function NotificationsPage() {
   const navigate = useNavigate();
@@ -39,6 +17,40 @@ export function NotificationsPage() {
       : notificationsTheme === "admin"
       ? "/admin"
       : "/dashboard";
+  const [notifications, setNotifications] = useState([]);
+  const [error, setError] = useState("");
+
+  const loadNotifications = async () => {
+    try {
+      const response = await notificationService.getNotifications();
+      setNotifications(response.data);
+    } catch (loadError) {
+      setError(loadError.message || "Unable to load notifications.");
+    }
+  };
+
+  useEffect(() => {
+    loadNotifications();
+  }, []);
+
+  const markAsRead = async (notification) => {
+    if (notification.read) {
+      return;
+    }
+
+    await notificationService.markAsRead(notification.id);
+    await loadNotifications();
+  };
+
+  const formatTime = (value) =>
+    value
+      ? new Intl.DateTimeFormat(undefined, {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(new Date(value))
+      : "";
 
   return (
     <div className={`notifications-page notifications-theme-${notificationsTheme} app-darkable-page min-h-screen bg-[radial-gradient(circle_at_top_left,_#e7ebe6,_transparent_28%),linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)] text-[#19221d]`}>
@@ -83,16 +95,33 @@ export function NotificationsPage() {
         </motion.section>
 
         <section className="space-y-4">
+          {error && (
+            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+          {notifications.length === 0 && !error && (
+            <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-5 text-[#5f6f67]">
+              No notifications yet.
+            </div>
+          )}
           {notifications.map((notification, index) => (
             <motion.article
-              key={notification.title}
+              key={notification.id}
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.08 }}
-              className="flex gap-4 rounded-2xl border border-[#e1e7df] bg-white/90 p-5 shadow-[0_12px_34px_rgba(25,34,29,0.08)]"
+              onClick={() => markAsRead(notification)}
+              className="flex cursor-pointer gap-4 rounded-2xl border border-[#e1e7df] bg-white/90 p-5 shadow-[0_12px_34px_rgba(25,34,29,0.08)]"
             >
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#336158]/12">
-                <notification.icon className="h-6 w-6 text-[#336158]" />
+                {notification.type === "submission_approved" ? (
+                  <CheckCircle2 className="h-6 w-6 text-[#336158]" />
+                ) : notification.type === "partner_update" ? (
+                  <PackageCheck className="h-6 w-6 text-[#336158]" />
+                ) : (
+                  <Bell className="h-6 w-6 text-[#336158]" />
+                )}
               </div>
 
               <div className="min-w-0 flex-1">
@@ -101,13 +130,15 @@ export function NotificationsPage() {
                     {notification.title}
                   </h2>
                   <span className="text-sm text-[#5f6f67]">
-                    {notification.time}
+                    {formatTime(notification.created_at)}
                   </span>
                 </div>
-                <p className="mt-1 text-[#5f6f67]">{notification.message}</p>
+                <p className="mt-1 text-[#5f6f67]">
+                  {notification.body || notification.message}
+                </p>
               </div>
 
-              {notification.unread && (
+              {!notification.read && (
                 <span className="mt-2 h-3 w-3 shrink-0 rounded-full bg-[#336158]" />
               )}
             </motion.article>

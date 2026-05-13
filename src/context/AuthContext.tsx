@@ -20,6 +20,8 @@ interface AuthContextType {
   resendTwoFactorCode: (twoFactorToken: string) => Promise<{ message: string; requiresTwoFactor: true; two_factor_token: string; two_factor_method?: 'email' | 'totp' }>;
   forgotPassword: (email: string) => Promise<{ message: string; reset_token?: string }>;
   resetPassword: (resetToken: string, password: string) => Promise<{ message: string }>;
+  updateProfile: (payload: any) => Promise<User>;
+  changePassword: (currentPassword: string, newPassword: string, confirmPassword: string) => Promise<{ message: string }>;
   getTwoFactorStatus: () => Promise<TwoFactorStatusResponse>;
   setupTwoFactor: (password: string) => Promise<TwoFactorSetupResponse>;
   enableTwoFactor: (password: string, code: string) => Promise<{ message: string; recovery_codes: string[] }>;
@@ -122,7 +124,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const resetPassword = (resetToken: string, password: string) => {
-    return authService.resetPassword({ token: resetToken, password });
+    return authService.resetPassword({ code: resetToken, password, confirm_password: password });
+  };
+
+  const updateProfile = async (payload: any) => {
+    const response = await authService.updateProfile(payload);
+    updateUser(response.data);
+    return response.data;
+  };
+
+  const changePassword = (currentPassword: string, newPassword: string, confirmPassword: string) => {
+    return authService.changePassword({
+      current_password: currentPassword,
+      new_password: newPassword,
+      confirm_password: confirmPassword,
+    });
   };
 
   const getTwoFactorStatus = () => {
@@ -187,6 +203,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resendTwoFactorCode,
     forgotPassword,
     resetPassword,
+    updateProfile,
+    changePassword,
     getTwoFactorStatus,
     setupTwoFactor,
     enableTwoFactor,

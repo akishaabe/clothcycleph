@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import {
   Recycle,
@@ -16,7 +16,7 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
-import { dssService } from "../../services/api";
+import { dssService, messageService, notificationService } from "../../services/api";
 import {
   BarChart,
   Bar,
@@ -102,6 +102,8 @@ export function UserDashboard() {
   const [requestError, setRequestError] = useState("");
   const [requestFilter, setRequestFilter] = useState("all");
   const [requestSearch, setRequestSearch] = useState("");
+  const [badgeCounts, setBadgeCounts] = useState({ messages: 0, notifications: 0 });
+  const requestsRef = useRef(null);
   const isNewSignup = location.state?.entry === "signup";
   const greeting = isNewSignup ? "Welcome to ClothCycle PH" : "Welcome Back";
 
@@ -110,10 +112,18 @@ export function UserDashboard() {
 
     async function loadRequests() {
       try {
-        const response = await dssService.getUserRequests();
+        const [response, messagesResponse, notificationsResponse] = await Promise.all([
+          dssService.getUserRequests(),
+          messageService.getUnreadCount(),
+          notificationService.getUnreadCount(),
+        ]);
 
         if (isMounted) {
           setRequests(response.data);
+          setBadgeCounts({
+            messages: Number(messagesResponse.unread_count || 0),
+            notifications: Number(notificationsResponse.unread_count || 0),
+          });
         }
       } catch (error) {
         if (isMounted) {
@@ -196,19 +206,21 @@ export function UserDashboard() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate("/notifications")}
-              className="w-10 h-10 rounded-full bg-[#f3f5f2] border border-[#e1e7df] flex items-center justify-center hover:bg-[#e7ebe6] transition-colors"
+              className="relative w-10 h-10 rounded-full bg-[#f3f5f2] border border-[#e1e7df] flex items-center justify-center hover:bg-[#e7ebe6] transition-colors"
               aria-label="Open notifications"
               title="Notifications"
             >
               <Bell className="w-5 h-5 text-[#5f6f67]" />
+              {badgeCounts.notifications > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />}
             </button>
             <button
               onClick={() => navigate("/messages")}
-              className="w-10 h-10 rounded-full bg-[#f3f5f2] border border-[#e1e7df] flex items-center justify-center hover:bg-[#e7ebe6] transition-colors"
+              className="relative w-10 h-10 rounded-full bg-[#f3f5f2] border border-[#e1e7df] flex items-center justify-center hover:bg-[#e7ebe6] transition-colors"
               aria-label="Open messages"
               title="Messages"
             >
               <MessageSquare className="w-5 h-5 text-[#5f6f67]" />
+              {badgeCounts.messages > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />}
             </button>
             <div className="relative">
               <button
@@ -326,7 +338,16 @@ export function UserDashboard() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.2 + index * 0.1 }}
-              className={`${cardClass} p-6 rounded-2xl text-left`}
+              onClick={() => {
+                const nextFilter = widget.label.includes("Pending")
+                  ? "pending"
+                  : widget.label.includes("Accepted")
+                    ? "accepted"
+                    : "all";
+                setRequestFilter(nextFilter);
+                requestsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              className={`${cardClass} p-6 rounded-2xl text-left transition-all hover:-translate-y-1`}
             >
               <div className="flex items-center justify-between mb-4">
                 <div
@@ -408,6 +429,7 @@ export function UserDashboard() {
         </section>
 
         <motion.section
+          ref={requestsRef}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.65 }}
@@ -491,7 +513,7 @@ export function UserDashboard() {
                     {request.status}
                   </span>
                   <button
-                    onClick={() => navigate(`/dss/${request.submission_id}`)}
+                    onClick={() => navigate(`/dss/${request.submission_id}?request=${request.id}`)}
                     className="rounded-xl border border-[#dce4da] px-3 py-2 text-sm text-[#5f6f67] hover:bg-[#f3f5f2]"
                   >
                     View

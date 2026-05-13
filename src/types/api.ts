@@ -69,8 +69,9 @@ export interface ForgotPasswordPayload {
 }
 
 export interface ResetPasswordPayload {
-  token: string;
+  code: string;
   password: string;
+  confirm_password?: string;
 }
 
 export interface GoogleAuthPayload {
@@ -80,10 +81,12 @@ export interface GoogleAuthPayload {
 
 export interface UpdateProfilePayload {
   name?: string;
+  email?: string;
   avatar_url?: string;
   bio?: string;
   phone?: string;
   address?: string;
+  password?: string;
 }
 
 // Submission types
@@ -167,6 +170,10 @@ export interface Partner {
   address?: string;
   website?: string;
   service_types?: string;
+  accepted_service_types?: string;
+  accepts_clean_only?: boolean;
+  capacity_notes?: string;
+  pickup_areas?: string;
   contact_person?: string;
   rating?: number;
   verified?: boolean;

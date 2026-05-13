@@ -187,6 +187,25 @@ export const getConversations = async (req: Request, res: Response) => {
   }
 };
 
+export const getUnreadMessageCount = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    const result = await query(
+      'SELECT COUNT(*)::int AS unread_count FROM messages WHERE to_user_id = $1 AND read = false',
+      [userId]
+    );
+
+    res.json({ unread_count: result.rows[0]?.unread_count || 0 });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+};
+
 export const markMessageAsRead = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

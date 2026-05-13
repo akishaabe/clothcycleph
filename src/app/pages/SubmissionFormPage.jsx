@@ -564,7 +564,7 @@ export function SubmissionFormPage() {
       {isReviewEditing && step !== 5 && (
         <button
           onClick={() => setStep(5)}
-          className="fixed bottom-6 right-6 z-40 rounded-full bg-[#336158] px-5 py-3 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(25,34,29,0.22)] hover:bg-[#2a4c48]"
+          className="fixed right-6 top-24 z-40 rounded-full bg-[#336158] px-5 py-3 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(25,34,29,0.22)] hover:bg-[#2a4c48]"
         >
           Back to review
         </button>
