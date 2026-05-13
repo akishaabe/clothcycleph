@@ -456,6 +456,8 @@ export function DssConfirmationPage() {
                         {partner.pickup_areas && <div>Pickup areas: {partner.pickup_areas}</div>}
                         {partner.accepts_clean_only && <div>Clean textiles only</div>}
                         {partner.capacity_notes && <div>{partner.capacity_notes}</div>}
+                          </div>
+              )}
                     <div className="mt-2 flex items-center gap-2 text-sm text-[#5f6f67]">
                       <MapPin className="h-4 w-4 text-[#336158]" />
                       {partner.distance_km != null
