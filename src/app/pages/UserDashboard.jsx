@@ -100,6 +100,8 @@ export function UserDashboard() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [requests, setRequests] = useState([]);
   const [requestError, setRequestError] = useState("");
+  const [requestFilter, setRequestFilter] = useState("all");
+  const [requestSearch, setRequestSearch] = useState("");
   const isNewSignup = location.state?.entry === "signup";
   const greeting = isNewSignup ? "Welcome to ClothCycle PH" : "Welcome Back";
 
@@ -152,6 +154,28 @@ export function UserDashboard() {
       },
     ];
   }, [requests]);
+
+  const filteredRequests = useMemo(() => {
+    const query = requestSearch.trim().toLowerCase();
+
+    return requests.filter((request) => {
+      const statusMatch = requestFilter === "all" || request.status === requestFilter;
+      const queryMatch =
+        !query ||
+        [
+          request.submission_name,
+          request.item_type,
+          request.partner_name,
+          request.type,
+          request.status,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+
+      return statusMatch && queryMatch;
+    });
+  }, [requests, requestFilter, requestSearch]);
 
   return (
     <div className="app-darkable-page min-h-screen bg-[radial-gradient(circle_at_top_left,_#e7ebe6,_transparent_28%),linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)] text-[#19221d]">
@@ -404,6 +428,32 @@ export function UserDashboard() {
             </button>
           </div>
 
+          <div className="mb-5 grid gap-3 md:grid-cols-[1fr_auto]">
+            <input
+              value={requestSearch}
+              onChange={(event) => setRequestSearch(event.target.value)}
+              className="rounded-xl border border-[#dce4da] bg-[#fbfcfa] px-4 py-3 text-sm text-[#19221d] outline-none focus:border-[#336158]"
+              placeholder="Search partner requests"
+            />
+            <div className="flex flex-wrap gap-2">
+              {["all", "pending", "accepted", "declined", "completed"].map(
+                (status) => (
+                  <button
+                    key={status}
+                    onClick={() => setRequestFilter(status)}
+                    className={`rounded-xl px-4 py-2 text-sm capitalize ${
+                      requestFilter === status
+                        ? "bg-[#336158] text-white"
+                        : "bg-[#f3f5f2] text-[#5f6f67] hover:bg-[#e7ebe6]"
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+
           {requestError && (
             <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
               {requestError}
@@ -411,21 +461,21 @@ export function UserDashboard() {
           )}
 
           <div className="grid gap-3">
-            {requests.length === 0 && (
+            {filteredRequests.length === 0 && (
               <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] px-4 py-5 text-sm text-[#5f6f67]">
                 No partner requests yet. Submit textile details, review the DSS
                 recommendation, then send the brief to a partner.
               </div>
             )}
 
-            {requests.slice(0, 5).map((request) => (
+            {filteredRequests.slice(0, 8).map((request) => (
               <div
                 key={request.id}
                 className="flex flex-col gap-3 rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4 md:flex-row md:items-center md:justify-between"
               >
                 <div>
                   <div className="font-semibold text-[#19221d]">
-                    {request.item_type} · {pathwayLabels[request.type] || request.type}
+                    {request.submission_name || request.item_type} · {pathwayLabels[request.type] || request.type}
                   </div>
                   <div className="mt-1 text-sm text-[#5f6f67]">
                     Sent to {request.partner_name || "partner"}

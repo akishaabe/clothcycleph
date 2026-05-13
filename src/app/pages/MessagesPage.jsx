@@ -342,6 +342,14 @@ export function MessagesPage() {
     }
   };
 
+  const openMessageAction = (message) => {
+    if (!message.action_url) {
+      return;
+    }
+
+    navigate(message.action_url);
+  };
+
   if (isAuthLoading && !isPreview) {
     return (
       <div className={`messages-page messages-theme-${messagesTheme} app-darkable-page flex min-h-screen items-center justify-center`}>
@@ -544,6 +552,15 @@ export function MessagesPage() {
                           }`}
                         >
                           <p className="text-lg leading-8">{message.content}</p>
+                          {message.action_url && (
+                            <button
+                              type="button"
+                              onClick={() => openMessageAction(message)}
+                              className="mt-4 rounded-xl bg-white/90 px-4 py-2 text-base font-semibold text-[#336158] shadow-sm transition-colors hover:bg-white"
+                            >
+                              View request
+                            </button>
+                          )}
                           <div className="mt-3 flex items-center justify-end gap-1 text-base opacity-80">
                             {formatMessageTime(message.created_at)}
                             {isMine && <Check className="h-3.5 w-3.5" />}

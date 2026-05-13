@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { dssService } from "../../services/api";
+import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
 
 const pathwayLabels = {
   recycle: "Recycle",
@@ -133,13 +134,17 @@ export function DssConfirmationPage() {
 
       return [
         `Recommended pathway: ${pathwayLabels[pathway]} (${Math.round(recommendation.confidence * 100)}% confidence)`,
+        `Submission name: ${preview.submission.submission_name || preview.submission.item_type}`,
         `Item: ${preview.submission.item_type}`,
         `Quantity: ${preview.submission.quantity || 1}`,
         `Condition: ${preview.submission.condition}`,
         `Cleanliness: ${preview.submission.cleanliness || "Not specified"}`,
         `Fabric: ${preview.submission.fabric || "Not specified"}`,
+        preview.submission.upcycle_request
+          ? `Upcycle request: ${preview.submission.upcycle_request}`
+          : "",
         `Recommendation note: ${recommendation.explanation}`,
-      ].join("\n");
+      ].filter(Boolean).join("\n");
     });
   };
 
@@ -190,9 +195,11 @@ export function DssConfirmationPage() {
 
   if (isLoading) {
     return (
-      <div className="app-darkable-page flex min-h-screen items-center justify-center bg-[linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)]">
-        <Loader2 className="h-8 w-8 animate-spin text-[#336158]" />
-      </div>
+      <BrandLoadingScreen
+        title="Reviewing your textile path"
+        message="Hang tight, the DSS engine is preparing your recommendations."
+        detail="We are checking fabric clues, item details, and partner-fit options."
+      />
     );
   }
 
@@ -249,14 +256,13 @@ export function DssConfirmationPage() {
                 Review recommendation and send to a partner
               </h1>
               <p className="mt-3 max-w-2xl text-[#5f6f67]">
-                This is a working DSS handoff preview. The recommendation is
-                generated from your saved submission details, then registered as
-                a partner request when sent.
+                The DSS engine reviews your saved submission details, then
+                registers a partner request when you send the brief.
               </p>
             </div>
             <div className="rounded-2xl border border-[#dce4da] bg-[#f7faf5] px-5 py-4 text-sm text-[#5f6f67]">
               <div className="font-semibold text-[#19221d]">
-                {preview.submission.item_type}
+                {preview.submission.submission_name || preview.submission.item_type}
               </div>
               <div>{formatDate(preview.submission.created_at)}</div>
             </div>

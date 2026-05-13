@@ -1,5 +1,7 @@
 type Pathway = 'recycle' | 'donate' | 'upcycle' | 'buyback';
 
+export const DSS_ENGINE_VERSION = 'dssEngine-v1';
+
 interface RuleCheck {
   question: string;
   matched: boolean;
@@ -258,18 +260,21 @@ export function buildPathwayRecommendations(submission: any) {
   const recommendations: Array<{
     recommended_pathway: Pathway;
     score: number;
+    rawScore: number;
     confidence: number;
     explanation: string;
     checks: RuleCheck[];
   }> = (['recycle', 'donate', 'upcycle'] as const).map((pathway) => {
     const ruleResult = pathwayRuleScore(pathway, condition, cleanliness);
     const preferenceBoost = preferred === pathway ? 8 : 0;
-    const score = Math.min(100, ruleResult.score + preferenceBoost);
+    const rawScore = ruleResult.score + preferenceBoost;
+    const score = Math.min(100, rawScore);
     const confidence = score / 100;
 
     return {
       recommended_pathway: pathway,
       score,
+      rawScore,
       confidence,
       explanation: buildPathwayExplanation(pathway, ruleResult.checks, preferenceBoost),
       checks: ruleResult.checks,
@@ -280,6 +285,7 @@ export function buildPathwayRecommendations(submission: any) {
     recommendations.push({
       recommended_pathway: 'buyback',
       score: 78,
+      rawScore: 78,
       confidence: 0.78,
       explanation:
         'Buyback is included because the user selected Upcycle and said they are interested in selling the upcycled item.',
@@ -295,7 +301,7 @@ export function buildPathwayRecommendations(submission: any) {
   }
 
   return recommendations
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => b.rawScore - a.rawScore)
     .map((recommendation, index) => ({
       ...recommendation,
       rank: index + 1,
@@ -308,7 +314,7 @@ function buildPathwayExplanation(pathway: Pathway, checks: RuleCheck[], preferen
   const missing = checks.filter((check) => !check.matched).map((check) => check.question);
   const pathwayLabel = pathway === 'donate' ? 'donation' : pathway;
   const parts = [
-    `${pathwayLabel} is based on the workbook item-details rules for condition and cleanliness.`,
+    `${pathwayLabel} is based on DSS item-detail rules for condition and cleanliness.`,
   ];
 
   if (matched.length > 0) {

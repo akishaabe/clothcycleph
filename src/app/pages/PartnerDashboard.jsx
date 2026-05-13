@@ -1,9 +1,10 @@
-import { Link, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Recycle, Package, Clock, CheckCircle, XCircle, Bell, User, BarChart3, Settings, LogOut, MessageSquare, Eye, Loader2, RefreshCw, X } from "lucide-react";
+import { Recycle, Package, Clock, CheckCircle, XCircle, Bell, User, BarChart3, Settings, LogOut, MessageSquare, Eye, Loader2, RefreshCw, X, Search } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { dssService } from "../../services/api";
+import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
 
 const platformData = [
   { month: "Jan", users: 850, submissions: 420 },
@@ -51,6 +52,8 @@ const formatDate = (value) =>
 
 export function PartnerDashboard() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestsSectionRef = useRef(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [requests, setRequests] = useState([]);
@@ -59,6 +62,8 @@ export function PartnerDashboard() {
   const [isLoadingRequests, setIsLoadingRequests] = useState(true);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [requestError, setRequestError] = useState("");
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const loadRequests = async () => {
     setIsLoadingRequests(true);
@@ -78,16 +83,54 @@ export function PartnerDashboard() {
     loadRequests();
   }, []);
 
+  useEffect(() => {
+    const requestId = searchParams.get("request");
+
+    if (!requestId || requests.length === 0) {
+      return;
+    }
+
+    const request = requests.find((item) => item.id === requestId);
+    if (request) {
+      setSelectedRequest(request);
+      setStatusNote(request.notes || "");
+      requestsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [searchParams, requests]);
+
   const metrics = useMemo(() => {
     const pending = requests.filter((request) => request.status === "pending").length;
     const accepted = requests.filter((request) => request.status === "accepted").length;
 
     return [
-      { icon: Package, label: "Active Requests", value: String(accepted), change: "+0", color: "#8aa6c8" },
-      { icon: Clock, label: "Pending Requests", value: String(pending), change: "+0", color: "#3f5f8f" },
-      { icon: BarChart3, label: "Total Requests", value: String(requests.length), change: "+0", color: "#6b93b8" }
+      { icon: Package, label: "Active Requests", value: String(accepted), filter: "accepted", color: "#8aa6c8" },
+      { icon: Clock, label: "Pending Requests", value: String(pending), filter: "pending", color: "#3f5f8f" },
+      { icon: BarChart3, label: "Total Requests", value: String(requests.length), filter: "all", color: "#6b93b8" }
     ];
   }, [requests]);
+
+  const filteredRequests = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return requests.filter((request) => {
+      const statusMatch = activeFilter === "all" || request.status === activeFilter;
+      const queryMatch =
+        !query ||
+        [
+          request.user_name,
+          request.user_email,
+          request.submission_name,
+          request.item_type,
+          request.type,
+          request.status,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+
+      return statusMatch && queryMatch;
+    });
+  }, [requests, activeFilter, searchQuery]);
 
   const updateRequestStatus = async (request, status) => {
     setIsUpdatingStatus(true);
@@ -108,6 +151,17 @@ export function PartnerDashboard() {
       setIsUpdatingStatus(false);
     }
   };
+
+  if (isLoadingRequests && requests.length === 0) {
+    return (
+      <BrandLoadingScreen
+        tone="partner"
+        title="Loading partner requests"
+        message="We are gathering DSS briefs sent to your organization."
+        detail="Accepted, pending, and completed requests will appear in a moment."
+      />
+    );
+  }
 
   return (
     <div className="partner-dashboard app-darkable-page min-h-screen bg-gradient-to-br from-[#f3f7fb] to-[#e4edf6]">
@@ -180,12 +234,21 @@ export function PartnerDashboard() {
         {/* Metrics */}
         <div className="grid md:grid-cols-3 gap-6 mb-8">
           {metrics.map((metric, index) => (
-            <motion.div
+            <motion.button
               key={metric.label}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: index * 0.1 }}
-              className="bg-white p-6 rounded-2xl shadow-lg"
+              onClick={() => {
+                setActiveFilter(metric.filter);
+                requestsSectionRef.current?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                });
+              }}
+              className={`bg-white p-6 rounded-2xl text-left shadow-lg transition-all hover:-translate-y-1 hover:shadow-xl ${
+                activeFilter === metric.filter ? "ring-2 ring-[#4f6f9f]" : ""
+              }`}
             >
               <div className="flex items-center justify-between mb-4">
                 <div
@@ -194,11 +257,13 @@ export function PartnerDashboard() {
                 >
                   <metric.icon className="w-6 h-6" style={{ color: metric.color }} />
                 </div>
-                <span className={`text-sm ${getTrendClass(metric.change)}`}>{metric.change}</span>
+                <span className="rounded-full bg-[#eff6ff] px-3 py-1 text-xs text-[#41668f]">
+                  View
+                </span>
               </div>
               <div className="text-3xl mb-1 text-[#10233f]">{metric.value}</div>
               <div className="text-sm text-[#41668f]">{metric.label}</div>
-            </motion.div>
+            </motion.button>
           ))}
         </div>
 
@@ -230,14 +295,20 @@ export function PartnerDashboard() {
 
         {/* Submissions Table */}
         <motion.div
+          ref={requestsSectionRef}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
           className="bg-white p-6 rounded-2xl shadow-lg"
         >
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl text-[#10233f]">DSS Partner Requests</h3>
-            <div className="flex gap-2">
+            <div>
+              <h3 className="text-xl text-[#10233f]">DSS Partner Requests</h3>
+              <p className="mt-1 text-sm text-[#41668f]">
+                View all user briefs, filter by status, then respond with a clear partner decision.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={loadRequests}
                 className="flex items-center gap-2 rounded-lg bg-[#eff6ff] px-4 py-2 text-sm text-[#41668f] transition-colors hover:bg-[#dbeafe]"
@@ -245,6 +316,35 @@ export function PartnerDashboard() {
                 <RefreshCw className="h-4 w-4" />
                 Refresh
               </button>
+            </div>
+          </div>
+
+          <div className="mb-5 grid gap-3 lg:grid-cols-[1fr_auto]">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#41668f]" />
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                className="w-full rounded-xl border border-[#d6e6f8] bg-[#fbfdff] py-3 pl-10 pr-4 text-sm text-[#10233f] outline-none focus:border-[#4f6f9f]"
+                placeholder="Search requester, item, pathway, or status"
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {["all", "pending", "accepted", "declined", "completed"].map(
+                (status) => (
+                  <button
+                    key={status}
+                    onClick={() => setActiveFilter(status)}
+                    className={`rounded-xl px-4 py-2 text-sm capitalize transition-colors ${
+                      activeFilter === status
+                        ? "bg-[#4f6f9f] text-white"
+                        : "bg-[#eff6ff] text-[#41668f] hover:bg-[#dbeafe]"
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ),
+              )}
             </div>
           </div>
 
@@ -277,20 +377,22 @@ export function PartnerDashboard() {
                   </tr>
                 )}
 
-                {!isLoadingRequests && requests.length === 0 && (
+                {!isLoadingRequests && filteredRequests.length === 0 && (
                   <tr>
                     <td colSpan={7} className="py-10 text-center text-[#41668f]">
-                      No DSS requests have been sent to this partner yet.
+                      No DSS requests match this view.
                     </td>
                   </tr>
                 )}
 
-                {!isLoadingRequests && requests.map((request) => (
+                {!isLoadingRequests && filteredRequests.map((request) => (
                   <tr key={request.id} className="border-b border-[#d6e6f8] hover:bg-[#eff6ff] transition-colors">
                     <td className="py-3 px-4 text-sm text-[#10233f]">{request.id.slice(0, 8)}</td>
                     <td className="py-3 px-4 text-sm text-[#10233f]">{request.user_name}</td>
                     <td className="py-3 px-4 text-sm text-[#41668f]">{pathwayLabels[request.type] || request.type}</td>
-                    <td className="py-3 px-4 text-sm text-[#41668f]">{request.quantity || 1} · {request.item_type}</td>
+                    <td className="py-3 px-4 text-sm text-[#41668f]">
+                      {request.quantity || 1} · {request.submission_name || request.item_type}
+                    </td>
                     <td className="py-3 px-4">
                       <span
                         className={`px-3 py-1 rounded-full text-xs ${
@@ -338,18 +440,18 @@ export function PartnerDashboard() {
       </div>
 
       {selectedRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10233f]/35 p-6 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#d6e6f8] bg-white p-6 shadow-[0_24px_70px_rgba(16,35,63,0.24)]">
-            <div className="mb-5 flex items-start justify-between gap-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10233f]/35 p-4 backdrop-blur-sm md:p-8">
+          <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-[#d6e6f8] bg-white p-6 shadow-[0_24px_70px_rgba(16,35,63,0.24)] md:p-8">
+            <div className="mb-7 flex items-start justify-between gap-4">
               <div>
                 <div className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#41668f]">
                   Partner request
                 </div>
-                <h2 className="text-2xl font-bold text-[#10233f]">
-                  {pathwayLabels[selectedRequest.type] || selectedRequest.type} · {selectedRequest.item_type}
+                <h2 className="text-3xl font-bold text-[#10233f]">
+                  {selectedRequest.submission_name || selectedRequest.item_type}
                 </h2>
                 <p className="mt-1 text-sm text-[#41668f]">
-                  Sent by {selectedRequest.user_name} · {formatDate(selectedRequest.created_at)}
+                  {pathwayLabels[selectedRequest.type] || selectedRequest.type} request sent by {selectedRequest.user_name} · {formatDate(selectedRequest.created_at)}
                 </p>
               </div>
               <button
@@ -361,8 +463,9 @@ export function PartnerDashboard() {
               </button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-4">
               {[
+                ["Pathway", pathwayLabels[selectedRequest.type] || selectedRequest.type],
                 ["Quantity", selectedRequest.quantity || 1],
                 ["Condition", selectedRequest.condition || "Not specified"],
                 ["Cleanliness", selectedRequest.cleanliness || "Not specified"],
@@ -376,47 +479,60 @@ export function PartnerDashboard() {
               ))}
             </div>
 
-            <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_0.9fr]">
-              <div className="rounded-2xl border border-[#d6e6f8] bg-[#fbfdff] p-5">
-                <h3 className="mb-3 font-semibold text-[#10233f]">Brief sent by user</h3>
-                <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-[#274568]">
+            <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-2xl border border-[#d6e6f8] bg-[#fbfdff] p-6">
+                <h3 className="mb-4 text-xl font-semibold text-[#10233f]">Brief sent by user</h3>
+                <pre className="whitespace-pre-wrap font-sans text-base leading-7 text-[#274568]">
                   {selectedRequest.output_payload?.brief || selectedRequest.notes || "No brief provided."}
                 </pre>
               </div>
 
               <div className="space-y-4">
-                <div className="rounded-2xl border border-[#d6e6f8] bg-white p-5">
-                  <h3 className="mb-3 font-semibold text-[#10233f]">Submission details</h3>
-                  <div className="space-y-2 text-sm text-[#41668f]">
+                <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6">
+                  <h3 className="mb-4 text-xl font-semibold text-[#10233f]">Submission details</h3>
+                  <div className="space-y-3 text-base leading-7 text-[#41668f]">
                     <p><span className="font-semibold text-[#10233f]">Fabric:</span> {selectedRequest.fabric || selectedRequest.details?.fabric_types || "Not specified"}</p>
                     <p><span className="font-semibold text-[#10233f]">Brand:</span> {selectedRequest.details?.no_brand_visible ? "No brand visible" : selectedRequest.details?.brand || "Not specified"}</p>
                     <p><span className="font-semibold text-[#10233f]">Burn test:</span> {selectedRequest.burn_test?.performed ? "Performed" : "Not performed"}</p>
+                    {selectedRequest.upcycle_request && (
+                      <p><span className="font-semibold text-[#10233f]">Upcycle request:</span> {selectedRequest.upcycle_request}</p>
+                    )}
                     {selectedRequest.description && (
                       <p><span className="font-semibold text-[#10233f]">User note:</span> {selectedRequest.description}</p>
                     )}
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-[#d6e6f8] bg-white p-5">
-                  <h3 className="mb-3 font-semibold text-[#10233f]">Update status</h3>
+                <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6">
+                  <h3 className="mb-2 text-2xl font-semibold text-[#10233f]">Partner decision and message to user</h3>
+                  <p className="mb-4 text-sm leading-6 text-[#41668f]">
+                    Accept when your organization can handle the item. Decline
+                    when capacity, location, cleanliness, or pathway fit is not
+                    suitable. The note below will be sent back to the user as
+                    the reason or next step.
+                  </p>
                   <textarea
                     value={statusNote}
                     onChange={(event) => setStatusNote(event.target.value)}
-                    rows={3}
-                    placeholder="Optional note for the user"
+                    rows={4}
+                    placeholder="Example: Accepted for donation. Please pack clean items separately and bring them on Friday afternoon."
                     className="mb-3 w-full resize-none rounded-xl border border-[#d6e6f8] p-3 text-sm text-[#10233f] outline-none focus:border-[#4f6f9f]"
                   />
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid gap-2 sm:grid-cols-3">
                     {[
-                      ["accepted", "Accept"],
-                      ["declined", "Decline"],
-                      ["completed", "Complete"],
+                      ["accepted", "Accept request"],
+                      ["declined", "Decline request"],
+                      ["completed", "Mark completed"],
                     ].map(([status, label]) => (
                       <button
                         key={status}
                         onClick={() => updateRequestStatus(selectedRequest, status)}
                         disabled={isUpdatingStatus}
-                        className="rounded-xl bg-[#4f6f9f] px-3 py-2 text-sm text-white hover:bg-[#3f5f8f] disabled:opacity-50"
+                        className={`rounded-xl px-3 py-3 text-sm text-white disabled:opacity-50 ${
+                          status === "declined"
+                            ? "bg-red-600 hover:bg-red-700"
+                            : "bg-[#4f6f9f] hover:bg-[#3f5f8f]"
+                        }`}
                       >
                         {label}
                       </button>

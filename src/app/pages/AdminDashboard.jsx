@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
   Recycle,
@@ -22,6 +22,7 @@ import {
   Save,
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { dssService } from "../../services/api";
 
 const systemData = [
   { date: "01 May", users: 1200, admins: 15, partners: 45 },
@@ -111,6 +112,31 @@ export function AdminDashboard() {
   const [suspendTarget, setSuspendTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
+  const [dssAuditRuns, setDssAuditRuns] = useState([]);
+  const [dssAuditError, setDssAuditError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDssAudit() {
+      try {
+        const response = await dssService.getAuditRuns();
+        if (isMounted) {
+          setDssAuditRuns(response.data);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setDssAuditError(error.message || "Unable to load DSS audit runs.");
+        }
+      }
+    }
+
+    loadDssAudit();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const activeConfig = roleConfig[activeRole];
   const roleAccounts = useMemo(
@@ -382,6 +408,80 @@ export function AdminDashboard() {
               <Area type="monotone" dataKey="partners" stroke="#9ca3af" fillOpacity={1} fill="url(#colorPartners)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="mb-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-lg"
+        >
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-xl text-gray-950">DSS Explanation Audit</h3>
+              <p className="mt-1 text-sm text-gray-600">
+                Recent recommendation runs with engine version, rule matches,
+                and partner handoff context.
+              </p>
+            </div>
+            <span className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-700">
+              dssEngine-v1
+            </span>
+          </div>
+
+          {dssAuditError && (
+            <div className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+              {dssAuditError}
+            </div>
+          )}
+
+          <div className="grid gap-3">
+            {dssAuditRuns.length === 0 && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-600">
+                No DSS audit runs yet. They appear after users send DSS briefs to partners.
+              </div>
+            )}
+
+            {dssAuditRuns.slice(0, 4).map((run) => (
+              <div
+                key={run.result_id}
+                className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+              >
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="font-semibold text-gray-950">
+                      {run.submission_name || run.item_type || "Submission"} · {run.recommended_pathway}
+                    </div>
+                    <div className="mt-1 text-sm text-gray-600">
+                      {run.engine_version} · {Math.round(Number(run.confidence || 0) * 100)}% confidence · {run.partner_name || "No partner"}
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1 text-sm text-gray-700">
+                    Score {Number(run.score || 0).toFixed(0)}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-gray-700">
+                  {run.explanation}
+                </p>
+                {run.output_payload?.rule_checks?.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {run.output_payload.rule_checks.map((check) => (
+                      <span
+                        key={`${run.result_id}-${check.question}`}
+                        className={`rounded-full px-3 py-1 text-xs ${
+                          check.matched
+                            ? "bg-green-100 text-green-700"
+                            : "bg-amber-100 text-amber-700"
+                        }`}
+                      >
+                        {check.question}: {check.matched ? "matched" : "missed"}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </motion.div>
 
         {/* Role Management Cards */}
