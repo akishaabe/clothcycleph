@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
   Recycle,
@@ -16,6 +16,7 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
+import { dssService } from "../../services/api";
 import {
   BarChart,
   Bar,
@@ -78,13 +79,79 @@ const serviceCards = [
 const cardClass =
   "bg-white/90 border border-[#e1e7df] shadow-[0_12px_34px_rgba(25,34,29,0.08)]";
 
+const requestStatusClass = {
+  pending: "bg-[#fff8e8] text-[#7a5427]",
+  accepted: "bg-[#edf7ed] text-[#336158]",
+  declined: "bg-red-50 text-red-700",
+  completed: "bg-[#eef5ff] text-[#3f5f8f]",
+};
+
+const pathwayLabels = {
+  recycle: "Recycle",
+  donate: "Donate",
+  upcycle: "Upcycle",
+  buyback: "Buyback",
+};
+
 export function UserDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [requests, setRequests] = useState([]);
+  const [requestError, setRequestError] = useState("");
   const isNewSignup = location.state?.entry === "signup";
   const greeting = isNewSignup ? "Welcome to ClothCycle PH" : "Welcome Back";
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadRequests() {
+      try {
+        const response = await dssService.getUserRequests();
+
+        if (isMounted) {
+          setRequests(response.data);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setRequestError(error.message || "Unable to load DSS requests.");
+        }
+      }
+    }
+
+    loadRequests();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const dashboardStats = useMemo(() => {
+    const pending = requests.filter((request) => request.status === "pending").length;
+    const accepted = requests.filter((request) => request.status === "accepted").length;
+
+    return [
+      {
+        icon: Package,
+        label: "Total Requests",
+        value: String(requests.length),
+        color: "#336158",
+      },
+      {
+        icon: Clock,
+        label: "Pending Requests",
+        value: String(pending),
+        color: "#d4a574",
+      },
+      {
+        icon: TrendingUp,
+        label: "Accepted Requests",
+        value: String(accepted),
+        color: "#336158",
+      },
+    ];
+  }, [requests]);
 
   return (
     <div className="app-darkable-page min-h-screen bg-[radial-gradient(circle_at_top_left,_#e7ebe6,_transparent_28%),linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)] text-[#19221d]">
@@ -229,26 +296,7 @@ export function UserDashboard() {
         </motion.section>
 
         <section className="grid md:grid-cols-3 gap-6 mb-8">
-          {[
-            {
-              icon: Package,
-              label: "Total Submissions",
-              value: "47",
-              color: "#336158",
-            },
-            {
-              icon: Clock,
-              label: "Pending Requests",
-              value: "3",
-              color: "#d4a574",
-            },
-            {
-              icon: TrendingUp,
-              label: "Items Diverted",
-              value: "125",
-              color: "#336158",
-            },
-          ].map((widget, index) => (
+          {dashboardStats.map((widget, index) => (
             <motion.button
               key={widget.label}
               initial={{ opacity: 0, scale: 0.9 }}
@@ -334,6 +382,75 @@ export function UserDashboard() {
             </ResponsiveContainer>
           </motion.div>
         </section>
+
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.65 }}
+          className={`${cardClass} mb-8 rounded-2xl p-6`}
+        >
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-xl text-[#19221d]">Partner Requests</h3>
+              <p className="mt-1 text-sm text-[#5f6f67]">
+                Track DSS briefs you sent to partners.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate("/submit")}
+              className="rounded-xl bg-[#336158] px-4 py-2 text-sm text-white hover:bg-[#2a4c48]"
+            >
+              New submission
+            </button>
+          </div>
+
+          {requestError && (
+            <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {requestError}
+            </div>
+          )}
+
+          <div className="grid gap-3">
+            {requests.length === 0 && (
+              <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] px-4 py-5 text-sm text-[#5f6f67]">
+                No partner requests yet. Submit textile details, review the DSS
+                recommendation, then send the brief to a partner.
+              </div>
+            )}
+
+            {requests.slice(0, 5).map((request) => (
+              <div
+                key={request.id}
+                className="flex flex-col gap-3 rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4 md:flex-row md:items-center md:justify-between"
+              >
+                <div>
+                  <div className="font-semibold text-[#19221d]">
+                    {request.item_type} · {pathwayLabels[request.type] || request.type}
+                  </div>
+                  <div className="mt-1 text-sm text-[#5f6f67]">
+                    Sent to {request.partner_name || "partner"}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs ${
+                      requestStatusClass[request.status] ||
+                      requestStatusClass.pending
+                    }`}
+                  >
+                    {request.status}
+                  </span>
+                  <button
+                    onClick={() => navigate(`/dss/${request.submission_id}`)}
+                    className="rounded-xl border border-[#dce4da] px-3 py-2 text-sm text-[#5f6f67] hover:bg-[#f3f5f2]"
+                  >
+                    View
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.section>
 
       </main>
 

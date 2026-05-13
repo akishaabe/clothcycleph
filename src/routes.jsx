@@ -11,6 +11,7 @@ import { FloatingPageControls } from "./app/components/FloatingPageControls";
 import { LegalDocumentPage } from "./app/pages/LegalDocumentPage";
 import { NotificationsPage } from "./app/pages/NotificationsPage";
 import { MessagesPage } from "./app/pages/MessagesPage";
+import { DssConfirmationPage } from "./app/pages/DssConfirmationPage";
 
 const withPageControls = (Page) => {
   return function PageWithControls() {
@@ -55,6 +56,10 @@ export const router = createBrowserRouter([
   {
     path: "/submit",
     Component: withPageControls(SubmissionFormPage),
+  },
+  {
+    path: "/dss/:submissionId",
+    Component: withPageControls(DssConfirmationPage),
   },
   {
     path: "/terms",

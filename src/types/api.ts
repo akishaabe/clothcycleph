@@ -98,8 +98,39 @@ export interface Submission {
   photos: string[];
   status: 'pending' | 'verified' | 'processed' | 'rejected';
   assigned_partner_id?: string;
+  submission_code?: string;
+  service_type?: 'recycle' | 'donate' | 'upcycle' | 'buyback';
+  quantity?: number;
+  buyback_interest?: boolean;
+  action?: string;
+  scheduled_at?: string;
+  details?: SubmissionDetails | null;
+  burn_test?: BurnTestDetails | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface SubmissionDetails {
+  item_types?: string[] | string;
+  other_item_type?: string;
+  condition?: string;
+  cleanliness?: string;
+  knows_fabric_type?: boolean;
+  fabric_types?: string[] | string;
+  fabric_identification?: string[] | string;
+  brand?: string;
+  no_brand_visible?: boolean;
+  fabric_description?: string[] | string;
+}
+
+export interface BurnTestDetails {
+  performed: boolean;
+  page?: number | null;
+  moment?: string[];
+  flames?: string[];
+  no_flame?: string[];
+  smell?: string | null;
+  ashes?: string[];
 }
 
 export interface CreateSubmissionPayload {
@@ -109,10 +140,102 @@ export interface CreateSubmissionPayload {
   cleanliness?: string;
   description?: string;
   photos?: string[];
+  service_type?: 'recycle' | 'donate' | 'upcycle' | 'buyback' | null;
+  quantity?: number;
+  buyback_interest?: boolean;
+  action?: string;
+  scheduled_at?: string | null;
+  details?: SubmissionDetails;
+  burn_test?: BurnTestDetails;
 }
 
 export interface UpdateSubmissionStatusPayload {
   status: 'pending' | 'verified' | 'processed' | 'rejected';
+}
+
+export interface Partner {
+  id: string;
+  name: string;
+  description?: string;
+  logo_url?: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  website?: string;
+  service_types?: string;
+  contact_person?: string;
+  rating?: number;
+  verified?: boolean;
+}
+
+export interface DssRecommendation {
+  recommended_pathway: 'recycle' | 'donate' | 'upcycle' | 'buyback';
+  rank: number;
+  score: number;
+  confidence: number;
+  explanation: string;
+  burn_test_result?: string | null;
+  checks?: Array<{
+    question: string;
+    matched: boolean;
+    expected: string;
+    selected: string;
+  }>;
+}
+
+export interface DssPreview {
+  submission: Submission;
+  recommendations: DssRecommendation[];
+  burn_test_analysis?: {
+    performed: boolean;
+    summary: string;
+    top_fibers: Array<{
+      fiber: string;
+      score: number;
+      confidence: number;
+      reasoning: string[];
+    }>;
+  };
+  brief: string;
+}
+
+export interface DssRequest {
+  id: string;
+  submission_id: string;
+  from_user_id: string;
+  to_partner_id: string;
+  type: 'recycle' | 'donate' | 'upcycle' | 'buyback';
+  status: 'pending' | 'accepted' | 'declined' | 'completed' | 'in_progress' | 'rejected';
+  status_label?: string;
+  notes?: string;
+  partner_name?: string;
+  partner_email?: string;
+  user_name?: string;
+  user_email?: string;
+  item_type?: string;
+  quantity?: number;
+  condition?: string;
+  cleanliness?: string;
+  fabric?: string;
+  description?: string;
+  photos?: string[];
+  details?: SubmissionDetails | null;
+  burn_test?: BurnTestDetails | null;
+  confidence?: number;
+  explanation?: string;
+  output_payload?: {
+    brief?: string;
+    recommendation?: DssRecommendation;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SendDssRecommendationPayload {
+  submission_id: string;
+  partner_id: string;
+  recommended_pathway: 'recycle' | 'donate' | 'upcycle' | 'buyback';
+  brief: string;
 }
 
 // Message types

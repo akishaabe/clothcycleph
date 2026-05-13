@@ -8,8 +8,12 @@ import {
   Shirt,
   Package,
   RefreshCcw,
+  AlertCircle,
 } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "../../context/AuthContext";
+import { useFileUpload } from "../../hooks/useFileUpload";
+import { useSubmissions } from "../../hooks/useSubmissions";
 import "./SubmissionFormPage.css";
 
 const itemTypes = [
@@ -82,6 +86,7 @@ const pathwayOptions = [
 const burnTestMomentOptions = [
   "Burned fast",
   "Melted and did not burn",
+  "No flame",
   "Burned slowly",
   "Shrinked away from flame",
   "Curled away",
@@ -99,6 +104,7 @@ const burnTestFlameOptions = [
 ];
 
 const burnTestNoFlameOptions = [
+  "Continues to burn",
   "Continues to burn quickly",
   "Has an afterglow",
   "Burns with difficulty",
@@ -134,6 +140,7 @@ const burnTestDescriptionMap = {
   "Burned fast": "The fabric caught fire immediately when flame touched it.",
   "Melted and did not burn":
     "The textile softened and liquefied instead of producing a steady flame.",
+  "No flame": "The textile did not catch flame when heat touched it.",
   "Burned slowly": "The flame spread gradually and the fabric took time to catch.",
   "Shrinked away from flame":
     "The material pulled back from the heat rather than burning straight away.",
@@ -148,6 +155,8 @@ const burnTestDescriptionMap = {
     "The flame moved irregularly instead of staying steady.",
   Sizzles: "A sizzling sound suggests moisture or certain synthetic fibers.",
   Drips: "Molten material drops from the textile as it burns.",
+  "Continues to burn":
+    "The fabric keeps burning after the flame source is removed.",
   "Continues to burn quickly":
     "Even after the flame is removed, it keeps burning without slowing down.",
   "Has an afterglow":
@@ -194,11 +203,88 @@ const burnTestDescriptionMap = {
     "Small shiny beads are a classic sign of plasticized fibers.",
 };
 
+const burnTestFiberRules = [
+  ["cotton", "burned fast", "Burns quickly", "Continues to burn quickly, Has an afterglow", "Like burning paper", "Light and feathery gray ash OR Black ash"],
+  ["linen", "burned fast", "Burns quickly", "Continues to burn", "Like burning paper", "Light and feathery gray ash"],
+  ["rayon, tencel", "burned fast", "Burns quickly", "Continues to burn quickly", "Like burning paper", "Light and feathery gray ash"],
+  ["silk", "curled away, no flame", "Burns slowly, Sputters", "Burns with difficulty, Completely stops burning", "Like burning hair", "Round, shiny black beads & Easy to crush"],
+  ["wool", "curled away, no flame, burned slowly", "Burns slowly, Sizzles, Flame was flickering", "Completely stops burning", "Like burning hair", "Easy to crush, Irregular bead"],
+  ["nylon", "Melted and did not burn, Shrinked away from flame", "Melts, Burns slowly", "Completely stops burning", "Like celery", "Round, hard, grayish bead & Won't crush"],
+  ["polyester, poly fleece", "Shrinked away from flame", "Melts, Burns slowly", "Burns with difficulty", "Like chemicals", "Round, hard, grayish bead & Won't crush"],
+  ["acetate", "Shrinked away from flame, Turned black", "Sputters, Melts, Drips, Burns quickly", "Continues to melt and burn", "Like vinegar", "Hard, black ash, Irregular bead, Difficult to crush"],
+  ["acrylic", "Shrinked away from flame", "Burns quickly, Sputters, Melts", "Continues to melt and burn", "Like chemicals", "Irregular, hard, black bead & Won't crush"],
+  ["spandex", "Shrinked away from flame", "Melts, Burns quickly", "Continues to melt and burn", "Sharp and bitter", "Soft, sticky, gummy"],
+];
+
+const normalizeAnswer = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[’']/g, "'")
+    .trim();
+
+const selectedList = (value) =>
+  Array.isArray(value)
+    ? value.map(normalizeAnswer)
+    : String(value || "")
+        .split(",")
+        .map(normalizeAnswer)
+        .filter(Boolean);
+
+const matchesExpected = (expectedValue, selectedValue) => {
+  const selected = selectedList(selectedValue);
+  const expected = String(expectedValue || "");
+
+  if (expected.includes("&")) {
+    return expected
+      .split("&")
+      .map(normalizeAnswer)
+      .every((answer) => selected.includes(answer));
+  }
+
+  return expected
+    .split(/\s+OR\s+|,/i)
+    .map(normalizeAnswer)
+    .some((answer) => selected.includes(answer));
+};
+
+const analyzeBurnTestAnswers = (formData) =>
+  burnTestFiberRules
+    .map(([fiber, moment, flames, noFlame, smell, ashes]) => {
+      const checks = [
+        matchesExpected(moment, formData.burnTestMoment),
+        matchesExpected(flames, formData.burnTestFlames),
+        matchesExpected(noFlame, formData.burnTestNoFlame),
+        matchesExpected(smell, formData.burnTestSmell),
+        matchesExpected(ashes, formData.burnTestAshes),
+      ];
+      const score = checks.filter(Boolean).length;
+
+      return {
+        fiber,
+        score,
+        confidence: score / checks.length,
+      };
+    })
+    .sort((a, b) => b.confidence - a.confidence || b.score - a.score)
+    .slice(0, 3);
+
 export function SubmissionFormPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { createSubmission, isLoading: isSubmitting } = useSubmissions();
+  const {
+    uploadMultipleFiles,
+    getFilePreview,
+    isLoading: isUploading,
+    progress,
+    error: uploadError,
+  } = useFileUpload();
   const selectedService = location.state?.service || "";
   const [step, setStep] = useState(1);
+  const [submitError, setSubmitError] = useState("");
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const [showBurnTestResult, setShowBurnTestResult] = useState(false);
 
   const [formData, setFormData] = useState({
     itemTypes: [],
@@ -215,7 +301,7 @@ export function SubmissionFormPage() {
     action: selectedService,
     buybackInterest: "",
     description: "",
-    images: [],
+    imageFiles: [],
 
     burnTestChoice: "",
     burnTestPage: null,
@@ -250,6 +336,7 @@ export function SubmissionFormPage() {
   };
 
   const setBurnTestChoice = (choice) => {
+    setShowBurnTestResult(false);
     setFormData((prev) => ({
       ...prev,
       burnTestChoice: choice,
@@ -272,7 +359,7 @@ export function SubmissionFormPage() {
 
   const handleBurnTestNext = () => {
     if (formData.burnTestPage === 6) {
-      setStep(2);
+      setShowBurnTestResult(true);
       return;
     }
 
@@ -282,13 +369,118 @@ export function SubmissionFormPage() {
     }));
   };
 
-  const handleSubmit = () => {
-    setStep(6);
-
-    setTimeout(() => {
-      navigate("/dashboard");
-    }, 3000);
+  const toSubmissionItemType = () => {
+    return formData.itemTypes
+      .map((type) =>
+        type === "Other" && formData.otherItemType.trim()
+          ? formData.otherItemType.trim()
+          : type,
+      )
+      .join(", ");
   };
+
+  const toServiceType = () => {
+    if (!formData.action) {
+      return null;
+    }
+
+    return formData.action.toLowerCase();
+  };
+
+  const handleImageUpload = async (files) => {
+    const nextFiles = Array.from(files || []);
+    updateField("imageFiles", nextFiles);
+
+    const previews = await Promise.all(
+      nextFiles.map(async (file) => getFilePreview(file)),
+    );
+    setImagePreviews(previews.filter(Boolean));
+  };
+
+  const handleSubmit = async () => {
+    setSubmitError("");
+
+    try {
+      let photoUrls = [];
+
+      if (formData.imageFiles.length > 0) {
+        photoUrls = await uploadMultipleFiles(formData.imageFiles);
+
+        if (photoUrls.length === 0) {
+          setSubmitError("Image upload failed. Please try again.");
+          return;
+        }
+      }
+
+      const fabricSummary =
+        formData.knowsFabricType === "Yes"
+          ? formData.fabricTypes.join(", ")
+          : formData.fabricDescription.join(", ");
+
+      const createdSubmission = await createSubmission({
+        item_type: toSubmissionItemType(),
+        condition: formData.condition,
+        fabric: fabricSummary,
+        cleanliness: formData.cleanliness,
+        description: formData.description || null,
+        photos: photoUrls,
+        service_type: toServiceType(),
+        quantity: Number(formData.quantity),
+        buyback_interest:
+          formData.action === "Upcycle" && formData.buybackInterest === "Yes",
+        action: formData.action,
+        details: {
+          item_types: formData.itemTypes,
+          other_item_type: formData.otherItemType || null,
+          condition: formData.condition,
+          cleanliness: formData.cleanliness,
+          knows_fabric_type: formData.knowsFabricType === "Yes",
+          fabric_types: formData.fabricTypes,
+          fabric_identification: formData.fabricIdentification,
+          brand: formData.noBrandVisible ? null : formData.brand || null,
+          no_brand_visible: formData.noBrandVisible,
+          fabric_description: formData.fabricDescription,
+        },
+        burn_test: {
+          performed: formData.burnTestChoice === "Yes",
+          page: formData.burnTestChoice === "Yes" ? formData.burnTestPage : null,
+          moment: formData.burnTestMoment,
+          flames: formData.burnTestFlames,
+          no_flame: formData.burnTestNoFlame,
+          smell: formData.burnTestSmell || null,
+          ashes: formData.burnTestAshes,
+        },
+      });
+
+      setStep(6);
+
+      setTimeout(() => {
+        navigate(`/dss/${createdSubmission.id}`);
+      }, 3000);
+    } catch (error) {
+      setSubmitError(error.message || "Failed to submit textile details.");
+    }
+  };
+
+  if (!isAuthLoading && !isAuthenticated) {
+    return (
+      <div className="submission-page app-darkable-page flex min-h-screen items-center justify-center bg-gradient-to-br from-[#f5f5f0] to-[#e8ebe4] px-6">
+        <div className="max-w-md text-center">
+          <AlertCircle className="mx-auto mb-4 h-12 w-12 text-[#a45d4d]" />
+          <h1 className="mb-2 text-2xl text-[#2d4a2d]">Login required</h1>
+          <p className="mb-5 text-[#5a6f5a]">
+            Please login before submitting textile items.
+          </p>
+          <button
+            onClick={() => navigate("/login")}
+            className="rounded-xl bg-[#6b8e6b] px-5 py-3 text-white transition-all hover:bg-[#5a7a5a]"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const hasItemTypes =
     formData.itemTypes.length > 0 &&
@@ -316,6 +508,8 @@ export function SubmissionFormPage() {
     isBurnTestComplete &&
     formData.action &&
     (formData.action !== "Upcycle" || formData.buybackInterest);
+
+  const burnTestResult = analyzeBurnTestAnswers(formData);
 
   const reviewRows = [
     ["Burn Test", formData.burnTestChoice],
@@ -422,7 +616,53 @@ export function SubmissionFormPage() {
             <div className="space-y-7">
               <h7 className="text-2xl text-[#2d4a2d]">Burn Test</h7>
 
-              {!formData.burnTestChoice && (
+              {showBurnTestResult && (
+                <QuestionBlock label="Burn test fabric result">
+                  <div className="rounded-2xl border border-[#d4d8d0] bg-[#f5f5f0] p-5">
+                    <p className="mb-4 text-[#5a6f5a]">
+                      Your fabric might be one of these based on the burn test
+                      logic sheet.
+                    </p>
+
+                    <div className="grid gap-3 md:grid-cols-3">
+                      {burnTestResult.map((result, index) => (
+                        <div
+                          key={result.fiber}
+                          className="rounded-xl border border-[#d4d8d0] bg-white p-4"
+                        >
+                          <div className="text-sm text-[#5a6f5a]">
+                            Top {index + 1}
+                          </div>
+                          <div className="mt-1 text-lg font-semibold capitalize text-[#2d4a2d]">
+                            {result.fiber}
+                          </div>
+                          <div className="mt-2 text-sm text-[#5a6f5a]">
+                            {Math.round(result.confidence * 100)}% confidence ·{" "}
+                            {result.score}/5 rule matches
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex gap-3">
+                    <button
+                      onClick={() => setShowBurnTestResult(false)}
+                      className="flex-1 rounded-xl border-2 border-[#6b8e6b] bg-white py-3 text-[#6b8e6b] transition-all hover:bg-[#f5f5f0]"
+                    >
+                      Edit burn test
+                    </button>
+                    <button
+                      onClick={() => setStep(2)}
+                      className="flex-1 rounded-xl bg-[#6b8e6b] py-3 text-white transition-all hover:bg-[#5a7a5a] hover:shadow-lg"
+                    >
+                      Continue to item details
+                    </button>
+                  </div>
+                </QuestionBlock>
+              )}
+
+              {!showBurnTestResult && !formData.burnTestChoice && (
                 <QuestionBlock label="Do you want to do a burn test?">
                   <p className="text-sm text-[#5a6f5a]/80 mb-4">
                     A burn test can help determine if your textile item is
@@ -443,7 +683,7 @@ export function SubmissionFormPage() {
                 </QuestionBlock>
               )}
 
-              {formData.burnTestChoice === "No" && (
+              {!showBurnTestResult && formData.burnTestChoice === "No" && (
                 <QuestionBlock label="Do you want to do a burn test?">
                   <p className="text-sm text-[#5a6f5a]/80 mb-4">
                     A burn test can help determine if your textile item is
@@ -471,7 +711,7 @@ export function SubmissionFormPage() {
                 </QuestionBlock>
               )}
 
-              {formData.burnTestChoice === "Yes" &&
+              {!showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 1 && (
                   <div className="space-y-6">
                     <QuestionBlock label="How to do a burn test?">
@@ -513,7 +753,7 @@ export function SubmissionFormPage() {
                   </div>
                 )}
 
-              {formData.burnTestChoice === "Yes" &&
+              {!showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 2 && (
                   <BurnTestCheckboxPage
                     label="How did it look like the moment flame touched the textile?"
@@ -528,7 +768,7 @@ export function SubmissionFormPage() {
                   />
                 )}
 
-              {formData.burnTestChoice === "Yes" &&
+              {!showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 3 && (
                   <BurnTestCheckboxPage
                     label="How did it look like while in flames?"
@@ -543,7 +783,7 @@ export function SubmissionFormPage() {
                   />
                 )}
 
-              {formData.burnTestChoice === "Yes" &&
+              {!showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 4 && (
                   <BurnTestCheckboxPage
                     label="When there was no flame, what did you notice?"
@@ -558,7 +798,7 @@ export function SubmissionFormPage() {
                   />
                 )}
 
-              {formData.burnTestChoice === "Yes" &&
+              {!showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 5 && (
                   <div className="space-y-6">
                     <QuestionBlock label="Almost there, how did it smell like?">
@@ -606,7 +846,7 @@ export function SubmissionFormPage() {
                   </div>
                 )}
 
-              {formData.burnTestChoice === "Yes" &&
+              {!showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 6 && (
                   <BurnTestCheckboxPage
                     label="What were the characteristics of the ashes?"
@@ -876,13 +1116,53 @@ export function SubmissionFormPage() {
               </QuestionBlock>
 
               <QuestionBlock label="Upload Images (Optional)">
-                <div className="border-2 border-dashed border-[#d4d8d0] rounded-xl p-8 text-center hover:border-[#6b8e6b] transition-colors cursor-pointer">
+                <label
+                  htmlFor="submission-images"
+                  className="block cursor-pointer rounded-xl border-2 border-dashed border-[#d4d8d0] p-8 text-center transition-colors hover:border-[#6b8e6b]"
+                >
                   <Upload className="w-12 h-12 mx-auto mb-3 text-[#5a6f5a]" />
                   <p className="text-[#5a6f5a] mb-1">
                     Click to upload or drag and drop
                   </p>
                   <p className="text-sm text-[#8a9a8a]">PNG, JPG up to 10MB</p>
-                </div>
+                  <input
+                    id="submission-images"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    disabled={isUploading || isSubmitting}
+                    onChange={(event) => handleImageUpload(event.target.files)}
+                  />
+                </label>
+
+                {isUploading && (
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#d4d8d0]">
+                    <div
+                      className="h-full bg-[#6b8e6b] transition-all"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                )}
+
+                {(uploadError || submitError) && (
+                  <div className="mt-3 rounded-xl border border-[#d4a574] bg-[#fff8e8] px-4 py-3 text-sm text-[#7a5427]">
+                    {submitError || uploadError}
+                  </div>
+                )}
+
+                {imagePreviews.length > 0 && (
+                  <div className="mt-4 grid grid-cols-3 gap-3">
+                    {imagePreviews.map((preview, index) => (
+                      <img
+                        key={preview}
+                        src={preview}
+                        alt={`Selected textile ${index + 1}`}
+                        className="h-28 w-full rounded-xl object-cover"
+                      />
+                    ))}
+                  </div>
+                )}
               </QuestionBlock>
 
               <div className="flex gap-3">
@@ -940,9 +1220,10 @@ export function SubmissionFormPage() {
 
                 <button
                   onClick={handleSubmit}
+                  disabled={isSubmitting || isUploading}
                   className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg"
                 >
-                  Submit
+                  {isSubmitting || isUploading ? "Submitting..." : "Submit"}
                 </button>
               </div>
             </div>

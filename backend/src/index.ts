@@ -12,6 +12,7 @@ import messageRoutes from './routes/messages.js';
 import uploadRoutes from './routes/upload.js';
 import notificationRoutes from './routes/notifications.js';
 import transactionRoutes from './routes/transactions.js';
+import dssRoutes from './routes/dss.js';
 import { initializeSocketServer } from './services/socketService.js';
 
 const app = express();
@@ -59,6 +60,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/dss', dssRoutes);
 
 // 404 handler
 app.use((req, res) => {

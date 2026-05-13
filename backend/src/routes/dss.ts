@@ -1,0 +1,38 @@
+import { Router } from 'express';
+import {
+  getPartnerDssRequests,
+  getSubmissionDss,
+  getUserDssRequests,
+  listPartners,
+  remindDssRequest,
+  sendRecommendationToPartner,
+  updateDssRequestStatus,
+} from '../controllers/dssController.js';
+import { authMiddleware } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { submissionIdParamSchema, uuidParamSchema } from '../schemas/common.js';
+import { remindDssRequestSchema, sendDssRecommendationSchema, updateDssRequestStatusSchema } from '../schemas/dss.js';
+
+const router = Router();
+
+router.get('/partners', authMiddleware, listPartners);
+router.get('/submissions/:submissionId', authMiddleware, validate(submissionIdParamSchema, 'params'), getSubmissionDss);
+router.post('/send', authMiddleware, validate(sendDssRecommendationSchema), sendRecommendationToPartner);
+router.get('/requests/user', authMiddleware, getUserDssRequests);
+router.get('/requests/partner', authMiddleware, getPartnerDssRequests);
+router.post(
+  '/requests/:id/remind',
+  authMiddleware,
+  validate(uuidParamSchema, 'params'),
+  validate(remindDssRequestSchema),
+  remindDssRequest
+);
+router.put(
+  '/requests/:id/status',
+  authMiddleware,
+  validate(uuidParamSchema, 'params'),
+  validate(updateDssRequestStatusSchema),
+  updateDssRequestStatus
+);
+
+export default router;

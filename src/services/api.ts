@@ -21,6 +21,10 @@ import {
   SendMessagePayload,
   Conversation,
   MessageContact,
+  Partner,
+  DssPreview,
+  DssRequest,
+  SendDssRecommendationPayload,
 } from '../types/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -237,6 +241,63 @@ export const submissionService = {
   ): Promise<{ message: string; data: Submission }> {
     return fetchWithAuth(`/submissions/${id}/status`, {
       method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+};
+
+// ============= DSS ENDPOINTS =============
+
+export const dssService = {
+  async listPartners(): Promise<{ data: Partner[]; count: number }> {
+    return fetchWithAuth('/dss/partners', {
+      method: 'GET',
+    });
+  },
+
+  async getSubmissionPreview(submissionId: string): Promise<{ data: DssPreview }> {
+    return fetchWithAuth(`/dss/submissions/${submissionId}`, {
+      method: 'GET',
+    });
+  },
+
+  async sendRecommendation(
+    payload: SendDssRecommendationPayload
+  ): Promise<{ message: string; data: { transaction: DssRequest; recommendation_result_id: string; recommendation_run_id: string } }> {
+    return fetchWithAuth('/dss/send', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getUserRequests(): Promise<{ data: DssRequest[]; count: number }> {
+    return fetchWithAuth('/dss/requests/user', {
+      method: 'GET',
+    });
+  },
+
+  async getPartnerRequests(): Promise<{ data: DssRequest[]; count: number }> {
+    return fetchWithAuth('/dss/requests/partner', {
+      method: 'GET',
+    });
+  },
+
+  async updateRequestStatus(
+    requestId: string,
+    payload: { status: 'pending' | 'accepted' | 'declined' | 'completed'; notes?: string }
+  ): Promise<{ message: string; data: DssRequest }> {
+    return fetchWithAuth(`/dss/requests/${requestId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async remindRequest(
+    requestId: string,
+    payload: { message?: string } = {}
+  ): Promise<{ message: string; data: DssRequest }> {
+    return fetchWithAuth(`/dss/requests/${requestId}/remind`, {
+      method: 'POST',
       body: JSON.stringify(payload),
     });
   },

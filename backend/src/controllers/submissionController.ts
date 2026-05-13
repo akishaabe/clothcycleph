@@ -1,31 +1,186 @@
 import { Request, Response } from 'express';
-import { query } from '../config/database.js';
+import { getClient, query } from '../config/database.js';
 import { AppError } from '../utils/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
 
+const joinTextValues = (values?: string[] | null) =>
+  Array.isArray(values) && values.length > 0 ? values.join(', ') : null;
+
+const toJsonArrayValues = (values?: unknown[] | null) =>
+  Array.isArray(values) ? values.map((value) => JSON.stringify(value)) : [];
+
 export const createSubmission = async (req: Request, res: Response) => {
+  const client = await getClient();
+  let transactionStarted = false;
+
   try {
-    const { item_type, condition, fabric, cleanliness, description, photos } = req.body;
+    const {
+      item_type,
+      condition,
+      fabric,
+      cleanliness,
+      description,
+      photos,
+      service_type,
+      quantity,
+      buyback_interest,
+      action,
+      scheduled_at,
+      details,
+      burn_test,
+    } = req.body;
     const userId = req.user?.id;
 
     if (!userId) {
       throw new AppError(401, 'User not authenticated');
     }
 
+    await client.query('BEGIN');
+    transactionStarted = true;
+
     const id = uuidv4();
-    const result = await query(
-      `INSERT INTO submissions (id, user_id, item_type, condition, fabric, cleanliness, description, photos, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    const photoValues = Array.isArray(photos) ? photos : [];
+    const photoJsonValues = toJsonArrayValues(photoValues);
+    const result = await client.query(
+      `INSERT INTO submissions (
+         id,
+         user_id,
+         item_type,
+         condition,
+         fabric,
+         cleanliness,
+         description,
+         photos,
+         status,
+         service_type,
+         quantity,
+         buyback_interest,
+         action,
+         scheduled_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::json[], $9, $10, $11, $12, $13, $14)
        RETURNING *`,
-      [id, userId, item_type, condition, fabric, cleanliness, description, photos || [], 'pending']
+      [
+        id,
+        userId,
+        item_type,
+        condition,
+        fabric,
+        cleanliness,
+        description,
+        photoJsonValues,
+        'pending',
+        service_type ?? null,
+        quantity ?? 1,
+        buyback_interest ?? false,
+        action ?? null,
+        scheduled_at ?? null,
+      ]
     );
+
+    if (details) {
+      await client.query(
+        `INSERT INTO submission_details (
+           submission_id,
+           item_types,
+           other_item_type,
+           condition,
+           cleanliness,
+           knows_fabric_type,
+           fabric_types,
+           fabric_identification,
+           brand,
+           no_brand_visible,
+           fabric_description
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ON CONFLICT (submission_id)
+         DO UPDATE SET
+           item_types = EXCLUDED.item_types,
+           other_item_type = EXCLUDED.other_item_type,
+           condition = EXCLUDED.condition,
+           cleanliness = EXCLUDED.cleanliness,
+           knows_fabric_type = EXCLUDED.knows_fabric_type,
+           fabric_types = EXCLUDED.fabric_types,
+           fabric_identification = EXCLUDED.fabric_identification,
+           brand = EXCLUDED.brand,
+           no_brand_visible = EXCLUDED.no_brand_visible,
+           fabric_description = EXCLUDED.fabric_description,
+           updated_at = NOW()`,
+        [
+          id,
+          joinTextValues(details.item_types),
+          details.other_item_type ?? null,
+          details.condition ?? condition,
+          details.cleanliness ?? cleanliness,
+          details.knows_fabric_type ?? null,
+          joinTextValues(details.fabric_types),
+          joinTextValues(details.fabric_identification),
+          details.brand ?? null,
+          details.no_brand_visible ?? false,
+          joinTextValues(details.fabric_description),
+        ]
+      );
+    }
+
+    if (burn_test) {
+      await client.query(
+        `INSERT INTO burn_tests (
+           submission_id,
+           performed,
+           page,
+           moment,
+           flames,
+           no_flame,
+           smell,
+           ashes
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          id,
+          burn_test.performed ?? false,
+          burn_test.page ?? null,
+          joinTextValues(burn_test.moment),
+          joinTextValues(burn_test.flames),
+          joinTextValues(burn_test.no_flame),
+          burn_test.smell ?? null,
+          joinTextValues(burn_test.ashes),
+        ]
+      );
+    }
+
+    if (photoValues.length > 0) {
+      for (const photo of photoValues) {
+        if (typeof photo !== 'string') {
+          continue;
+        }
+
+        await client.query(
+          `INSERT INTO submission_images (submission_id, url)
+           VALUES ($1, $2)`,
+          [id, photo]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    transactionStarted = false;
 
     res.status(201).json({
       message: 'Submission created successfully',
-      data: result.rows[0],
+      data: {
+        ...result.rows[0],
+        details: details ?? null,
+        burn_test: burn_test ?? null,
+      },
     });
   } catch (error) {
+    if (transactionStarted) {
+      await client.query('ROLLBACK');
+    }
     res.status(400).json({ error: (error as Error).message });
+  } finally {
+    client.release();
   }
 };
 
@@ -38,7 +193,21 @@ export const getUserSubmissions = async (req: Request, res: Response) => {
     }
 
     const result = await query(
-      `SELECT * FROM submissions WHERE user_id = $1 ORDER BY created_at DESC`,
+      `SELECT
+         s.*,
+         row_to_json(sd) AS details,
+         row_to_json(bt) AS burn_test
+       FROM submissions s
+       LEFT JOIN submission_details sd ON sd.submission_id = s.id
+       LEFT JOIN LATERAL (
+         SELECT *
+         FROM burn_tests
+         WHERE submission_id = s.id
+         ORDER BY created_at DESC
+         LIMIT 1
+       ) bt ON true
+       WHERE s.user_id = $1
+       ORDER BY s.created_at DESC`,
       [userId]
     );
 
@@ -56,7 +225,20 @@ export const getSubmissionById = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const result = await query(
-      `SELECT * FROM submissions WHERE id = $1`,
+      `SELECT
+         s.*,
+         row_to_json(sd) AS details,
+         row_to_json(bt) AS burn_test
+       FROM submissions s
+       LEFT JOIN submission_details sd ON sd.submission_id = s.id
+       LEFT JOIN LATERAL (
+         SELECT *
+         FROM burn_tests
+         WHERE submission_id = s.id
+         ORDER BY created_at DESC
+         LIMIT 1
+       ) bt ON true
+       WHERE s.id = $1`,
       [id]
     );
 

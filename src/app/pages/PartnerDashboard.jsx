@@ -1,8 +1,9 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { Recycle, Package, Clock, CheckCircle, XCircle, Bell, User, BarChart3, Settings, LogOut, MessageSquare } from "lucide-react";
+import { Recycle, Package, Clock, CheckCircle, XCircle, Bell, User, BarChart3, Settings, LogOut, MessageSquare, Eye, Loader2, RefreshCw, X } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { dssService } from "../../services/api";
 
 const platformData = [
   { month: "Jan", users: 850, submissions: 420 },
@@ -11,14 +12,6 @@ const platformData = [
   { month: "Apr", users: 1180, submissions: 620 },
   { month: "May", users: 1320, submissions: 680 },
   { month: "Jun", users: 1450, submissions: 750 }
-];
-
-const submissions = [
-  { id: "SUB-001", user: "Maria Santos", type: "Recycle", items: 15, status: "pending", date: "2026-05-06" },
-  { id: "SUB-002", user: "Juan Cruz", type: "Donate", items: 8, status: "pending", date: "2026-05-06" },
-  { id: "SUB-003", user: "Ana Reyes", type: "Upcycle", items: 5, status: "approved", date: "2026-05-05" },
-  { id: "SUB-004", user: "Pedro Garcia", type: "Recycle", items: 12, status: "approved", date: "2026-05-05" },
-  { id: "SUB-005", user: "Lisa Tan", type: "Donate", items: 20, status: "rejected", date: "2026-05-04" }
 ];
 
 const getTrendClass = (value) => {
@@ -33,10 +26,88 @@ const getTrendClass = (value) => {
   return "text-[#4f6f9f]";
 };
 
+const pathwayLabels = {
+  recycle: "Recycle",
+  donate: "Donate",
+  upcycle: "Upcycle",
+  buyback: "Buyback",
+};
+
+const statusStyles = {
+  pending: "bg-[#8aa6c8]/20 text-[#3f5f8f]",
+  accepted: "bg-[#4f6f9f]/20 text-[#10233f]",
+  declined: "bg-red-100 text-red-700",
+  completed: "bg-green-100 text-green-700",
+};
+
+const formatDate = (value) =>
+  value
+    ? new Intl.DateTimeFormat("en-PH", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(new Date(value))
+    : "";
+
 export function PartnerDashboard() {
   const navigate = useNavigate();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [requests, setRequests] = useState([]);
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [statusNote, setStatusNote] = useState("");
+  const [isLoadingRequests, setIsLoadingRequests] = useState(true);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [requestError, setRequestError] = useState("");
+
+  const loadRequests = async () => {
+    setIsLoadingRequests(true);
+    setRequestError("");
+
+    try {
+      const response = await dssService.getPartnerRequests();
+      setRequests(response.data);
+    } catch (error) {
+      setRequestError(error.message || "Unable to load partner requests.");
+    } finally {
+      setIsLoadingRequests(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRequests();
+  }, []);
+
+  const metrics = useMemo(() => {
+    const pending = requests.filter((request) => request.status === "pending").length;
+    const accepted = requests.filter((request) => request.status === "accepted").length;
+
+    return [
+      { icon: Package, label: "Active Requests", value: String(accepted), change: "+0", color: "#8aa6c8" },
+      { icon: Clock, label: "Pending Requests", value: String(pending), change: "+0", color: "#3f5f8f" },
+      { icon: BarChart3, label: "Total Requests", value: String(requests.length), change: "+0", color: "#6b93b8" }
+    ];
+  }, [requests]);
+
+  const updateRequestStatus = async (request, status) => {
+    setIsUpdatingStatus(true);
+    setRequestError("");
+
+    try {
+      await dssService.updateRequestStatus(request.id, {
+        status,
+        notes: statusNote || undefined,
+      });
+      await loadRequests();
+      setSelectedRequest((current) =>
+        current?.id === request.id ? { ...current, status, notes: statusNote || current.notes } : current,
+      );
+    } catch (error) {
+      setRequestError(error.message || "Unable to update request status.");
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
 
   return (
     <div className="partner-dashboard app-darkable-page min-h-screen bg-gradient-to-br from-[#f3f7fb] to-[#e4edf6]">
@@ -108,11 +179,7 @@ export function PartnerDashboard() {
 
         {/* Metrics */}
         <div className="grid md:grid-cols-3 gap-6 mb-8">
-          {[
-            { icon: Package, label: "Active Requests", value: "23", change: "+5", color: "#8aa6c8" },
-            { icon: Clock, label: "Pending Requests", value: "12", change: "+2", color: "#3f5f8f" },
-            { icon: BarChart3, label: "Total Submissions", value: "750", change: "+8%", color: "#6b93b8" }
-          ].map((metric, index) => (
+          {metrics.map((metric, index) => (
             <motion.div
               key={metric.label}
               initial={{ opacity: 0, scale: 0.9 }}
@@ -169,16 +236,23 @@ export function PartnerDashboard() {
           className="bg-white p-6 rounded-2xl shadow-lg"
         >
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl text-[#10233f]">Recent Submissions</h3>
+            <h3 className="text-xl text-[#10233f]">DSS Partner Requests</h3>
             <div className="flex gap-2">
-              <button className="px-4 py-2 bg-[#eff6ff] text-[#41668f] rounded-lg hover:bg-[#dbeafe] transition-colors text-sm">
-                Filter
-              </button>
-              <button className="px-4 py-2 bg-[#4f6f9f] text-white rounded-lg hover:bg-[#3f5f8f] transition-colors text-sm">
-                Export
+              <button
+                onClick={loadRequests}
+                className="flex items-center gap-2 rounded-lg bg-[#eff6ff] px-4 py-2 text-sm text-[#41668f] transition-colors hover:bg-[#dbeafe]"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Refresh
               </button>
             </div>
           </div>
+
+          {requestError && (
+            <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {requestError}
+            </div>
+          )}
 
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -186,7 +260,7 @@ export function PartnerDashboard() {
                 <tr className="border-b border-[#d6e6f8]">
                   <th className="text-left py-3 px-4 text-sm text-[#41668f]">ID</th>
                   <th className="text-left py-3 px-4 text-sm text-[#41668f]">User</th>
-                  <th className="text-left py-3 px-4 text-sm text-[#41668f]">Type</th>
+                  <th className="text-left py-3 px-4 text-sm text-[#41668f]">Pathway</th>
                   <th className="text-left py-3 px-4 text-sm text-[#41668f]">Items</th>
                   <th className="text-left py-3 px-4 text-sm text-[#41668f]">Status</th>
                   <th className="text-left py-3 px-4 text-sm text-[#41668f]">Date</th>
@@ -194,32 +268,63 @@ export function PartnerDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {submissions.map((submission) => (
-                  <tr key={submission.id} className="border-b border-[#d6e6f8] hover:bg-[#eff6ff] transition-colors">
-                    <td className="py-3 px-4 text-sm text-[#10233f]">{submission.id}</td>
-                    <td className="py-3 px-4 text-sm text-[#10233f]">{submission.user}</td>
-                    <td className="py-3 px-4 text-sm text-[#41668f]">{submission.type}</td>
-                    <td className="py-3 px-4 text-sm text-[#41668f]">{submission.items}</td>
+                {isLoadingRequests && (
+                  <tr>
+                    <td colSpan={7} className="py-10 text-center text-[#41668f]">
+                      <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
+                      Loading requests
+                    </td>
+                  </tr>
+                )}
+
+                {!isLoadingRequests && requests.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-10 text-center text-[#41668f]">
+                      No DSS requests have been sent to this partner yet.
+                    </td>
+                  </tr>
+                )}
+
+                {!isLoadingRequests && requests.map((request) => (
+                  <tr key={request.id} className="border-b border-[#d6e6f8] hover:bg-[#eff6ff] transition-colors">
+                    <td className="py-3 px-4 text-sm text-[#10233f]">{request.id.slice(0, 8)}</td>
+                    <td className="py-3 px-4 text-sm text-[#10233f]">{request.user_name}</td>
+                    <td className="py-3 px-4 text-sm text-[#41668f]">{pathwayLabels[request.type] || request.type}</td>
+                    <td className="py-3 px-4 text-sm text-[#41668f]">{request.quantity || 1} · {request.item_type}</td>
                     <td className="py-3 px-4">
                       <span
                         className={`px-3 py-1 rounded-full text-xs ${
-                          submission.status === "approved"
-                            ? "bg-[#4f6f9f]/20 text-[#10233f]"
-                            : submission.status === "pending"
-                            ? "bg-[#8aa6c8]/20 text-[#3f5f8f]"
-                            : "bg-red-100 text-red-700"
+                          statusStyles[request.status] || statusStyles.pending
                         }`}
                       >
-                        {submission.status}
+                        {request.status_label || request.status}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-sm text-[#41668f]">{submission.date}</td>
+                    <td className="py-3 px-4 text-sm text-[#41668f]">{formatDate(request.created_at)}</td>
                     <td className="py-3 px-4">
                       <div className="flex gap-2">
-                        <button className="w-8 h-8 rounded-lg bg-[#4f6f9f]/20 flex items-center justify-center hover:bg-[#4f6f9f]/30 transition-colors">
+                        <button
+                          onClick={() => {
+                            setSelectedRequest(request);
+                            setStatusNote(request.notes || "");
+                          }}
+                          className="w-8 h-8 rounded-lg bg-[#eff6ff] flex items-center justify-center hover:bg-[#dbeafe] transition-colors"
+                          title="View"
+                        >
+                          <Eye className="w-4 h-4 text-[#41668f]" />
+                        </button>
+                        <button
+                          onClick={() => updateRequestStatus(request, "accepted")}
+                          className="w-8 h-8 rounded-lg bg-[#4f6f9f]/20 flex items-center justify-center hover:bg-[#4f6f9f]/30 transition-colors"
+                          title="Accept"
+                        >
                           <CheckCircle className="w-4 h-4 text-[#4f6f9f]" />
                         </button>
-                        <button className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center hover:bg-red-200 transition-colors">
+                        <button
+                          onClick={() => updateRequestStatus(request, "declined")}
+                          className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center hover:bg-red-200 transition-colors"
+                          title="Decline"
+                        >
                           <XCircle className="w-4 h-4 text-red-600" />
                         </button>
                       </div>
@@ -231,6 +336,98 @@ export function PartnerDashboard() {
           </div>
         </motion.div>
       </div>
+
+      {selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10233f]/35 p-6 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#d6e6f8] bg-white p-6 shadow-[0_24px_70px_rgba(16,35,63,0.24)]">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <div className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#41668f]">
+                  Partner request
+                </div>
+                <h2 className="text-2xl font-bold text-[#10233f]">
+                  {pathwayLabels[selectedRequest.type] || selectedRequest.type} · {selectedRequest.item_type}
+                </h2>
+                <p className="mt-1 text-sm text-[#41668f]">
+                  Sent by {selectedRequest.user_name} · {formatDate(selectedRequest.created_at)}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedRequest(null)}
+                className="rounded-xl bg-[#eff6ff] p-2 text-[#41668f] hover:bg-[#dbeafe]"
+                aria-label="Close request details"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              {[
+                ["Quantity", selectedRequest.quantity || 1],
+                ["Condition", selectedRequest.condition || "Not specified"],
+                ["Cleanliness", selectedRequest.cleanliness || "Not specified"],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl bg-[#eff6ff] px-4 py-3">
+                  <div className="text-xs uppercase tracking-wide text-[#41668f]">
+                    {label}
+                  </div>
+                  <div className="mt-1 font-semibold text-[#10233f]">{value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_0.9fr]">
+              <div className="rounded-2xl border border-[#d6e6f8] bg-[#fbfdff] p-5">
+                <h3 className="mb-3 font-semibold text-[#10233f]">Brief sent by user</h3>
+                <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-[#274568]">
+                  {selectedRequest.output_payload?.brief || selectedRequest.notes || "No brief provided."}
+                </pre>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-[#d6e6f8] bg-white p-5">
+                  <h3 className="mb-3 font-semibold text-[#10233f]">Submission details</h3>
+                  <div className="space-y-2 text-sm text-[#41668f]">
+                    <p><span className="font-semibold text-[#10233f]">Fabric:</span> {selectedRequest.fabric || selectedRequest.details?.fabric_types || "Not specified"}</p>
+                    <p><span className="font-semibold text-[#10233f]">Brand:</span> {selectedRequest.details?.no_brand_visible ? "No brand visible" : selectedRequest.details?.brand || "Not specified"}</p>
+                    <p><span className="font-semibold text-[#10233f]">Burn test:</span> {selectedRequest.burn_test?.performed ? "Performed" : "Not performed"}</p>
+                    {selectedRequest.description && (
+                      <p><span className="font-semibold text-[#10233f]">User note:</span> {selectedRequest.description}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-[#d6e6f8] bg-white p-5">
+                  <h3 className="mb-3 font-semibold text-[#10233f]">Update status</h3>
+                  <textarea
+                    value={statusNote}
+                    onChange={(event) => setStatusNote(event.target.value)}
+                    rows={3}
+                    placeholder="Optional note for the user"
+                    className="mb-3 w-full resize-none rounded-xl border border-[#d6e6f8] p-3 text-sm text-[#10233f] outline-none focus:border-[#4f6f9f]"
+                  />
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      ["accepted", "Accept"],
+                      ["declined", "Decline"],
+                      ["completed", "Complete"],
+                    ].map(([status, label]) => (
+                      <button
+                        key={status}
+                        onClick={() => updateRequestStatus(selectedRequest, status)}
+                        disabled={isUpdatingStatus}
+                        className="rounded-xl bg-[#4f6f9f] px-3 py-2 text-sm text-white hover:bg-[#3f5f8f] disabled:opacity-50"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showLogoutConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10233f]/35 p-6 backdrop-blur-sm">
