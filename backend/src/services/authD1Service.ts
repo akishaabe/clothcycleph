@@ -426,6 +426,159 @@ export async function resetPasswordD1(db: D1Database, token: string, password: s
   return { message: 'Password reset successfully' };
 }
 
+export async function verifyResetCodeD1(db: D1Database, token: string) {
+  const tokenHash = await hashToken(token.trim());
+  const record = await queryD1First(
+    db,
+    `SELECT id FROM password_reset_tokens WHERE token_hash = ? AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP`,
+    [tokenHash]
+  );
+
+  if (!record) {
+    throw new Error('Invalid or expired reset code');
+  }
+
+  return { message: 'Reset code is valid' };
+}
+
+export async function getUsersD1(db: D1Database, role?: string) {
+  let sql = `SELECT u.*, p.name AS partner_name FROM users u LEFT JOIN partners p ON u.partner_id = p.id`;
+  const params: unknown[] = [];
+
+  if (role) {
+    sql += ' WHERE lower(u.role) = lower(?)';
+    params.push(role);
+  }
+
+  sql += ' ORDER BY u.created_at DESC';
+
+  const result = await queryD1(db, sql, params);
+  return {
+    ...result,
+    results: result.results?.map(normalizeUser),
+  };
+}
+
+export async function createUserD1(
+  db: D1Database,
+  payload: {
+    name: string;
+    email: string;
+    role: 'user' | 'partner' | 'admin';
+    status?: 'active' | 'inactive' | 'suspended';
+    phone?: string | null;
+    address?: string | null;
+    partner_id?: string | null;
+    password?: string | null;
+  }
+) {
+  const existingUser = await queryD1First(db, 'SELECT id FROM users WHERE email = ?', [payload.email]);
+  if (existingUser) {
+    throw new Error('User already exists');
+  }
+
+  const userId = generateD1UUID();
+  const passwordHash = await hashPassword(
+    payload.password || generateSecureToken()
+  );
+
+  await executeD1(
+    db,
+    `INSERT INTO users (id, email, name, password_hash, role, status, partner_id, phone, address, two_factor_enabled, terms_accepted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)`,
+    [
+      userId,
+      payload.email,
+      payload.name,
+      passwordHash,
+      payload.role,
+      payload.status || 'active',
+      payload.partner_id || null,
+      payload.phone || null,
+      payload.address || null,
+    ]
+  );
+
+  const user = await queryD1First(
+    db,
+    `SELECT u.*, p.name AS partner_name FROM users u LEFT JOIN partners p ON u.partner_id = p.id WHERE u.id = ?`,
+    [userId]
+  );
+
+  return normalizeUser(user);
+}
+
+export async function updateUserD1(
+  db: D1Database,
+  userId: string,
+  payload: {
+    name?: string;
+    email?: string;
+    role?: 'user' | 'partner' | 'admin';
+    status?: 'active' | 'inactive' | 'suspended';
+    phone?: string | null;
+    address?: string | null;
+    partner_id?: string | null;
+  }
+) {
+  const existingUser = await queryD1First(db, 'SELECT id FROM users WHERE id = ?', [userId]);
+  if (!existingUser) {
+    throw new Error('User not found');
+  }
+
+  await executeD1(
+    db,
+    `UPDATE users
+     SET name = ?,
+         email = ?,
+         role = ?,
+         status = ?,
+         phone = ?,
+         address = ?,
+         partner_id = ?,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [
+      payload.name || null,
+      payload.email || null,
+      payload.role || 'user',
+      payload.status || 'active',
+      payload.phone || null,
+      payload.address || null,
+      payload.partner_id || null,
+      userId,
+    ]
+  );
+
+  const user = await queryD1First(
+    db,
+    `SELECT u.*, p.name AS partner_name FROM users u LEFT JOIN partners p ON u.partner_id = p.id WHERE u.id = ?`,
+    [userId]
+  );
+
+  return normalizeUser(user);
+}
+
+export async function deleteUserD1(db: D1Database, userId: string) {
+  const result = await executeD1(db, 'DELETE FROM users WHERE id = ?', [userId]);
+  if (!result) {
+    throw new Error('User not found');
+  }
+  return { message: 'User deleted' };
+}
+
+function normalizeUser(row: any) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    read: undefined,
+    partner_name: row.partner_name,
+  };
+}
+
 export async function getProfileD1(db: D1Database, userId: string): Promise<AuthUser> {
   const user = await queryD1First(
     db,

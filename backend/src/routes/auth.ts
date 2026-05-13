@@ -12,6 +12,7 @@ import {
   disableTwoFactor,
   forgotPassword,
   resetPassword,
+  verifyResetCode,
   continueWithGoogle,
   changePassword,
 } from '../controllers/authController.js';
@@ -22,6 +23,7 @@ import {
   googleAuthSchema,
   loginSchema,
   resetPasswordSchema,
+  verifyResetCodeSchema,
   signupSchema,
   twoFactorVerifySchema,
   twoFactorResendSchema,
@@ -41,6 +43,7 @@ router.post('/google', validate(googleAuthSchema), continueWithGoogle);
 router.post('/2fa/verify', validate(twoFactorVerifySchema), verifyTwoFactor);
 router.post('/2fa/resend', validate(twoFactorResendSchema), resendTwoFactorCode);
 router.post('/forgot-password', validate(forgotPasswordSchema), forgotPassword);
+router.post('/verify-reset-code', validate(verifyResetCodeSchema), verifyResetCode);
 router.post('/reset-password', validate(resetPasswordSchema), resetPassword);
 
 // Protected routes

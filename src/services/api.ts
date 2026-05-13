@@ -177,6 +177,13 @@ export const authService = {
     });
   },
 
+  async verifyResetCode(payload: { code: string }): Promise<{ message: string }> {
+    return fetchWithAuth('/auth/verify-reset-code', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   async resetPassword(payload: ResetPasswordPayload): Promise<{ message: string }> {
     return fetchWithAuth('/auth/reset-password', {
       method: 'POST',
@@ -370,6 +377,12 @@ export const dssService = {
       body: JSON.stringify(payload),
     });
   },
+
+  async getRuleChangeRequests(): Promise<{ data: any[]; count: number }> {
+    return fetchWithAuth('/dss/rule-change-requests', {
+      method: 'GET',
+    });
+  },
 };
 
 // ============= MESSAGE ENDPOINTS =============
@@ -428,6 +441,58 @@ export const notificationService = {
 
   async markAllAsRead(): Promise<{ message: string; count: number }> {
     return fetchWithAuth('/notifications/read-all', { method: 'PUT' });
+  },
+};
+
+export const adminService = {
+  async getUsers(role?: string): Promise<{ data: User[]; count: number }> {
+    const params = new URLSearchParams();
+    if (role) {
+      params.set('role', role.toLowerCase());
+    }
+    return fetchWithAuth(`/admin/users${params.toString() ? `?${params.toString()}` : ''}`, {
+      method: 'GET',
+    });
+  },
+
+  async createUser(payload: {
+    name: string;
+    email: string;
+    role: 'user' | 'partner' | 'admin';
+    status?: 'active' | 'inactive' | 'suspended';
+    phone?: string;
+    address?: string;
+    partner_id?: string;
+    password?: string;
+  }): Promise<{ message: string; data: User }> {
+    return fetchWithAuth('/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateUser(
+    id: string,
+    payload: {
+      name: string;
+      email: string;
+      role: 'user' | 'partner' | 'admin';
+      status: 'active' | 'inactive' | 'suspended';
+      phone?: string;
+      address?: string;
+      partner_id?: string;
+    }
+  ): Promise<{ message: string; data: User }> {
+    return fetchWithAuth(`/admin/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteUser(id: string): Promise<{ message: string }> {
+    return fetchWithAuth(`/admin/users/${id}`, {
+      method: 'DELETE',
+    });
   },
 };
 

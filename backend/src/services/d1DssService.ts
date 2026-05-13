@@ -1,6 +1,7 @@
 import { D1Database, executeD1, generateD1UUID, queryD1, queryD1First } from '../config/d1.js';
-import { analyzeBurnTest, buildPathwayRecommendations } from './dssEngine.js';
+import { analyzeBurnTest, buildPathwayRecommendations, DSS_ENGINE_VERSION } from './dssEngine.js';
 import { createNotificationD1 } from './d1NotificationService.js';
+import { createSystemMessageD1 } from './d1MessageService.js';
 import { listPartnerLocationsD1, PartnerSearchOptions } from './d1GisService.js';
 
 const statusLabels: Record<string, string> = {
@@ -67,8 +68,8 @@ export async function sendRecommendationToPartnerD1(
       runId,
       payload.submission_id,
       userId,
-      'dss-preview',
-      'handoff-v1',
+      'dss',
+      DSS_ENGINE_VERSION,
       JSON.stringify({ selected_partner_id: payload.partner_id, selected_pathway: payload.recommended_pathway }),
       JSON.stringify(submission),
     ]
@@ -93,7 +94,13 @@ export async function sendRecommendationToPartnerD1(
       recommendation.confidence,
       recommendation.explanation,
       payload.brief,
-      JSON.stringify({ recommendation, brief: payload.brief, burn_test_analysis: analyzeBurnTest(submission.burn_test) }),
+      JSON.stringify({
+        engine_version: DSS_ENGINE_VERSION,
+        recommendation,
+        brief: payload.brief,
+        burn_test_analysis: analyzeBurnTest(submission.burn_test),
+        rule_checks: recommendation.checks || [],
+      }),
     ]
   );
 
@@ -139,6 +146,114 @@ export async function sendRecommendationToPartnerD1(
     recommendation_result_id: resultId,
     recommendation_run_id: runId,
   };
+}
+
+export async function getDssAuditRunsD1(db: D1Database) {
+  const result = await queryD1(
+    db,
+    `SELECT
+       rr.id AS result_id,
+       rr.recommended_pathway,
+       rr.rank,
+       rr.score,
+       rr.confidence,
+       rr.explanation,
+       rr.output_payload,
+       r.id AS run_id,
+       r.engine_name,
+       r.engine_version,
+       r.criteria,
+       r.input_snapshot,
+       r.created_at,
+       s.submission_name,
+       s.item_type,
+       p.name AS partner_name,
+       u.name AS requested_by_name
+     FROM recommendation_results rr
+     JOIN recommendation_runs r ON r.id = rr.run_id
+     LEFT JOIN submissions s ON s.id = rr.submission_id
+     LEFT JOIN partners p ON p.id = rr.partner_id
+     LEFT JOIN users u ON u.id = r.requested_by_user_id
+     ORDER BY r.created_at DESC
+     LIMIT 50`
+  );
+
+  return {
+    ...result,
+    results: result.results?.map((row: any) => ({
+      ...row,
+      output_payload: parseJsonObject(row.output_payload),
+    })),
+  };
+}
+
+export async function createPartnerRuleChangeRequestD1(
+  db: D1Database,
+  userId: string,
+  email: string | undefined,
+  payload: { rule_area: string; requested_change: string; reason?: string }
+) {
+  const partner = await queryD1First(db, 'SELECT id FROM partners WHERE user_id = ? OR lower(email) = lower(?)', [
+    userId,
+    email || '',
+  ]);
+
+  const id = generateD1UUID();
+  const result = await executeD1(
+    db,
+    `INSERT INTO partner_rule_change_requests (
+       id, partner_id, requested_by_user_id, rule_area, requested_change, reason
+     )
+     VALUES (?, ?, ?, ?, ?, ?)
+     RETURNING *`,
+    [id, partner?.id || null, userId, payload.rule_area, payload.requested_change, payload.reason || null]
+  );
+
+  const request = result.results?.[0] ?? null;
+  const admins = await queryD1(db, `SELECT id FROM users WHERE role = 'admin' AND COALESCE(status, 'active') = 'active'`);
+
+  await Promise.all(
+    (admins.results || []).map(async (admin: any) => {
+      const adminActionUrl = `/admin?panel=rule-requests&request=${id}`;
+      const partnerActionUrl = '/partner#rule-requests';
+      await createSystemMessageD1(db, {
+        fromUserId: userId,
+        toUserId: admin.id,
+        content: `Partner rule change request: ${payload.rule_area}\n${payload.requested_change}`,
+        actionUrl: adminActionUrl,
+        metadata: {
+          kind: 'partner_rule_change_request',
+          rule_change_request_id: id,
+          admin_action_url: adminActionUrl,
+          partner_action_url: partnerActionUrl,
+        },
+      });
+      await createNotificationD1(db, {
+        userId: admin.id,
+        type: 'system',
+        title: 'Partner rule change request',
+        body: `A partner requested an update for ${payload.rule_area}.`,
+        data: { action_url: adminActionUrl, ruleChangeRequestId: id },
+      });
+    })
+  );
+
+  return request;
+}
+
+export async function getPartnerRuleChangeRequestsD1(db: D1Database) {
+  return queryD1(
+    db,
+    `SELECT
+       prcr.*,
+       p.name AS partner_name,
+       u.name AS requested_by_name,
+       u.email AS requested_by_email
+     FROM partner_rule_change_requests prcr
+     LEFT JOIN partners p ON p.id = prcr.partner_id
+     LEFT JOIN users u ON u.id = prcr.requested_by_user_id
+     ORDER BY prcr.created_at DESC`
+  );
 }
 
 export async function getUserDssRequestsD1(db: D1Database, userId: string) {

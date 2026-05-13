@@ -660,7 +660,71 @@ export const createPartnerRuleChangeRequest = async (req: AuthRequest, res: Resp
       ]
     );
 
+    const request = result.rows[0];
+    const adminResult = await query(
+      `SELECT id FROM users WHERE role = 'admin' AND COALESCE(status, 'active') = 'active'`
+    );
+
+    await Promise.all(
+      adminResult.rows.map(async (admin) => {
+        const adminActionUrl = `/admin?panel=rule-requests&request=${request.id}`;
+        const partnerActionUrl = '/partner#rule-requests';
+
+        await query(
+          `INSERT INTO messages (
+             id, from_user_id, to_user_id, content, action_url, metadata
+           )
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            uuidv4(),
+            userId,
+            admin.id,
+            `Partner rule change request: ${req.body.rule_area}\n${req.body.requested_change}`,
+            adminActionUrl,
+            JSON.stringify({
+              kind: 'partner_rule_change_request',
+              rule_change_request_id: request.id,
+              admin_action_url: adminActionUrl,
+              partner_action_url: partnerActionUrl,
+            }),
+          ]
+        );
+
+        await enqueueNotification(
+          admin.id,
+          'system',
+          'Partner rule change request',
+          `A partner requested an update for ${req.body.rule_area}.`,
+          { action_url: adminActionUrl, ruleChangeRequestId: request.id }
+        );
+      })
+    );
+
     res.status(201).json({ message: 'Rule change request submitted for admin review', data: result.rows[0] });
+  } catch (error) {
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};
+
+export const getPartnerRuleChangeRequests = async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      throw new AppError(403, 'Only admins can view partner rule change requests');
+    }
+
+    const result = await query(
+      `SELECT
+         prcr.*,
+         p.name AS partner_name,
+         u.name AS requested_by_name,
+         u.email AS requested_by_email
+       FROM partner_rule_change_requests prcr
+       LEFT JOIN partners p ON p.id = prcr.partner_id
+       LEFT JOIN users u ON u.id = prcr.requested_by_user_id
+       ORDER BY prcr.created_at DESC`
+    );
+
+    res.json({ data: result.rows, count: result.rows.length });
   } catch (error) {
     res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
   }

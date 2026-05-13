@@ -12,6 +12,7 @@ import { LegalDocumentPage } from "./app/pages/LegalDocumentPage";
 import { NotificationsPage } from "./app/pages/NotificationsPage";
 import { MessagesPage } from "./app/pages/MessagesPage";
 import { DssConfirmationPage } from "./app/pages/DssConfirmationPage";
+import { DssRequestsPage } from "./app/pages/DssRequestsPage";
 
 const withPageControls = (Page) => {
   return function PageWithControls() {
@@ -60,6 +61,10 @@ export const router = createBrowserRouter([
   {
     path: "/dss/:submissionId",
     Component: withPageControls(DssConfirmationPage),
+  },
+  {
+    path: "/dss-requests",
+    Component: withPageControls(DssRequestsPage),
   },
   {
     path: "/terms",

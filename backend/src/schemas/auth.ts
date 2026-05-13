@@ -61,6 +61,14 @@ export const resetPasswordSchema = z.object({
   path: ['confirm_password'],
 });
 
+export const verifyResetCodeSchema = z.object({
+  code: z.string().trim().regex(/^\d{6}$/, 'Reset code must be 6 digits').optional(),
+  token: z.string().trim().regex(/^\d{6}$/, 'Reset code must be 6 digits').optional(),
+}).refine((data) => data.code || data.token, {
+  message: 'Reset code is required',
+  path: ['code'],
+});
+
 export const googleAuthSchema = z.object({
   credential: z.string().min(1),
   role: z.literal('user').default('user'),

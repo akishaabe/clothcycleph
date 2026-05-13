@@ -4,6 +4,8 @@ export interface User {
   email: string;
   name: string;
   role: 'user' | 'partner' | 'admin';
+  status?: 'active' | 'inactive' | 'suspended';
+  partner_id?: string;
   two_factor_enabled?: boolean;
   email_verified_at?: string;
   avatar_url?: string;
@@ -74,6 +76,10 @@ export interface ResetPasswordPayload {
   confirm_password?: string;
 }
 
+export interface VerifyResetCodePayload {
+  code: string;
+}
+
 export interface GoogleAuthPayload {
   credential: string;
   role?: 'user';
@@ -99,7 +105,7 @@ export interface Submission {
   fabric?: string;
   cleanliness?: string;
   description?: string;
-  photos: string[];
+  photos: SubmissionPhotoValue[];
   status: 'pending' | 'verified' | 'processed' | 'rejected';
   assigned_partner_id?: string;
   submission_code?: string;
@@ -138,6 +144,13 @@ export interface BurnTestDetails {
   ashes?: string[];
 }
 
+export interface SubmissionPhoto {
+  url: string;
+  label?: string;
+}
+
+export type SubmissionPhotoValue = string | SubmissionPhoto;
+
 export interface CreateSubmissionPayload {
   item_type: string;
   submission_name?: string | null;
@@ -145,7 +158,7 @@ export interface CreateSubmissionPayload {
   fabric?: string;
   cleanliness?: string;
   description?: string;
-  photos?: string[];
+  photos?: SubmissionPhotoValue[];
   service_type?: 'recycle' | 'donate' | 'upcycle' | 'buyback' | null;
   quantity?: number;
   buyback_interest?: boolean;
@@ -235,7 +248,7 @@ export interface DssRequest {
   fabric?: string;
   description?: string;
   upcycle_request?: string;
-  photos?: string[];
+  photos?: SubmissionPhotoValue[];
   details?: SubmissionDetails | null;
   burn_test?: BurnTestDetails | null;
   confidence?: number;

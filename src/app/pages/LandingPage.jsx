@@ -178,9 +178,9 @@ export function LandingPage() {
               </h1>
 
               <p className="text-xl text-[#5f6f67] dark:text-zinc-400 mb-10 max-w-2xl leading-relaxed">
-                Join the modern movement towards sustainable fashion.
-                Recycle, donate, and upcycle unused garments while
-                creating meaningful environmental impact.
+                Not sure whether to recycle, donate, or upcycle? ClothCycle PH
+                uses a DSS engine to read your textile details, fabric clues,
+                and burn-test answers, then recommends the best next step.
               </p>
 
               <div className="flex flex-wrap gap-4">
@@ -287,10 +287,10 @@ export function LandingPage() {
           >
             {[
               {
-                icon: Recycle,
-                title: "Recycle",
+                icon: Sparkles,
+                title: "DSS Guidance",
                 description:
-                  "Transform unused textiles into new sustainable materials.",
+                  "Answer simple textile questions and get a recommended path when you are not sure what to do.",
               },
               {
                 icon: Heart,
@@ -299,10 +299,10 @@ export function LandingPage() {
                   "Support communities by giving garments a meaningful second purpose.",
               },
               {
-                icon: Sparkles,
+                icon: Recycle,
                 title: "Upcycle",
                 description:
-                  "Turn unwanted pieces into unique creations through innovation.",
+                  "Recycle or upcycle pieces into new materials and creative second-life products.",
               },
             ].map((item) => (
               <motion.div

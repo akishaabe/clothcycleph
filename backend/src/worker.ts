@@ -11,12 +11,17 @@ import {
   resendTwoFactorCodeD1,
   forgotPasswordD1,
   resetPasswordD1,
+  verifyResetCodeD1,
   getProfileD1,
   updateProfileD1,
   getTwoFactorStatusD1,
   setupTwoFactorD1,
   enableTwoFactorD1,
   disableTwoFactorD1,
+  getUsersD1,
+  createUserD1,
+  updateUserD1,
+  deleteUserD1,
 } from './services/authD1Service.js';
 import {
   createSubmissionD1,
@@ -51,12 +56,16 @@ import { createSubmissionSchema, updateSubmissionStatusSchema } from './schemas/
 import { sendMessageSchema } from './schemas/messages.js';
 import { createTransactionSchema, updateTransactionStatusSchema } from './schemas/transactions.js';
 import {
+  partnerRuleChangeRequestSchema,
   remindDssRequestSchema,
   sendDssRecommendationSchema,
   updateDssRequestStatusSchema,
 } from './schemas/dss.js';
 import {
+  createPartnerRuleChangeRequestD1,
+  getPartnerRuleChangeRequestsD1,
   getPartnerDssRequestsD1,
+  getDssAuditRunsD1,
   getSubmissionDssD1,
   getUserDssRequestsD1,
   listDssPartnersD1,
@@ -136,6 +145,14 @@ const requireAuth = async (c: any, next: any) => {
   }
 };
 
+const requireAdmin = async (c: any, next: any) => {
+  const user = (c as any).get('user') as { role?: string };
+  if (user?.role !== 'admin') {
+    return c.json({ error: 'Only admins can access this endpoint' }, 403);
+  }
+  return await next();
+};
+
 const parseJsonBody = async <T extends z.ZodTypeAny>(c: any, schema: T): Promise<z.infer<T>> => {
   const body = await c.req.json();
   return schema.parse(body);
@@ -183,6 +200,8 @@ const getStatusCode = (error: Error) => {
 
   return 400;
 };
+
+const csvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
 app.get('/', (c) => c.json({ message: 'ClothCycle Cloudflare Worker API' }));
 
@@ -312,12 +331,26 @@ app.post('/api/auth/forgot-password', async (c) => {
 
 app.post('/api/auth/reset-password', async (c) => {
   const body = await c.req.json();
-  const { token, password } = body;
+  const token = body.code || body.token;
+  const password = body.password;
+
   if (!token || !password) {
     return c.json({ error: 'Missing reset fields' }, 400);
   }
 
   const result = await resetPasswordD1(c.env.DB, token, password);
+  return c.json(result);
+});
+
+app.post('/api/auth/verify-reset-code', async (c) => {
+  const body = await c.req.json();
+  const token = body.code || body.token;
+
+  if (!token) {
+    return c.json({ error: 'Missing reset code' }, 400);
+  }
+
+  const result = await verifyResetCodeD1(c.env.DB, token);
   return c.json(result);
 });
 
@@ -443,6 +476,66 @@ app.get('/api/dss/requests/partner', requireAuth, async (c) => {
   return jsonList(c, result.results);
 });
 
+app.get('/api/dss/audit', requireAuth, requireAdmin, async (c) => {
+  const result = await getDssAuditRunsD1(c.env.DB);
+  return jsonList(c, result.results);
+});
+
+app.get('/api/dss/audit/export', requireAuth, requireAdmin, async (c) => {
+  const result = await getDssAuditRunsD1(c.env.DB);
+  const rows = result.results || [];
+  const header = [
+    'created_at',
+    'engine_version',
+    'recommended_pathway',
+    'rank',
+    'score',
+    'confidence',
+    'submission_name',
+    'item_type',
+    'partner_name',
+    'requested_by_name',
+    'explanation',
+  ];
+  const csv = [
+    header.join(','),
+    ...rows.map((row: any) =>
+      [
+        row.created_at,
+        row.engine_version,
+        row.recommended_pathway,
+        row.rank,
+        row.score,
+        row.confidence,
+        row.submission_name,
+        row.item_type,
+        row.partner_name,
+        row.requested_by_name,
+        row.explanation,
+      ].map(csvCell).join(',')
+    ),
+  ].join('\n');
+
+  return new Response(csv, {
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': 'attachment; filename="clothcycle-dss-audit.csv"',
+    },
+  });
+});
+
+app.get('/api/dss/rule-change-requests', requireAuth, requireAdmin, async (c) => {
+  const result = await getPartnerRuleChangeRequestsD1(c.env.DB);
+  return jsonList(c, result.results);
+});
+
+app.post('/api/dss/rule-change-requests', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; email?: string };
+  const body = await parseJsonBody(c, partnerRuleChangeRequestSchema);
+  const data = await createPartnerRuleChangeRequestD1(c.env.DB, user.id!, user.email, body);
+  return c.json({ message: 'Rule change request submitted for admin review', data }, 201);
+});
+
 app.post('/api/dss/requests/:id/remind', requireAuth, async (c) => {
   const user = (c as any).get('user') as { id?: string };
   const body = await parseJsonBody(c, remindDssRequestSchema);
@@ -475,6 +568,15 @@ app.get('/api/messages/conversations', requireAuth, async (c) => {
   const user = (c as any).get('user') as { id?: string };
   const result = await getConversationsD1(c.env.DB, user.id!);
   return jsonList(c, result.results);
+});
+
+app.get('/api/messages/unread-count', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const result = await c.env.DB
+    .prepare('SELECT COUNT(*) AS unread_count FROM messages WHERE to_user_id = ? AND read = 0')
+    .bind(user.id)
+    .first<{ unread_count: number }>();
+  return c.json({ unread_count: Number(result?.unread_count || 0) });
 });
 
 app.get('/api/messages/:userId', requireAuth, async (c) => {
@@ -517,8 +619,8 @@ app.post('/api/upload', requireAuth, async (c) => {
     return c.json({ error: 'Only image files are allowed' }, 400);
   }
 
-  if (file.size && file.size > 5 * 1024 * 1024) {
-    return c.json({ error: 'File size must be less than 5MB' }, 400);
+  if (file.size != null && file.size > 10 * 1024 * 1024) {
+    return c.json({ error: 'File size must be less than 10MB' }, 400);
   }
 
   const fileData = await file.arrayBuffer();
@@ -536,6 +638,48 @@ app.get('/api/notifications/count', requireAuth, async (c) => {
   const user = (c as any).get('user') as { id?: string };
   const count = await getUnreadNotificationCountD1(c.env.DB, user.id!);
   return c.json({ unread_count: count });
+});
+
+app.get('/api/admin/users', requireAuth, requireAdmin, async (c) => {
+  const role = c.req.query('role')?.toString();
+  const result = await getUsersD1(c.env.DB, role);
+  return jsonList(c, result.results);
+});
+
+app.post('/api/admin/users', requireAuth, requireAdmin, async (c) => {
+  const body = await c.req.json();
+  const user = await createUserD1(c.env.DB, {
+    name: body.name,
+    email: body.email,
+    role: body.role,
+    status: body.status,
+    phone: body.phone,
+    address: body.address,
+    partner_id: body.partner_id,
+    password: body.password,
+  });
+  return c.json({ message: 'User created successfully', data: user }, 201);
+});
+
+app.put('/api/admin/users/:id', requireAuth, requireAdmin, async (c) => {
+  const userId = c.req.param('id');
+  const body = await c.req.json();
+  const user = await updateUserD1(c.env.DB, userId, {
+    name: body.name,
+    email: body.email,
+    role: body.role,
+    status: body.status,
+    phone: body.phone,
+    address: body.address,
+    partner_id: body.partner_id,
+  });
+  return c.json({ message: 'User updated successfully', data: user });
+});
+
+app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (c) => {
+  const userId = c.req.param('id');
+  await deleteUserD1(c.env.DB, userId);
+  return c.json({ message: 'User deleted successfully' });
 });
 
 app.put('/api/notifications/:id/read', requireAuth, async (c) => {

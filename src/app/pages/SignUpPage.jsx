@@ -30,6 +30,7 @@ export function SignUpPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const googleClientId = getGoogleClientId();
 
   useEffect(() => {
@@ -278,6 +279,8 @@ export function SignUpPage() {
                   type={showPassword ? "text" : "password"}
                   value={formData.password}
                   onChange={(e) => updateField("password", e.target.value)}
+                  onFocus={() => setIsPasswordFocused(true)}
+                  onBlur={() => setIsPasswordFocused(false)}
                   className="w-full pl-12 pr-12 py-3 border-2 border-[#e7ebe6] rounded-xl focus:border-[#336158] focus:outline-none transition-colors bg-white"
                   placeholder="••••••••"
                   required
@@ -292,10 +295,12 @@ export function SignUpPage() {
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
-              <PasswordChecklist
-                password={formData.password}
-                confirmPassword={formData.confirmPassword}
-              />
+              {isPasswordFocused ? (
+                <PasswordChecklist
+                  password={formData.password}
+                  confirmPassword={formData.confirmPassword}
+                />
+              ) : null}
             </div>
 
             <div>

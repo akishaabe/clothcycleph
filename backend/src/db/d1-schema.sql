@@ -266,6 +266,22 @@ CREATE TABLE IF NOT EXISTS recommendation_feedback (
 
 CREATE INDEX IF NOT EXISTS idx_recommendation_feedback_result_id ON recommendation_feedback(recommendation_result_id);
 
+CREATE TABLE IF NOT EXISTS partner_rule_change_requests (
+  id TEXT PRIMARY KEY,
+  partner_id TEXT REFERENCES partners(id) ON DELETE SET NULL,
+  requested_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  rule_area TEXT NOT NULL,
+  requested_change TEXT NOT NULL,
+  reason TEXT,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'implemented')),
+  admin_notes TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_partner_rule_change_requests_partner_id ON partner_rule_change_requests(partner_id);
+CREATE INDEX IF NOT EXISTS idx_partner_rule_change_requests_status ON partner_rule_change_requests(status);
+
 -- Notifications table
 CREATE TABLE IF NOT EXISTS notifications (
   id TEXT PRIMARY KEY,
@@ -322,6 +338,10 @@ CREATE TABLE IF NOT EXISTS messages (
   conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
   sender_type TEXT,
   content TEXT NOT NULL,
+  related_submission_id TEXT REFERENCES submissions(id) ON DELETE SET NULL,
+  related_transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+  action_url TEXT,
+  metadata TEXT DEFAULT '{}',
   read INTEGER DEFAULT 0,
   read_at TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,

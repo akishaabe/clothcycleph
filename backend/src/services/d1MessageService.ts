@@ -40,6 +40,35 @@ export async function sendMessageD1(db: D1Database, fromUserId: string, toUserId
   return normalizeMessage(result?.results?.[0]);
 }
 
+export async function createSystemMessageD1(
+  db: D1Database,
+  payload: {
+    fromUserId: string;
+    toUserId: string;
+    content: string;
+    actionUrl?: string;
+    metadata?: Record<string, unknown>;
+  }
+) {
+  const id = generateD1UUID();
+  const result = await executeD1(
+    db,
+    `INSERT INTO messages (id, from_user_id, to_user_id, content, action_url, metadata)
+     VALUES (?, ?, ?, ?, ?, ?)
+     RETURNING *`,
+    [
+      id,
+      payload.fromUserId,
+      payload.toUserId,
+      payload.content.trim(),
+      payload.actionUrl || null,
+      JSON.stringify(payload.metadata || {}),
+    ]
+  );
+
+  return normalizeMessage(result?.results?.[0]);
+}
+
 export async function getMessagesD1(db: D1Database, currentUserId: string, userId: string) {
   if (userId === currentUserId) {
     throw new Error('You cannot open a conversation with yourself');
@@ -136,5 +165,23 @@ function normalizeMessage(row: any) {
   return {
     ...row,
     read: Boolean(row.read),
+    metadata: parseJsonObject(row.metadata),
   };
+}
+
+function parseJsonObject(value: unknown) {
+  if (value && typeof value === 'object') {
+    return value;
+  }
+
+  if (typeof value !== 'string' || value.length === 0) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
 }
