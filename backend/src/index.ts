@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'node:path';
 import { createServer } from 'http';
 import { config } from './config/env.js';
 import { initializeDatabase } from './models/schema.js';
@@ -13,6 +14,7 @@ import uploadRoutes from './routes/upload.js';
 import notificationRoutes from './routes/notifications.js';
 import transactionRoutes from './routes/transactions.js';
 import dssRoutes from './routes/dss.js';
+import adminRoutes from './routes/admin.js';
 import { initializeSocketServer } from './services/socketService.js';
 
 const app = express();
@@ -24,6 +26,7 @@ let queueStatus: 'disabled' | 'initialized' = 'disabled';
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 app.use(
   cors({
     origin(
@@ -61,6 +64,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/dss', dssRoutes);
+app.use('/api/admin', adminRoutes);
 
 // 404 handler
 app.use((req, res) => {

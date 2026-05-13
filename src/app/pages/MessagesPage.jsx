@@ -343,20 +343,35 @@ export function MessagesPage() {
   };
 
   const openMessageAction = (message) => {
-    const actionUrl =
-      currentUser?.role === "partner"
-        ? message.metadata?.partner_action_url
-        : currentUser?.role === "user"
-          ? message.metadata?.user_action_url
-          : null;
-    const url = actionUrl || message.action_url;
+    const roleActionUrl =
+      currentUser?.role === "admin"
+        ? message.metadata?.admin_action_url
+        : currentUser?.role === "partner"
+          ? message.metadata?.partner_action_url
+          : currentUser?.role === "user"
+            ? message.metadata?.user_action_url
+            : null;
+    const url = roleActionUrl || message.action_url;
 
     if (!url) {
       return;
     }
 
-    navigate(url);
+    if (url.startsWith("/")) {
+      navigate(url);
+      return;
+    }
+
+    window.location.assign(url);
   };
+
+  const hasMessageAction = (message) =>
+    Boolean(
+      message.action_url ||
+        message.metadata?.admin_action_url ||
+        message.metadata?.partner_action_url ||
+        message.metadata?.user_action_url
+    );
 
   if (isAuthLoading && !isPreview) {
     return (
@@ -568,7 +583,7 @@ export function MessagesPage() {
                           }`}
                         >
                           <p className="text-sm leading-6 md:text-base">{message.content}</p>
-                          {message.action_url && (
+                          {hasMessageAction(message) && (
                             <button
                               type="button"
                               onClick={() => openMessageAction(message)}

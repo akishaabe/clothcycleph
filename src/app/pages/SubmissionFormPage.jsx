@@ -9,8 +9,9 @@ import {
   Package,
   RefreshCcw,
   AlertCircle,
+  X,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useFileUpload } from "../../hooks/useFileUpload";
 import { useSubmissions } from "../../hooks/useSubmissions";
@@ -284,6 +285,7 @@ export function SubmissionFormPage() {
   const selectedService = location.state?.service || "";
   const [step, setStep] = useState(1);
   const [submitError, setSubmitError] = useState("");
+  const fileInputRef = useRef(null);
   const [imagePreviews, setImagePreviews] = useState([]);
   const [showBurnTestResult, setShowBurnTestResult] = useState(false);
   const [isReviewEditing, setIsReviewEditing] = useState(false);
@@ -306,6 +308,7 @@ export function SubmissionFormPage() {
     upcycleRequest: "",
     description: "",
     imageFiles: [],
+    imageLabels: [],
 
     burnTestChoice: "",
     burnTestPage: null,
@@ -394,12 +397,30 @@ export function SubmissionFormPage() {
 
   const handleImageUpload = async (files) => {
     const nextFiles = Array.from(files || []);
-    updateField("imageFiles", nextFiles);
+    setFormData((prev) => ({
+      ...prev,
+      imageFiles: nextFiles,
+      imageLabels: nextFiles.map((file, index) => prev.imageLabels[index] || file.name.replace(/\.[^.]+$/, "")),
+    }));
 
     const previews = await Promise.all(
       nextFiles.map(async (file) => getFilePreview(file)),
     );
     setImagePreviews(previews.filter(Boolean));
+  };
+
+  const removeImage = (indexToRemove) => {
+    setFormData((prev) => {
+      const nextFiles = prev.imageFiles.filter((_, index) => index !== indexToRemove);
+      const nextLabels = prev.imageLabels.filter((_, index) => index !== indexToRemove);
+      return { ...prev, imageFiles: nextFiles, imageLabels: nextLabels };
+    });
+
+    setImagePreviews((prev) => prev.filter((_, index) => index !== indexToRemove));
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleSubmit = async () => {
@@ -417,6 +438,11 @@ export function SubmissionFormPage() {
         }
       }
 
+      const photosWithLabels = photoUrls.map((url, index) => ({
+        url,
+        label: formData.imageLabels[index] || `Textile image ${index + 1}`,
+      }));
+
       const fabricSummary =
         formData.knowsFabricType === "Yes"
           ? formData.fabricTypes.join(", ")
@@ -429,7 +455,7 @@ export function SubmissionFormPage() {
         fabric: fabricSummary,
         cleanliness: formData.cleanliness,
         description: formData.description || null,
-        photos: photoUrls,
+        photos: photosWithLabels,
         service_type: toServiceType(),
         quantity: Number(formData.quantity),
         buyback_interest:
@@ -1204,6 +1230,7 @@ export function SubmissionFormPage() {
                     type="file"
                     accept="image/*"
                     multiple
+                    ref={fileInputRef}
                     className="hidden"
                     disabled={isUploading || isSubmitting}
                     onChange={(event) => handleImageUpload(event.target.files)}
@@ -1226,14 +1253,43 @@ export function SubmissionFormPage() {
                 )}
 
                 {imagePreviews.length > 0 && (
-                  <div className="mt-4 grid grid-cols-3 gap-3">
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {imagePreviews.map((preview, index) => (
-                      <img
-                        key={preview}
-                        src={preview}
-                        alt={`Selected textile ${index + 1}`}
-                        className="h-28 w-full rounded-xl object-cover"
-                      />
+                      <div key={preview} className="overflow-hidden rounded-2xl border border-[#dce4da] bg-white shadow-sm">
+                        <div className="relative">
+                          <img
+                          src={preview}
+                          alt={`Selected textile ${index + 1}`}
+                          className="h-36 w-full object-cover"
+                        />
+                          <button
+                          type="button"
+                          onClick={() => removeImage(index)}
+                          className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-lg leading-none text-transparent hover:bg-black"
+                          aria-label={`Remove selected image ${index + 1}`}
+                        >
+                          <X className="h-4 w-4 text-white" />
+                          ×
+                          </button>
+                        </div>
+                        <label className="block p-3">
+                          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#5f6f67]">
+                            Image label
+                          </span>
+                          <input
+                            value={formData.imageLabels[index] || ""}
+                            onChange={(event) =>
+                              setFormData((prev) => {
+                                const labels = [...prev.imageLabels];
+                                labels[index] = event.target.value;
+                                return { ...prev, imageLabels: labels };
+                              })
+                            }
+                            className="w-full rounded-xl border border-[#dce4da] bg-[#fbfcfa] px-3 py-2 text-sm text-[#19221d] outline-none focus:border-[#336158]"
+                            placeholder={`Image ${index + 1} label`}
+                          />
+                        </label>
+                      </div>
                     ))}
                   </div>
                 )}

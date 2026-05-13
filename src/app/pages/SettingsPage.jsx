@@ -66,6 +66,7 @@ export function SettingsPage() {
     newPassword: "",
     confirmPassword: "",
   });
+  const [focusedPasswordField, setFocusedPasswordField] = useState("");
   const [twoFactorStatus, setTwoFactorStatus] = useState({
     enabled: false,
     setup_started: false,
@@ -1065,6 +1066,8 @@ export function SettingsPage() {
                           type="password"
                           placeholder="Enter password"
                           value={security[field]}
+                          onFocus={() => setFocusedPasswordField(field)}
+                          onBlur={() => setFocusedPasswordField("")}
                           onChange={(event) =>
                             setSecurity({
                               ...security,
@@ -1074,7 +1077,7 @@ export function SettingsPage() {
                           className={inputClass}
                       />
                     </div>
-                    {field === "newPassword" && (
+                    {field === "newPassword" && focusedPasswordField === "newPassword" && (
                       <PasswordChecklist
                         password={security.newPassword}
                         confirmPassword={security.confirmPassword}

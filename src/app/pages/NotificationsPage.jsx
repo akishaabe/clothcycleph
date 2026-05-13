@@ -34,12 +34,55 @@ export function NotificationsPage() {
   }, []);
 
   const markAsRead = async (notification) => {
-    if (notification.read) {
-      return;
-    }
+    setError("");
 
-    await notificationService.markAsRead(notification.id);
-    await loadNotifications();
+    try {
+      if (!notification.read) {
+        await notificationService.markAsRead(notification.id);
+      }
+
+      const actionUrl =
+        notification.data?.action_url || notification.data?.user_action_url;
+
+      if (actionUrl) {
+        if (actionUrl.startsWith('/')) {
+          navigate(actionUrl);
+        } else {
+          window.location.assign(actionUrl);
+        }
+        return;
+      }
+
+      if (notification.data?.transactionId && notificationsTheme === "partner") {
+        navigate(`/partner?request=${notification.data.transactionId}`);
+        return;
+      }
+
+      if (notification.data?.transactionId) {
+        navigate(`/dss-requests?request=${notification.data.transactionId}`);
+        return;
+      }
+
+      if (notification.data?.submissionId) {
+        navigate(`/dss/${notification.data.submissionId}`);
+        return;
+      }
+
+      await loadNotifications();
+    } catch (readError) {
+      setError(readError.message || 'Unable to update notification.');
+    }
+  };
+
+  const markAllAsRead = async () => {
+    setError("");
+
+    try {
+      await notificationService.markAllAsRead();
+      await loadNotifications();
+    } catch (readError) {
+      setError(readError.message || "Unable to mark notifications as read.");
+    }
   };
 
   const formatTime = (value) =>
@@ -79,18 +122,28 @@ export function NotificationsPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-6 rounded-[28px] border border-[#dce4da] bg-white/85 p-8 shadow-[0_24px_80px_rgba(25,34,29,0.12)]"
         >
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#336158] text-white">
-              <Bell className="h-7 w-7" />
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#336158] text-white">
+                <Bell className="h-7 w-7" />
+              </div>
+              <div>
+                <h1 className="font-gloock text-4xl text-[#19221d]">
+                  Notifications
+                </h1>
+                <p className="mt-1 text-[#5f6f67]">
+                  Recent updates about your submissions and account activity.
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="font-gloock text-4xl text-[#19221d]">
-                Notifications
-              </h1>
-              <p className="mt-1 text-[#5f6f67]">
-                Recent updates about your submissions and account activity.
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={markAllAsRead}
+              disabled={!notifications.some((notification) => !notification.read)}
+              className="w-fit rounded-xl bg-[#336158] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#2a4c48] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Mark all as read
+            </button>
           </div>
         </motion.section>
 

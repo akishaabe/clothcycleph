@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { dssService } from "../../services/api";
 import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
+import { ImageCarousel } from "../components/ImageCarousel";
 
 const pathwayLabels = {
   recycle: "Recycle",
@@ -456,6 +457,8 @@ export function DssConfirmationPage() {
                         {partner.pickup_areas && <div>Pickup areas: {partner.pickup_areas}</div>}
                         {partner.accepts_clean_only && <div>Clean textiles only</div>}
                         {partner.capacity_notes && <div>{partner.capacity_notes}</div>}
+                      </div>
+                    )}
                           </div>
               )}
                     <div className="mt-2 flex items-center gap-2 text-sm text-[#5f6f67]">
@@ -514,9 +517,31 @@ export function DssConfirmationPage() {
               </button>
             </div>
 
+            {preview.submission.photos?.length > 0 && (
+              <ImageCarousel
+                images={preview.submission.photos}
+                title="Your uploaded images"
+              />
+            )}
+
             <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)]">
-              <h2 className="mb-4 text-xl font-semibold">Sent requests</h2>
-              <div className="space-y-3">
+              <h2 className="mb-2 text-xl font-semibold">Sent requests</h2>
+              <p className="text-sm leading-6 text-[#5f6f67]">
+                Partner replies and reminder controls now live on a separate page so this DSS confirmation stays focused.
+              </p>
+              {highlightedRequestId && (
+                <div className="mt-4 rounded-xl border border-[#cfe2cf] bg-[#edf7ed] px-4 py-3 text-sm text-[#336158]">
+                  A request from messages is highlighted in your sent requests page.
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => navigate(highlightedRequestId ? `/dss-requests?request=${highlightedRequestId}` : "/dss-requests")}
+                className="mt-4 w-full rounded-xl border border-[#dce4da] px-4 py-3 text-sm font-semibold text-[#336158] hover:bg-[#f3f5f2]"
+              >
+                View sent requests
+              </button>
+              {false && <div className="space-y-3">
                 {requests.length === 0 && (
                   <p className="text-sm text-[#5f6f67]">
                     No partner requests yet for this account.
@@ -565,7 +590,7 @@ export function DssConfirmationPage() {
                     )}
                   </div>
                 ))}
-              </div>
+              </div>}
             </div>
           </aside>
         </section>

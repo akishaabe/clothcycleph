@@ -801,6 +801,32 @@ export const resetPassword = async (req: Request, res: Response) => {
   }
 };
 
+export const verifyResetCode = async (req: Request, res: Response) => {
+  try {
+    const { code, token } = req.body;
+    const resetCode = (code || token).trim();
+    const tokenHash = hashToken(resetCode);
+
+    const tokenResult = await query(
+      `SELECT id
+       FROM password_reset_tokens
+       WHERE token_hash = $1
+         AND used_at IS NULL
+         AND expires_at > NOW()
+       LIMIT 1`,
+      [tokenHash]
+    );
+
+    if (tokenResult.rows.length === 0) {
+      throw new AppError(400, 'Invalid or expired reset code');
+    }
+
+    res.json({ message: 'Reset code verified' });
+  } catch (error) {
+    sendAuthError(res, error);
+  }
+};
+
 export const getProfile = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;

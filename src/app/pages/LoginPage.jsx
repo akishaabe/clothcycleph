@@ -25,7 +25,7 @@ import { isStrongPassword, PasswordChecklist } from "../../utils/passwordPolicy"
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { login, continueWithGoogle, verifyTwoFactor, resendTwoFactorCode, forgotPassword, resetPassword } = useAuth();
+  const { login, continueWithGoogle, verifyTwoFactor, resendTwoFactorCode, forgotPassword, verifyResetCode, resetPassword } = useAuth();
 
   const googleButtonRef = useRef(null);
   const [email, setEmail] = useState("");
@@ -44,6 +44,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+  const [isNewPasswordFocused, setIsNewPasswordFocused] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [resendCountdown, setResendCountdown] = useState(0);
   const googleClientId = getGoogleClientId();
@@ -156,8 +157,10 @@ export function LoginPage() {
           if (!/^\d{6}$/.test(resetToken)) {
             throw new Error("Enter the 6-digit reset code first.");
           }
+
+          await verifyResetCode(resetToken);
           setResetStep("password");
-          setSuccessMessage("Code entered. Choose a new password.");
+          setSuccessMessage("Code verified. Choose a new password.");
           return;
         }
 
@@ -608,6 +611,8 @@ export function LoginPage() {
                         type={showNewPassword ? "text" : "password"}
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
+                        onFocus={() => setIsNewPasswordFocused(true)}
+                        onBlur={() => setIsNewPasswordFocused(false)}
                         placeholder="New password"
                         required
                         className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-12 text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
@@ -622,10 +627,12 @@ export function LoginPage() {
                         {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                       </button>
                     </div>
-                    <PasswordChecklist
-                      password={newPassword}
-                      confirmPassword={confirmNewPassword}
-                    />
+                    {isNewPasswordFocused ? (
+                      <PasswordChecklist
+                        password={newPassword}
+                        confirmPassword={confirmNewPassword}
+                      />
+                    ) : null}
                   </div>
                   <div>
                     <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">

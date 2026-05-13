@@ -5,6 +5,7 @@ import { Recycle, Package, Clock, CheckCircle, XCircle, Bell, User, BarChart3, S
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { dssService, messageService, notificationService } from "../../services/api";
 import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
+import { ImageCarousel } from "../components/ImageCarousel";
 
 const platformData = [
   { month: "Jan", users: 850, submissions: 420 },
@@ -493,6 +494,7 @@ export function PartnerDashboard() {
         </motion.div>
 
         <motion.form
+          id="rule-requests"
           onSubmit={submitRuleRequest}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -615,16 +617,11 @@ export function PartnerDashboard() {
                 </div>
 
                 {selectedRequest.photos?.length > 0 && (
-                  <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6">
-                    <h3 className="mb-4 text-xl font-semibold text-[#10233f]">Uploaded photos</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      {selectedRequest.photos.map((photo) => (
-                        <a key={photo} href={photo} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-[#d6e6f8] bg-[#eff6ff]">
-                          <img src={photo} alt="" className="aspect-square w-full object-cover" />
-                        </a>
-                      ))}
-                    </div>
-                  </div>
+                  <ImageCarousel
+                    images={selectedRequest.photos}
+                    title="Uploaded photos"
+                    allowDownload
+                  />
                 )}
 
                 <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6">

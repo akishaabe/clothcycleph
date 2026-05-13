@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
@@ -23,7 +23,7 @@ import {
   Download,
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { dssService, messageService, notificationService } from "../../services/api";
+import { dssService, messageService, notificationService, adminService } from "../../services/api";
 
 const systemData = [
   { date: "01 May", users: 1200, admins: 15, partners: 45 },
@@ -33,14 +33,7 @@ const systemData = [
   { date: "29 May", users: 1500, admins: 19, partners: 58 }
 ];
 
-const initialAccounts = [
-  { id: 1, name: "Maria Santos", role: "Admin", email: "maria@clothcycle.ph", status: "active", joined: "2025-12-15", phone: "+63 917 210 4411", organization: "ClothCycle PH" },
-  { id: 2, name: "Juan Cruz", role: "Partner", email: "juan@partner.com", status: "active", joined: "2026-01-10", phone: "+63 918 440 1120", organization: "Green Loom Partners" },
-  { id: 3, name: "Ana Reyes", role: "User", email: "ana@email.com", status: "active", joined: "2026-02-20", phone: "+63 912 552 0192", organization: "Individual" },
-  { id: 4, name: "Pedro Garcia", role: "Admin", email: "pedro@clothcycle.ph", status: "inactive", joined: "2025-11-05", phone: "+63 915 772 8801", organization: "ClothCycle PH" },
-  { id: 5, name: "Lisa Tan", role: "Partner", email: "lisa@partner.com", status: "active", joined: "2026-03-12", phone: "+63 916 337 9012", organization: "Circular Weaves Hub" },
-  { id: 6, name: "Carlo Mendoza", role: "User", email: "carlo@email.com", status: "suspended", joined: "2026-04-01", phone: "+63 919 771 1050", organization: "Individual" },
-];
+const initialAccounts = [];
 
 const getTrendClass = (value) => {
   if (value.startsWith("-")) {
@@ -84,6 +77,7 @@ const emptyForm = {
   phone: "",
   organization: "",
   status: "active",
+  password: "",
 };
 
 const getStatusClass = (status) => {
@@ -101,8 +95,25 @@ const getStatusClass = (status) => {
 const canCreateRole = (role) => role === "Admin" || role === "Partner";
 const canSuspendRole = (role) => role === "User" || role === "Partner";
 
+const mapUserToAccount = (user) => ({
+  id: user.id,
+  name: user.name,
+  role: user.role.charAt(0).toUpperCase() + user.role.slice(1),
+  email: user.email,
+  status: user.status || 'active',
+  joined: user.created_at ? user.created_at.split('T')[0] : '',
+  phone: user.phone || '',
+  organization:
+    user.role === 'partner'
+      ? user.partner_name || 'Partner'
+      : user.role === 'admin'
+      ? 'ClothCycle PH'
+      : 'Individual',
+});
+
 export function AdminDashboard() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [accounts, setAccounts] = useState(initialAccounts);
@@ -110,11 +121,18 @@ export function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
+  const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
+  const [adminError, setAdminError] = useState("");
   const [suspendTarget, setSuspendTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
   const [dssAuditRuns, setDssAuditRuns] = useState([]);
   const [dssAuditError, setDssAuditError] = useState("");
+  const [ruleChangeRequests, setRuleChangeRequests] = useState([]);
+  const [ruleRequestSort, setRuleRequestSort] = useState("newest");
+  const [showAllDssAudit, setShowAllDssAudit] = useState(false);
+  const [dssAuditSort, setDssAuditSort] = useState("newest");
+  const [isActivityExpanded, setIsActivityExpanded] = useState(false);
   const [systemHealth, setSystemHealth] = useState({
     value: "Checking",
     trend: "Loading",
@@ -126,13 +144,15 @@ export function AdminDashboard() {
 
     async function loadDssAudit() {
       try {
-        const [response, messagesResponse, notificationsResponse] = await Promise.all([
+        const [response, ruleRequestsResponse, messagesResponse, notificationsResponse] = await Promise.all([
           dssService.getAuditRuns(),
+          dssService.getRuleChangeRequests(),
           messageService.getUnreadCount(),
           notificationService.getUnreadCount(),
         ]);
         if (isMounted) {
           setDssAuditRuns(response.data);
+          setRuleChangeRequests(ruleRequestsResponse.data);
           setBadgeCounts({
             messages: Number(messagesResponse.unread_count || 0),
             notifications: Number(notificationsResponse.unread_count || 0),
@@ -174,6 +194,26 @@ export function AdminDashboard() {
       }
     }
 
+    async function loadAccounts() {
+      setIsLoadingAccounts(true);
+      setAdminError("");
+      try {
+        const response = await adminService.getUsers();
+        if (isMounted) {
+          setAccounts(response.data.map(mapUserToAccount));
+        }
+      } catch (loadError) {
+        if (isMounted) {
+          setAdminError(loadError.message || "Unable to load user accounts.");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingAccounts(false);
+        }
+      }
+    }
+
+    loadAccounts();
     loadHealth();
 
     return () => {
@@ -210,6 +250,34 @@ export function AdminDashboard() {
     [accounts]
   );
 
+  const sortedDssAuditRuns = useMemo(() => {
+    return [...dssAuditRuns].sort((a, b) => {
+      if (dssAuditSort === "confidence") {
+        return Number(b.confidence || 0) - Number(a.confidence || 0);
+      }
+
+      if (dssAuditSort === "score") {
+        return Number(b.score || 0) - Number(a.score || 0);
+      }
+
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    });
+  }, [dssAuditRuns, dssAuditSort]);
+
+  const sortedRuleChangeRequests = useMemo(() => {
+    return [...ruleChangeRequests].sort((a, b) => {
+      if (ruleRequestSort === "partner") {
+        return String(a.partner_name || "").localeCompare(String(b.partner_name || ""));
+      }
+
+      if (ruleRequestSort === "status") {
+        return String(a.status || "").localeCompare(String(b.status || ""));
+      }
+
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    });
+  }, [ruleChangeRequests, ruleRequestSort]);
+
   const openCreateModal = (role = activeRole) => {
     setActiveRole(role);
     setEditingAccount(null);
@@ -228,6 +296,7 @@ export function AdminDashboard() {
       phone: account.phone,
       organization: account.organization,
       status: account.status,
+      password: "",
     });
     setIsAccountModalOpen(true);
   };
@@ -242,70 +311,102 @@ export function AdminDashboard() {
     setFormData((current) => ({ ...current, [field]: value }));
   };
 
-  const handleSaveAccount = (event) => {
+  const handleSaveAccount = async (event) => {
     event.preventDefault();
+    setAdminError("");
 
-    if (editingAccount) {
-      setAccounts((current) =>
-        current.map((account) =>
-          account.id === editingAccount.id
-            ? { ...account, ...formData }
-            : account
-        )
-      );
-    } else {
-      setAccounts((current) => [
-        {
-          id: Date.now(),
-          role: activeRole,
-          joined: new Date().toISOString().slice(0, 10),
-          ...formData,
-        },
-        ...current,
-      ]);
+    try {
+      if (editingAccount) {
+        const response = await adminService.updateUser(editingAccount.id, {
+          name: formData.name,
+          email: formData.email,
+          role: activeRole.toLowerCase(),
+          status: formData.status,
+          phone: formData.phone,
+          address: '',
+          partner_id: null,
+        });
+
+        setAccounts((current) =>
+          current.map((account) =>
+            account.id === editingAccount.id
+              ? mapUserToAccount(response.data)
+              : account
+          )
+        );
+      } else {
+        const response = await adminService.createUser({
+          name: formData.name,
+          email: formData.email,
+          role: activeRole.toLowerCase(),
+          status: formData.status,
+          phone: formData.phone,
+          address: '',
+          partner_id: null,
+          password: formData.password || undefined,
+        });
+
+        setAccounts((current) => [mapUserToAccount(response.data), ...current]);
+      }
+
+      closeAccountModal();
+    } catch (saveError) {
+      setAdminError(saveError.message || "Unable to save account.");
     }
-
-    closeAccountModal();
   };
 
-  const confirmDeleteAccount = () => {
+  const confirmDeleteAccount = async () => {
     if (!deleteTarget) {
       return;
     }
 
-    setAccounts((current) =>
-      current.filter((account) => account.id !== deleteTarget.id)
-    );
-    setDeleteTarget(null);
+    try {
+      await adminService.deleteUser(deleteTarget.id);
+      setAccounts((current) =>
+        current.filter((account) => account.id !== deleteTarget.id)
+      );
+    } catch (deleteError) {
+      setAdminError(deleteError.message || "Unable to delete account.");
+    } finally {
+      setDeleteTarget(null);
+    }
   };
 
-  const confirmSuspendAccount = () => {
+  const confirmSuspendAccount = async () => {
     if (!suspendTarget) {
       return;
     }
 
-    setAccounts((current) =>
-      current.map((account) =>
-        account.id === suspendTarget.id
-          ? {
-              ...account,
-              status: account.status === "suspended" ? "active" : "suspended",
-            }
-          : account
-      )
-    );
+    const nextStatus = suspendTarget.status === "suspended" ? "active" : "suspended";
 
-    if (editingAccount?.id === suspendTarget.id) {
-      const nextStatus =
-        suspendTarget.status === "suspended" ? "active" : "suspended";
+    try {
+      const response = await adminService.updateUser(suspendTarget.id, {
+        name: suspendTarget.name,
+        email: suspendTarget.email,
+        role: suspendTarget.role.toLowerCase(),
+        status: nextStatus,
+        phone: suspendTarget.phone,
+        address: '',
+        partner_id: null,
+      });
 
-      setEditingAccount((current) =>
-        current ? { ...current, status: nextStatus } : current
+      setAccounts((current) =>
+        current.map((account) =>
+          account.id === suspendTarget.id ? mapUserToAccount(response.data) : account
+        )
       );
-      setFormData((current) => ({ ...current, status: nextStatus }));
-    }
 
-    setSuspendTarget(null);
+      if (editingAccount?.id === suspendTarget.id) {
+        setEditingAccount((current) =>
+          current ? { ...current, status: nextStatus } : current
+        );
+        setFormData((current) => ({ ...current, status: nextStatus }));
+      }
+    } catch (updateError) {
+      setAdminError(updateError.message || "Unable to update account status.");
+    } finally {
+      setSuspendTarget(null);
+    }
   };
 
   const handleExportAudit = async () => {
@@ -485,13 +586,30 @@ export function AdminDashboard() {
                 and partner handoff context.
               </p>
             </div>
-            <button
-              onClick={handleExportAudit}
-              className="inline-flex items-center gap-2 rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
-            >
-              <Download className="h-4 w-4" />
-              Export audit CSV
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={dssAuditSort}
+                onChange={(event) => setDssAuditSort(event.target.value)}
+                className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+              >
+                <option value="newest">Newest</option>
+                <option value="confidence">Highest confidence</option>
+                <option value="score">Highest score</option>
+              </select>
+              <button
+                onClick={() => setShowAllDssAudit((current) => !current)}
+                className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+              >
+                {showAllDssAudit ? "Show less" : "View all"}
+              </button>
+              <button
+                onClick={handleExportAudit}
+                className="inline-flex items-center gap-2 rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+              >
+                <Download className="h-4 w-4" />
+                Export CSV
+              </button>
+            </div>
           </div>
 
           {dssAuditError && (
@@ -507,12 +625,12 @@ export function AdminDashboard() {
               </div>
             )}
 
-            {dssAuditRuns.slice(0, 4).map((run) => (
-              <div
+            {sortedDssAuditRuns.slice(0, showAllDssAudit ? 20 : 3).map((run) => (
+              <details
                 key={run.result_id}
                 className="rounded-xl border border-gray-200 bg-gray-50 p-4"
               >
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <summary className="flex cursor-pointer list-none flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div>
                     <div className="font-semibold text-gray-950">
                       {run.submission_name || run.item_type || "Submission"} · {run.recommended_pathway}
@@ -524,7 +642,7 @@ export function AdminDashboard() {
                   <span className="rounded-full bg-white px-3 py-1 text-sm text-gray-700">
                     Score {Number(run.score || 0).toFixed(0)}
                   </span>
-                </div>
+                </summary>
                 <p className="mt-3 text-sm leading-6 text-gray-700">
                   {run.explanation}
                 </p>
@@ -544,7 +662,69 @@ export function AdminDashboard() {
                     ))}
                   </div>
                 )}
+              </details>
+            ))}
+          </div>
+        </motion.div>
+
+        <motion.div
+          id="rule-requests"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.38 }}
+          className={`mb-8 rounded-2xl border bg-white p-6 shadow-lg ${
+            searchParams.get("panel") === "rule-requests" ? "border-gray-950 ring-2 ring-gray-950/10" : "border-gray-200"
+          }`}
+        >
+          <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="text-xl text-gray-950">Partner Rule Requests</h3>
+              <p className="mt-1 text-sm text-gray-600">
+                Requests sent by partners for DSS criteria, preference, capacity, or pickup-area updates.
+              </p>
+            </div>
+            <select
+              value={ruleRequestSort}
+              onChange={(event) => setRuleRequestSort(event.target.value)}
+              className="w-fit rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+            >
+              <option value="newest">Newest</option>
+              <option value="partner">Partner</option>
+              <option value="status">Status</option>
+            </select>
+          </div>
+
+          <div className="grid gap-3">
+            {sortedRuleChangeRequests.length === 0 && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-600">
+                No partner rule requests yet.
               </div>
+            )}
+
+            {sortedRuleChangeRequests.slice(0, 8).map((request) => (
+              <details
+                key={request.id}
+                open={searchParams.get("request") === request.id}
+                className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+              >
+                <summary className="flex cursor-pointer list-none flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="font-semibold text-gray-950">
+                      {request.rule_area} · {request.partner_name || request.requested_by_name || "Partner"}
+                    </div>
+                    <div className="mt-1 text-sm text-gray-600">
+                      Requested by {request.requested_by_name || request.requested_by_email || "Unknown"} · {request.status || "pending"}
+                    </div>
+                  </div>
+                  <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-700">
+                    Admin review
+                  </span>
+                </summary>
+                <div className="mt-4 space-y-3 text-sm leading-6 text-gray-700">
+                  <p><span className="font-semibold text-gray-950">Requested change:</span> {request.requested_change}</p>
+                  {request.reason && <p><span className="font-semibold text-gray-950">Reason:</span> {request.reason}</p>}
+                </div>
+              </details>
             ))}
           </div>
         </motion.div>
@@ -711,14 +891,25 @@ export function AdminDashboard() {
           transition={{ delay: 0.7 }}
           className="bg-white p-6 rounded-2xl shadow-lg"
         >
-          <h3 className="text-xl mb-4 text-gray-950">Recent System Activity</h3>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xl text-gray-950">Recent System Activity</h3>
+              <p className="mt-1 text-sm text-gray-600">Operational activity preview for admin review.</p>
+            </div>
+            <button
+              onClick={() => setIsActivityExpanded((current) => !current)}
+              className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+            >
+              {isActivityExpanded ? "Collapse" : "View all"}
+            </button>
+          </div>
           <div className="space-y-3">
             {[
               { time: "10:45 AM", action: "New user registered", user: "Ana Reyes" },
               { time: "10:30 AM", action: "Admin role assigned", user: "Maria Santos" },
               { time: "10:15 AM", action: "Partner approved", user: "Juan Cruz" },
               { time: "09:50 AM", action: "System backup completed", user: "System" }
-            ].map((log, index) => (
+            ].slice(0, isActivityExpanded ? 4 : 2).map((log, index) => (
               <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-3">
                   <div className="w-2 h-2 rounded-full bg-gray-950"></div>
@@ -766,6 +957,7 @@ export function AdminDashboard() {
           role={activeRole}
           formData={formData}
           editingAccount={editingAccount}
+          adminError={adminError}
           onChange={handleFormChange}
           onClose={closeAccountModal}
           onRequestSuspend={() => setSuspendTarget(editingAccount)}
@@ -850,11 +1042,13 @@ function AccountModal({
   role,
   formData,
   editingAccount,
+  adminError,
   onChange,
   onClose,
   onRequestSuspend,
   onSubmit,
 }) {
+
   const title = editingAccount ? `Edit ${role}` : `Add ${role}`;
   const config = roleConfig[role];
   const showSuspendAction = editingAccount && canSuspendRole(role);
@@ -884,15 +1078,22 @@ function AccountModal({
               </p>
             </div>
           </div>
+
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg bg-gray-100 p-2 text-gray-700 hover:bg-gray-200"
-            aria-label="Close"
+            className="rounded-xl p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-950"
+            aria-label="Close modal"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
+
+        {adminError ? (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {adminError}
+          </div>
+        ) : null}
 
         <div className="grid gap-4 md:grid-cols-2">
           <label className="block">
@@ -915,6 +1116,19 @@ function AccountModal({
               required
             />
           </label>
+
+          {!editingAccount && (
+            <label className="block">
+              <span className="mb-2 block text-sm text-gray-600">Password (optional)</span>
+              <input
+                type="password"
+                value={formData.password}
+                onChange={(event) => onChange("password", event.target.value)}
+                className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-gray-950 outline-none focus:border-gray-950"
+                placeholder="Leave blank to generate a temporary password"
+              />
+            </label>
+          )}
 
           <label className="block">
             <span className="mb-2 block text-sm text-gray-600">Phone</span>

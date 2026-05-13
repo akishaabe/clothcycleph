@@ -7,6 +7,8 @@ interface RuleCheck {
   matched: boolean;
   expected: string;
   selected: string;
+  score?: number;
+  total?: number;
 }
 
 interface FabricRule {
@@ -101,30 +103,41 @@ const fabricRules: FabricRule[] = [
   },
 ];
 
-const pathwayRules: Record<Exclude<Pathway, 'buyback'>, { conditions: string[]; cleanliness: string[] }> = {
+const pathwayRules: Record<
+  Exclude<Pathway, 'buyback'>,
+  {
+    conditions: string[];
+    cleanliness: string[];
+    itemHints: string[];
+    fabricHints: string[];
+  }
+> = {
   recycle: {
     conditions: [
-      'Good condition (wearable, no major damage)',
       'Minor damage (small tears, loose seams, stains)',
       'Heavily damaged (large tears, unusable as clothing)',
     ],
-    cleanliness: ['Yes, clean and ready for use', 'Needs cleaning'],
+    cleanliness: ['Needs cleaning', 'Heavily soiled or contaminated'],
+    itemHints: ['Fabric scraps', 'Household textile (curtains, bedsheets)'],
+    fabricHints: ['polyester', 'poly fleece', 'nylon', 'acrylic', 'spandex', 'acetate'],
   },
   donate: {
     conditions: ['Good condition (wearable, no major damage)'],
-    cleanliness: ['Yes, clean and ready for use', 'Needs cleaning'],
+    cleanliness: ['Yes, clean and ready for use'],
+    itemHints: ['Top', 'Pants / Jeans', 'Dress', 'Jacket / Outerwear'],
+    fabricHints: ['cotton', 'linen', 'rayon', 'tencel'],
   },
   upcycle: {
     conditions: [
-      'Good condition (wearable, no major damage)',
       'Minor damage (small tears, loose seams, stains)',
       'Heavily damaged (large tears, unusable as clothing)',
     ],
     cleanliness: [
       'Yes, clean and ready for use',
       'Needs cleaning',
-      'Heavily soiled or contaminated',
     ],
+    itemHints: ['Fabric scraps', 'Top', 'Pants / Jeans', 'Dress', 'Jacket / Outerwear', 'Household textile (curtains, bedsheets)'],
+    fabricHints: ['cotton', 'linen', 'denim', 'wool', 'silk'],
   },
 };
 
@@ -148,62 +161,114 @@ function normalizeList(values?: string[] | string | null) {
 }
 
 function parseExpected(expression: string) {
-  if (expression.includes('&')) {
-    return {
-      mode: 'all' as const,
-      values: expression.split('&').map(normalize).filter(Boolean),
-    };
-  }
-
-  return {
-    mode: 'any' as const,
-    values: expression.split(/\s+OR\s+|,/i).map(normalize).filter(Boolean),
-  };
+  return expression
+    .split(/\s+OR\s+/i)
+    .map((group) => group.split(/[,&]/).map(normalize).filter(Boolean))
+    .filter((group) => group.length > 0);
 }
 
 function checkExpected(question: string, expression: string, selectedValues: string[] | string | null | undefined): RuleCheck {
-  const expected = parseExpected(expression);
+  const expectedGroups = parseExpected(expression);
   const selected = normalizeList(selectedValues);
-  const matched =
-    expected.mode === 'all'
-      ? expected.values.every((value) => selected.includes(value))
-      : expected.values.some((value) => selected.includes(value));
+  const scoredGroups = expectedGroups.map((group) => ({
+    score: group.filter((value) => selected.includes(value)).length,
+    total: group.length,
+  }));
+  const bestGroup = scoredGroups.sort((a, b) => b.score / b.total - a.score / a.total)[0] || {
+    score: 0,
+    total: 1,
+  };
 
   return {
     question,
-    matched,
+    matched: bestGroup.score === bestGroup.total,
     expected: expression,
     selected: selectedValues
       ? Array.isArray(selectedValues)
         ? selectedValues.join(', ')
         : selectedValues
       : 'None',
+    score: bestGroup.score,
+    total: bestGroup.total,
   };
 }
 
-function pathwayRuleScore(pathway: Exclude<Pathway, 'buyback'>, condition: string, cleanliness: string) {
+function includesAnyText(value: unknown, hints: string[]) {
+  const haystack = Array.isArray(value)
+    ? value.join(' ')
+    : typeof value === 'string'
+      ? value
+      : '';
+
+  return hints.some((hint) => normalize(haystack).includes(normalize(hint)));
+}
+
+function pathwayRuleScore(pathway: Exclude<Pathway, 'buyback'>, submission: any, burnAnalysis: any) {
   const rule = pathwayRules[pathway];
+  const condition = submission.condition || submission.details?.condition || '';
+  const cleanliness = submission.cleanliness || submission.details?.cleanliness || '';
+  const itemSignal = [submission.item_type, submission.details?.item_types, submission.details?.other_item_type].filter(Boolean).flat();
+  const fabricSignal = [
+    submission.fabric,
+    submission.details?.fabric_types,
+    submission.details?.fabric_description,
+    burnAnalysis.top_fibers?.[0]?.fiber,
+  ].filter(Boolean).flat();
   const conditionMatched = rule.conditions.map(normalize).includes(normalize(condition));
   const cleanlinessMatched = rule.cleanliness.map(normalize).includes(normalize(cleanliness));
-  const matched = [conditionMatched, cleanlinessMatched].filter(Boolean).length;
+  const itemMatched = includesAnyText(itemSignal, rule.itemHints);
+  const fabricMatched = includesAnyText(fabricSignal, rule.fabricHints);
+  const brandMatched =
+    pathway === 'donate'
+      ? !submission.details?.no_brand_visible
+      : pathway === 'upcycle'
+        ? true
+        : Boolean(submission.details?.no_brand_visible || !submission.details?.brand);
+  const checks = [
+    {
+      question: 'Condition',
+      matched: conditionMatched,
+      expected: rule.conditions.join(' OR '),
+      selected: condition || 'None',
+    },
+    {
+      question: 'Cleanliness',
+      matched: cleanlinessMatched,
+      expected: rule.cleanliness.join(' OR '),
+      selected: cleanliness || 'None',
+    },
+    {
+      question: 'Item type',
+      matched: itemMatched,
+      expected: rule.itemHints.join(' OR '),
+      selected: Array.isArray(itemSignal) ? itemSignal.join(', ') : String(itemSignal || 'None'),
+    },
+    {
+      question: 'Fabric signal',
+      matched: fabricMatched,
+      expected: rule.fabricHints.join(' OR '),
+      selected: Array.isArray(fabricSignal) ? fabricSignal.join(', ') : String(fabricSignal || 'None'),
+    },
+    {
+      question: 'Brand handling',
+      matched: brandMatched,
+      expected:
+        pathway === 'donate'
+          ? 'Brand/identity visible preferred'
+          : pathway === 'recycle'
+            ? 'Unbranded or unknown brand acceptable'
+            : 'Brand not restrictive',
+      selected: submission.details?.no_brand_visible ? 'No brand visible' : submission.details?.brand || 'Not specified',
+    },
+  ];
+  const weights = [30, 25, 20, 15, 10];
+  const score = checks.reduce((total, check, index) => total + (check.matched ? weights[index] : 0), 0);
+  const matched = checks.filter((check) => check.matched).length;
 
   return {
     matched,
-    score: (matched / 2) * 100,
-    checks: [
-      {
-        question: 'Condition',
-        matched: conditionMatched,
-        expected: rule.conditions.join(' OR '),
-        selected: condition || 'None',
-      },
-      {
-        question: 'Cleanliness',
-        matched: cleanlinessMatched,
-        expected: rule.cleanliness.join(' OR '),
-        selected: cleanliness || 'None',
-      },
-    ],
+    score,
+    checks,
   };
 }
 
@@ -225,8 +290,9 @@ export function analyzeBurnTest(burnTest: any) {
         checkExpected('Smell', rule.smell, burnTest.smell),
         checkExpected('Ashes', rule.ashes, burnTest.ashes),
       ];
-      const matched = checks.filter((check) => check.matched).length;
-      const confidence = matched / checks.length;
+      const matched = checks.reduce((total, check) => total + (check.score || 0), 0);
+      const possible = checks.reduce((total, check) => total + (check.total || 1), 0);
+      const confidence = possible > 0 ? matched / possible : 0;
 
       return {
         fiber: rule.fiber,
@@ -252,8 +318,6 @@ export function analyzeBurnTest(burnTest: any) {
 }
 
 export function buildPathwayRecommendations(submission: any) {
-  const condition = submission.condition || submission.details?.condition || '';
-  const cleanliness = submission.cleanliness || submission.details?.cleanliness || '';
   const preferred = normalize(submission.service_type || submission.action);
   const burnAnalysis = analyzeBurnTest(submission.burn_test);
 
@@ -265,7 +329,7 @@ export function buildPathwayRecommendations(submission: any) {
     explanation: string;
     checks: RuleCheck[];
   }> = (['recycle', 'donate', 'upcycle'] as const).map((pathway) => {
-    const ruleResult = pathwayRuleScore(pathway, condition, cleanliness);
+    const ruleResult = pathwayRuleScore(pathway, submission, burnAnalysis);
     const preferenceBoost = preferred === pathway ? 8 : 0;
     const rawScore = ruleResult.score + preferenceBoost;
     const score = Math.min(100, rawScore);
