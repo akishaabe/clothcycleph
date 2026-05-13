@@ -353,7 +353,7 @@ export function LoginPage() {
             <div className="mb-10">
               <h1 className="text-5xl font-light mb-3">
                 {twoFactorToken
-                  ? "Two-Factor Check"
+                  ? "Verifying Identity"
                   : authMode === "forgot"
                     ? "Reset Password"
                     : authMode === "reset"
@@ -645,16 +645,16 @@ export function LoginPage() {
               {!twoFactorToken && authMode === "login" ? (
                 <>
                   {googleClientId ? (
-                    <div className="flex justify-center">
-                      <div ref={googleButtonRef} />
-                    </div>
-                  ) : null}
-
-                  {googleClientId ? (
                     <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-[#8a9a91]">
                       <div className="h-px flex-1 bg-[#e7ebe6]" />
                       or
                       <div className="h-px flex-1 bg-[#e7ebe6]" />
+                    </div>
+                  ) : null}
+
+                  {googleClientId ? (
+                    <div className="flex justify-center">
+                      <div ref={googleButtonRef} />
                     </div>
                   ) : null}
                 </>

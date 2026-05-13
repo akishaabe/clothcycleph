@@ -40,6 +40,41 @@ const staggerGroup = {
 
 const viewportReveal = { once: true, amount: 0.24 };
 
+const featuredPartners = [
+  {
+    id: "tela-cycle-hub",
+    name: "Tela Cycle Hub",
+    description: "Donation and upcycling collection center in Bulacan.",
+    location: "Dona Rosa Subdivision, Subic, Baliuag, Bulacan, Philippines",
+    phone: "+63 928 1500 711",
+    email: "info@telacycle.com",
+  },
+  {
+    id: "green-loom-partners",
+    name: "Green Loom Partners",
+    description: "Sustainable textile donation partner.",
+    location: "Mandaluyong City, Philippines",
+    phone: "+63 918 440 1120",
+    email: "juan@partner.com",
+  },
+  {
+    id: "circular-weaves-hub",
+    name: "Circular Weaves Hub",
+    description: "Community recycling and education partner.",
+    location: "Quezon City, Philippines",
+    phone: "+63 916 337 9012",
+    email: "lisa@partner.com",
+  },
+  {
+    id: "urban-fiber-works",
+    name: "Urban Fiber Works",
+    description: "Upcycling studio for local creatives.",
+    location: "Pasig City, Philippines",
+    phone: "+63 917 210 4411",
+    email: "contact@fiberworks.ph",
+  },
+];
+
 export function LandingPage() {
   return (
     <div
@@ -456,16 +491,16 @@ export function LandingPage() {
             </p>
 
             <motion.div
-              className="grid grid-cols-2 md:grid-cols-4 gap-8"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8"
               variants={staggerGroup}
             >
-              {[1, 2, 3, 4].map((i) => (
+              {featuredPartners.map((partner) => (
                 <motion.div
-                  key={i}
+                  key={partner.id}
                   variants={revealScale}
                   whileHover={{ y: -6 }}
                   className="
-                    h-28
+                    p-6
                     bg-white
                     dark:bg-white/5
                     backdrop-blur-xl
@@ -473,17 +508,39 @@ export function LandingPage() {
                     border-[#e7ebe6]
                     dark:border-white/10
                     rounded-3xl
-                    flex
-                    items-center
-                    justify-center
+                    shadow-sm
                     hover:bg-[#f3f5f2]
                     dark:hover:bg-white/10
                     transition-all
+                    flex
+                    flex-col
+                    justify-between
                   "
                 >
-                  <span className="text-[#5f6f67] dark:text-zinc-300">
-                    Partner {i}
-                  </span>
+                  <div>
+                    <h4 className="text-xl font-semibold text-[#19221d] dark:text-white mb-2">
+                      {partner.name}
+                    </h4>
+                    <p className="text-sm text-[#5f6f67] dark:text-zinc-300 mb-4">
+                      {partner.description}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2 text-sm text-[#4b5563] dark:text-zinc-200">
+                    <p>{partner.location}</p>
+                    <p>{partner.phone}</p>
+                    <p>{partner.email}</p>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                        partner.location
+                      )}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex mt-3 items-center justify-center rounded-full bg-[#336158] px-4 py-2 text-sm font-medium text-white hover:bg-[#2a4c48] transition-colors"
+                    >
+                      View on map
+                    </a>
+                  </div>
                 </motion.div>
               ))}
             </motion.div>
