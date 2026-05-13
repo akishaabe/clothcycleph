@@ -1,9 +1,5 @@
 name = "clothcycle-api"
 main = "src/worker.ts"
-compatibility_date = "2026-05-12"
-
-name = "clothcycle-api"
-main = "src/worker.ts"
 compatibility_date = "2026-05-13"
 
 # Cloudflare Pages / Workers deployment configuration
@@ -32,10 +28,6 @@ TWO_FACTOR_ENCRYPTION_KEY = "replace-with-encryption-key"
 # R2 (Object Storage)
 R2_BUCKET_NAME = "clothcycle-uploads"
 R2_ACCOUNT_ID = "replace-with-account-id"
-
-# Fallback proxy (for endpoints not yet ported to D1)
-# Once all endpoints are ported to D1, this can be removed
-BACKEND_ORIGIN = "https://api.clothcycleph.com"
 
 # D1 Database - Update database_id after creating database
 [[d1_databases]]

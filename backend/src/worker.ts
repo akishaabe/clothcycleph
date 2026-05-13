@@ -1,310 +1,593 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
-import { bearerAuth } from 'hono/bearer-auth';
+import { z } from 'zod';
+import { verifyJwt } from './utils/workerJwt.js';
 import {
   signupD1,
   loginD1,
+  continueWithGoogleD1,
   verifyTwoFactorD1,
+  resendTwoFactorCodeD1,
+  forgotPasswordD1,
+  resetPasswordD1,
   getProfileD1,
   updateProfileD1,
-} from './services/authD1Service';
-import { verifyToken } from './utils/auth';
-import { D1Database } from './config/d1';
+  getTwoFactorStatusD1,
+  setupTwoFactorD1,
+  enableTwoFactorD1,
+  disableTwoFactorD1,
+} from './services/authD1Service.js';
+import {
+  createSubmissionD1,
+  getUserSubmissionsD1,
+  getSubmissionByIdD1,
+  updateSubmissionStatusD1,
+} from './services/d1SubmissionService.js';
+import {
+  getMessageContactsD1,
+  getConversationsD1,
+  getMessagesD1,
+  sendMessageD1,
+  markMessageAsReadD1,
+} from './services/d1MessageService.js';
+import {
+  getNotificationsD1,
+  getUnreadNotificationCountD1,
+  markNotificationAsReadD1,
+  markAllNotificationsAsReadD1,
+} from './services/d1NotificationService.js';
+import {
+  createTransactionD1,
+  getTransactionsBySubmissionD1,
+  getTransactionsByUserD1,
+  getTransactionsByPartnerD1,
+  updateTransactionStatusD1,
+} from './services/d1TransactionService.js';
+import { uploadFileToR2 } from './services/d1UploadService.js';
+import type { D1Database } from './config/d1.js';
+import type { EmailProvider } from './services/workerEmailService.js';
+import { createSubmissionSchema, updateSubmissionStatusSchema } from './schemas/submissions.js';
+import { sendMessageSchema } from './schemas/messages.js';
+import { createTransactionSchema, updateTransactionStatusSchema } from './schemas/transactions.js';
+import {
+  remindDssRequestSchema,
+  sendDssRecommendationSchema,
+  updateDssRequestStatusSchema,
+} from './schemas/dss.js';
+import {
+  getPartnerDssRequestsD1,
+  getSubmissionDssD1,
+  getUserDssRequestsD1,
+  listDssPartnersD1,
+  remindDssRequestD1,
+  sendRecommendationToPartnerD1,
+  updateDssRequestStatusD1,
+} from './services/d1DssService.js';
+import { listPartnerLocationsD1 } from './services/d1GisService.js';
 
-type CloudflareEnv = {
+type WorkerFile = {
+  arrayBuffer: () => Promise<ArrayBuffer>;
+  name: string;
+  type: string;
+  size?: number;
+};
+
+
+interface CloudflareEnv {
   DB: D1Database;
-  R2_BUCKET?: any; // Cloudflare R2 bucket binding
-  BACKEND_ORIGIN?: string;
-  JWT_SECRET?: string;
-  TWO_FACTOR_ENCRYPTION_KEY?: string;
-  EMAIL_PROVIDER?: string;
+  R2_BUCKET: any;
+  JWT_SECRET: string;
+  TWO_FACTOR_ENCRYPTION_KEY: string;
+  EMAIL_PROVIDER?: EmailProvider;
   BREVO_API_KEY?: string;
   SENDGRID_API_KEY?: string;
   EMAIL_FROM?: string;
-};
+  GOOGLE_CLIENT_ID?: string;
+  APP_URL?: string;
+  NODE_ENV?: string;
+}
 
-type HonoEnv = {
-  Bindings: CloudflareEnv;
-  Variables: {
-    user?: {
-      id: string;
-      email: string;
-      role: 'user' | 'partner' | 'admin';
-    };
-  };
-};
+const app = new Hono<{ Bindings: CloudflareEnv }>();
 
-const app = new Hono<HonoEnv>().basePath('/api');
-
-// Security middleware
 app.use('*', secureHeaders());
 app.use(
   '*',
   cors({
-    origin: (origin) => origin || '',
+    origin: '*',
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   })
 );
 
-// Health check endpoint
-app.get('/health', (c) => {
-  const db = c.env.DB;
-  return c.json({
-    status: 'ok',
-    runtime: 'cloudflare-workers',
-    framework: 'hono',
-    database: db ? 'bound' : 'missing',
-    storage: c.env.R2_BUCKET ? 'bound' : 'missing',
-  });
+app.onError((error, c) => {
+  console.error(error);
+  const status = getStatusCode(error);
+  return c.json({ 
+    error: error.message || 'Internal server error',
+    stack: c.env.NODE_ENV === 'development' ? error.stack : undefined 
+  }, status as any);
 });
 
-// Auth middleware for protected routes
-const authMiddleware = async (c: any, next: any) => {
-  const auth = c.req.header('Authorization');
-  const token = auth?.replace('Bearer ', '');
+const getAuthOptions = (c: any) => ({
+  jwtSecret: c.env.JWT_SECRET || 'CHANGE_ME',
+  totpEncryptionKey: c.env.TWO_FACTOR_ENCRYPTION_KEY || 'CHANGE_ME_TOO',
+  emailProvider: c.env.EMAIL_PROVIDER,
+  emailApiKey: c.env.BREVO_API_KEY || c.env.SENDGRID_API_KEY,
+  emailFrom: c.env.EMAIL_FROM,
+  appUrl: c.env.APP_URL,
+  googleClientId: c.env.GOOGLE_CLIENT_ID,
+  exposeDevSecrets: Boolean(!c.env.EMAIL_PROVIDER),
+});
 
-  if (!token) {
-    return c.json({ error: 'Unauthorized: No token provided' }, 401);
+const requireAuth = async (c: any, next: any) => {
+  const authorizationHeader = c.req.header('Authorization');
+  if (!authorizationHeader || !authorizationHeader.startsWith('Bearer ')) {
+    return c.json({ error: 'Unauthorized' }, 401);
   }
 
+  const token = authorizationHeader.replace('Bearer ', '');
   try {
-    const decoded = verifyToken(token);
-    c.set('user', decoded);
-    await next();
+    const payload = await verifyJwt(token, c.env.JWT_SECRET || 'CHANGE_ME');
+    c.set('user', payload);
+    return await next();
   } catch (error) {
-    return c.json({ error: 'Unauthorized: Invalid token' }, 401);
+    return c.json({ error: 'Unauthorized' }, 401);
   }
 };
 
-// ============ AUTH ROUTES ============
+const parseJsonBody = async <T extends z.ZodTypeAny>(c: any, schema: T): Promise<z.infer<T>> => {
+  const body = await c.req.json();
+  return schema.parse(body);
+};
 
-const auth = new Hono<HonoEnv>();
+const jsonList = (c: any, data: unknown[] | undefined) => {
+  const rows = data ?? [];
+  return c.json({ data: rows, count: rows.length });
+};
 
-// Signup
-auth.post('/signup', async (c) => {
-  try {
-    const db = c.env.DB;
-    const body = await c.req.json();
-    const { email, name, password } = body;
+const jsonData = (c: any, data: unknown, status = 200) => c.json({ data }, status as any);
 
-    if (!email || !name || !password) {
-      return c.json({ error: 'Email, name, and password are required' }, 400);
-    }
-
-    const result = await signupD1(db, email, name, password);
-
-    return c.json(
-      {
-        message: 'User created successfully. Check your email for verification code.',
-        requiresTwoFactor: true,
-        two_factor_token: result.twoFactorToken,
-        two_factor_method: 'email',
-      },
-      201
-    );
-  } catch (error) {
-    const message = (error as Error).message;
-    return c.json({ error: message || 'Signup failed' }, 400);
-  }
+const getPartnerSearchOptions = (c: any) => ({
+  latitude: parseOptionalNumber(c.req.query('lat')),
+  longitude: parseOptionalNumber(c.req.query('lng')),
+  pathway: c.req.query('pathway') || undefined,
+  radiusKm: parseOptionalNumber(c.req.query('radius_km')),
 });
 
-// Login
-auth.post('/login', async (c) => {
-  try {
-    const db = c.env.DB;
-    const body = await c.req.json();
-    const { email, password } = body;
-
-    if (!email || !password) {
-      return c.json({ error: 'Email and password are required' }, 400);
-    }
-
-    const ipAddress = c.req.header('cf-connecting-ip');
-    const userAgent = c.req.header('user-agent');
-
-    const result = await loginD1(db, email, password, ipAddress, userAgent);
-
-    if (result.requiresTwoFactor) {
-      return c.json({
-        message: `Two-factor verification required. ${
-          result.twoFactorMethod === 'totp'
-            ? 'Enter your authenticator code.'
-            : 'Check your email for verification code.'
-        }`,
-        requiresTwoFactor: true,
-        two_factor_token: result.twoFactorToken,
-        two_factor_method: result.twoFactorMethod,
-      });
-    }
-
-    return c.json({
-      message: 'Login successful',
-      user: result.user,
-      token: result.token,
-    });
-  } catch (error) {
-    const message = (error as Error).message;
-    return c.json({ error: message || 'Login failed' }, 400);
+const parseOptionalNumber = (value?: string) => {
+  if (!value) {
+    return undefined;
   }
-});
 
-// Verify 2FA
-auth.post('/2fa/verify', async (c) => {
-  try {
-    const db = c.env.DB;
-    const body = await c.req.json();
-    const { two_factor_token, code } = body;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
 
-    if (!two_factor_token || !code) {
-      return c.json({ error: 'Two-factor token and code are required' }, 400);
-    }
-
-    const ipAddress = c.req.header('cf-connecting-ip');
-    const userAgent = c.req.header('user-agent');
-
-    const result = await verifyTwoFactorD1(db, two_factor_token, code, ipAddress, userAgent);
-
-    return c.json({
-      message: 'Login successful',
-      user: result.user,
-      token: result.token,
-    });
-  } catch (error) {
-    const message = (error as Error).message;
-    return c.json({ error: message || 'Two-factor verification failed' }, 400);
+const getStatusCode = (error: Error) => {
+  if (error instanceof z.ZodError) {
+    return 400;
   }
-});
 
-// Get profile (protected)
-auth.get('/profile', authMiddleware, async (c) => {
-  try {
-    const db = c.env.DB;
-    const user = c.get('user');
-
-    if (!user) {
-      return c.json({ error: 'User not found' }, 401);
-    }
-
-    const profile = await getProfileD1(db, user.id);
-    return c.json({ data: profile });
-  } catch (error) {
-    const message = (error as Error).message;
-    return c.json({ error: message || 'Failed to get profile' }, 400);
+  if (/not found/i.test(error.message)) {
+    return 404;
   }
-});
 
-// Update profile (protected)
-auth.put('/profile', authMiddleware, async (c) => {
-  try {
-    const db = c.env.DB;
-    const user = c.get('user');
-    const body = await c.req.json();
-
-    if (!user) {
-      return c.json({ error: 'User not found' }, 401);
-    }
-
-    const updated = await updateProfileD1(db, user.id, body);
-    return c.json({
-      message: 'Profile updated successfully',
-      data: updated,
-    });
-  } catch (error) {
-    const message = (error as Error).message;
-    return c.json({ error: message || 'Failed to update profile' }, 400);
+  if (/permission|forbidden|only admins|only admins or partners/i.test(error.message)) {
+    return 403;
   }
-});
 
-// Routes info
-auth.get('/routes', (c) => {
+  if (/unauthorized|not authenticated/i.test(error.message)) {
+    return 401;
+  }
+
+  return 400;
+};
+
+app.get('/', (c) => c.json({ message: 'ClothCycle Cloudflare Worker API' }));
+
+app.get('/api/health', (c) =>
+  c.json({
+    status: 'ok',
+    message: 'ClothCycle Cloudflare Worker API is running',
+    database: c.env.DB ? 'bound' : 'missing',
+    storage: c.env.R2_BUCKET ? 'bound' : 'missing',
+  })
+);
+
+app.post('/api/auth/signup', async (c) => {
+  const body = await c.req.json();
+  const { email, name, password } = body;
+  if (!email || !name || !password) {
+    return c.json({ error: 'Missing signup fields' }, 400);
+  }
+
+  const result = await signupD1(c.env.DB, email, name, password, getAuthOptions(c));
   return c.json({
-    message: 'Cloudflare Workers auth API with D1 database',
-    status: 'active',
-    routes: [
-      'POST /api/auth/signup',
-      'POST /api/auth/login',
-      'POST /api/auth/2fa/verify',
-      'GET /api/auth/profile (protected)',
-      'PUT /api/auth/profile (protected)',
-    ],
-    note: 'Auth service is now running on D1 (Cloudflare SQLite). Additional endpoints being ported.',
+    message: 'Signup successful - please verify your email with the code sent.',
+    two_factor_token: result.twoFactorToken,
+    requiresTwoFactor: result.requiresTwoFactor,
+    two_factor_method: result.twoFactorMethod,
   });
 });
 
-// Fallback auth routes (not yet ported)
-auth.all('*', (c) => {
-  return c.json(
-    {
-      error: 'Route not yet ported to D1',
-      next: 'More auth endpoints (2FA setup, password reset, etc.) are being ported to D1.',
-    },
-    501
+app.post('/api/auth/login', async (c) => {
+  const body = await c.req.json();
+  const { email, password } = body;
+  if (!email || !password) {
+    return c.json({ error: 'Missing login fields' }, 400);
+  }
+
+  const result = await loginD1(
+    c.env.DB,
+    email,
+    password,
+    getAuthOptions(c),
+    c.req.header('CF-Connecting-IP') || '',
+    c.req.header('User-Agent') || ''
   );
-});
-
-app.route('/auth', auth);
-
-// ============ FALLBACK PROXY (for non-auth routes) ============
-
-app.all('*', async (c) => {
-  const backendOrigin = c.env.BACKEND_ORIGIN;
-
-  if (!backendOrigin) {
-    return c.json(
-      {
-        error: 'API routes not yet ported to D1. Set BACKEND_ORIGIN to proxy to Express backend.',
-        status: 'partial',
-        auth_routes: 'available',
-        other_routes: 'requires BACKEND_ORIGIN',
-      },
-      501
-    );
-  }
-
-  return proxyToBackend(c, backendOrigin);
-});
-
-/**
- * Proxy requests to the Express backend for routes not yet ported to D1
- */
-async function proxyToBackend(c: any, backendOrigin: string) {
-  const incomingUrl = new URL(c.req.url);
-  const relativePath = incomingUrl.pathname.replace(/^\/api/, '') || '/';
-  const queryString = incomingUrl.search || '';
-  const targetUrl = `${backendOrigin.replace(/\/$/, '')}${relativePath}${queryString}`;
-
-  const headers = new Headers(c.req.headers);
-  headers.delete('host');
-  headers.delete('content-length');
-
-  const hasBody = !['GET', 'HEAD', 'OPTIONS'].includes(c.req.method);
-  const body = hasBody ? await c.req.raw.clone().arrayBuffer() : undefined;
-
-  try {
-    const response = await fetch(targetUrl, {
-      method: c.req.method,
-      headers,
-      body,
-      redirect: 'manual',
+  if (result.requiresTwoFactor) {
+    return c.json({
+      message: 'Two-factor authentication required',
+      requiresTwoFactor: true,
+      two_factor_token: result.twoFactorToken,
+      two_factor_method: result.twoFactorMethod,
     });
-
-    const responseHeaders = new Headers(response.headers);
-    responseHeaders.delete('transfer-encoding');
-
-    const responseBody = await response.arrayBuffer();
-    return c.body(responseBody, response.status, Object.fromEntries(responseHeaders.entries()));
-  } catch (error) {
-    return c.json(
-      {
-        error: 'Failed to reach backend',
-        message: (error as Error).message,
-      },
-      502
-    );
   }
-}
+
+  return c.json({ message: 'Login successful', token: result.token, user: result.user });
+});
+
+app.post('/api/auth/google', async (c) => {
+  const body = await c.req.json();
+  const { credential, role } = body;
+  if (!credential || !role) {
+    return c.json({ error: 'Missing Google login fields' }, 400);
+  }
+
+  const result = await continueWithGoogleD1(
+    c.env.DB,
+    credential,
+    role,
+    getAuthOptions(c),
+    c.req.header('CF-Connecting-IP') || '',
+    c.req.header('User-Agent') || ''
+  );
+  if (result.requiresTwoFactor) {
+    return c.json({
+      message: 'Two-factor authentication required',
+      requiresTwoFactor: true,
+      two_factor_token: result.twoFactorToken,
+      two_factor_method: result.twoFactorMethod,
+    });
+  }
+
+  return c.json({ message: 'Login successful', token: result.token, user: result.user });
+});
+
+app.post('/api/auth/2fa/verify', async (c) => {
+  const body = await c.req.json();
+  const { two_factor_token, code } = body;
+  if (!two_factor_token || !code) {
+    return c.json({ error: 'Missing verification fields' }, 400);
+  }
+
+  const result = await verifyTwoFactorD1(
+    c.env.DB,
+    two_factor_token,
+    code,
+    getAuthOptions(c),
+    c.req.header('CF-Connecting-IP') || '',
+    c.req.header('User-Agent') || ''
+  );
+  return c.json({ message: 'Verification successful', token: result.token, user: result.user });
+});
+
+app.post('/api/auth/2fa/resend', async (c) => {
+  const body = await c.req.json();
+  const { two_factor_token } = body;
+  if (!two_factor_token) {
+    return c.json({ error: 'Missing two_factor_token' }, 400);
+  }
+
+  const result = await resendTwoFactorCodeD1(c.env.DB, two_factor_token, getAuthOptions(c));
+  return c.json({
+    message: 'A new verification code has been sent.',
+    requiresTwoFactor: true,
+    two_factor_token: result.twoFactorToken,
+    two_factor_method: 'email',
+  });
+});
+
+app.post('/api/auth/forgot-password', async (c) => {
+  const body = await c.req.json();
+  const { email } = body;
+  if (!email) {
+    return c.json({ error: 'Missing email' }, 400);
+  }
+
+  const result = await forgotPasswordD1(c.env.DB, email, getAuthOptions(c));
+  return c.json(result);
+});
+
+app.post('/api/auth/reset-password', async (c) => {
+  const body = await c.req.json();
+  const { token, password } = body;
+  if (!token || !password) {
+    return c.json({ error: 'Missing reset fields' }, 400);
+  }
+
+  const result = await resetPasswordD1(c.env.DB, token, password);
+  return c.json(result);
+});
+
+app.get('/api/auth/profile', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const profile = await getProfileD1(c.env.DB, user.id!);
+  return jsonData(c, profile);
+});
+
+app.put('/api/auth/profile', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const body = await c.req.json();
+  const profile = await updateProfileD1(c.env.DB, user.id!, body);
+  return c.json({ message: 'Profile updated', data: profile });
+});
+
+app.get('/api/auth/2fa/status', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const status = await getTwoFactorStatusD1(c.env.DB, user.id!);
+  return c.json(status);
+});
+
+app.get('/api/auth/2fa/setup', requireAuth, (c) =>
+  c.json({ message: 'POST to /api/auth/2fa/setup with { password } to begin setup.' })
+);
+
+app.post('/api/auth/2fa/setup', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; email?: string };
+  const body = await c.req.json();
+  const { password } = body;
+  if (!password) {
+    return c.json({ error: 'Missing password' }, 400);
+  }
+
+  const result = await setupTwoFactorD1(c.env.DB, user.id!, password, getAuthOptions(c));
+  return c.json(result);
+});
+
+app.post('/api/auth/2fa/enable', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const body = await c.req.json();
+  const { password, code } = body;
+  if (!password || !code) {
+    return c.json({ error: 'Missing enable fields' }, 400);
+  }
+
+  const result = await enableTwoFactorD1(c.env.DB, user.id!, password, code, getAuthOptions(c));
+  return c.json(result);
+});
+
+app.post('/api/auth/2fa/disable', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const body = await c.req.json();
+  const { password, code } = body;
+  const result = await disableTwoFactorD1(c.env.DB, user.id!, password, code, getAuthOptions(c));
+  return c.json(result);
+});
+
+app.post('/api/submissions', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const body = await parseJsonBody(c, createSubmissionSchema);
+  const submission = await createSubmissionD1(c.env.DB, user.id!, body);
+  return c.json({ message: 'Submission created successfully', data: submission }, 201);
+});
+
+app.get('/api/submissions', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const result = await getUserSubmissionsD1(c.env.DB, user.id!);
+  return jsonList(c, result.results);
+});
+
+app.get('/api/submissions/:id', requireAuth, async (c) => {
+  const submissionId = c.req.param('id');
+  const submission = await getSubmissionByIdD1(c.env.DB, submissionId);
+  if (!submission) {
+    return c.json({ error: 'Submission not found' }, 404);
+  }
+  return jsonData(c, submission);
+});
+
+app.put('/api/submissions/:id/status', requireAuth, async (c) => {
+  const submissionId = c.req.param('id');
+  const body = await parseJsonBody(c, updateSubmissionStatusSchema);
+  const updated = await updateSubmissionStatusD1(c.env.DB, submissionId, body.status);
+  if (!updated) {
+    return c.json({ error: 'Submission not found' }, 404);
+  }
+  return c.json({ message: 'Submission updated successfully', data: updated });
+});
+
+app.get('/api/gis/partners', requireAuth, async (c) => {
+  const result = await listPartnerLocationsD1(c.env.DB, getPartnerSearchOptions(c));
+  return jsonList(c, result.results);
+});
+
+app.get('/api/dss/partners', requireAuth, async (c) => {
+  const result = await listDssPartnersD1(c.env.DB, getPartnerSearchOptions(c));
+  return jsonList(c, result.results);
+});
+
+app.get('/api/dss/submissions/:submissionId', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; role?: string };
+  const data = await getSubmissionDssD1(c.env.DB, c.req.param('submissionId'), user.id!, user.role);
+  return jsonData(c, data);
+});
+
+app.post('/api/dss/send', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; role?: string };
+  const body = await parseJsonBody(c, sendDssRecommendationSchema);
+  const data = await sendRecommendationToPartnerD1(c.env.DB, user.id!, user.role, body);
+  return c.json({ message: 'Recommendation sent to partner', data }, 201);
+});
+
+app.get('/api/dss/requests/user', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const result = await getUserDssRequestsD1(c.env.DB, user.id!);
+  return jsonList(c, result.results);
+});
+
+app.get('/api/dss/requests/partner', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; email?: string; role?: string };
+  const result = await getPartnerDssRequestsD1(c.env.DB, user.id!, user.email, user.role);
+  return jsonList(c, result.results);
+});
+
+app.post('/api/dss/requests/:id/remind', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const body = await parseJsonBody(c, remindDssRequestSchema);
+  const result = await remindDssRequestD1(c.env.DB, user.id!, c.req.param('id'), body.message);
+  return c.json({ message: `Reminder sent to ${result.partnerName}.`, data: result.request });
+});
+
+app.put('/api/dss/requests/:id/status', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; email?: string; role?: string };
+  const body = await parseJsonBody(c, updateDssRequestStatusSchema);
+  const data = await updateDssRequestStatusD1(
+    c.env.DB,
+    user.id!,
+    user.email,
+    user.role,
+    c.req.param('id'),
+    body.status,
+    body.notes
+  );
+  return c.json({ message: 'Request status updated', data });
+});
+
+app.get('/api/messages/contacts', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; role?: string };
+  const result = await getMessageContactsD1(c.env.DB, user.id!, user.role as string);
+  return jsonList(c, result.results);
+});
+
+app.get('/api/messages/conversations', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const result = await getConversationsD1(c.env.DB, user.id!);
+  return jsonList(c, result.results);
+});
+
+app.get('/api/messages/:userId', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const otherUserId = c.req.param('userId');
+  const result = await getMessagesD1(c.env.DB, user.id!, otherUserId);
+  return jsonList(c, result.results);
+});
+
+app.post('/api/messages', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const body = await parseJsonBody(c, sendMessageSchema);
+  const message = await sendMessageD1(c.env.DB, user.id!, body.to_user_id, body.content);
+  return c.json({ message: 'Message sent successfully', data: message }, 201);
+});
+
+app.put('/api/messages/:id/read', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const messageId = c.req.param('id');
+  const updated = await markMessageAsReadD1(c.env.DB, messageId, user.id!);
+  if (!updated) {
+    return c.json({ error: 'Message not found' }, 404);
+  }
+  return jsonData(c, updated);
+});
+
+app.post('/api/upload', requireAuth, async (c) => {
+  if (!c.env.R2_BUCKET) {
+    return c.json({ error: 'R2 bucket is not configured' }, 503);
+  }
+
+  const formData = await c.req.formData();
+  const file = formData.get('file') as WorkerFile | null;
+  if (!file || typeof file.arrayBuffer !== 'function') {
+    return c.json({ error: 'Missing file' }, 400);
+  }
+
+  const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+  if (!allowedMimes.includes(file.type)) {
+    return c.json({ error: 'Only image files are allowed' }, 400);
+  }
+
+  if (file.size && file.size > 5 * 1024 * 1024) {
+    return c.json({ error: 'File size must be less than 5MB' }, 400);
+  }
+
+  const fileData = await file.arrayBuffer();
+  const upload = await uploadFileToR2(c.env.R2_BUCKET, fileData, file.name, file.type);
+  return c.json({ message: 'File uploaded successfully', ...upload }, 201);
+});
+
+app.get('/api/notifications', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const result = await getNotificationsD1(c.env.DB, user.id!, c.req.query('unread') === 'true');
+  return jsonList(c, result.results);
+});
+
+app.get('/api/notifications/count', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const count = await getUnreadNotificationCountD1(c.env.DB, user.id!);
+  return c.json({ unread_count: count });
+});
+
+app.put('/api/notifications/:id/read', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const notificationId = c.req.param('id');
+  const updated = await markNotificationAsReadD1(c.env.DB, notificationId, user.id!);
+  if (!updated) {
+    return c.json({ error: 'Notification not found' }, 404);
+  }
+  return c.json({ message: 'Notification marked read', data: updated });
+});
+
+app.put('/api/notifications/read-all', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const updated = await markAllNotificationsAsReadD1(c.env.DB, user.id!);
+  return c.json({ message: 'All notifications marked as read', count: updated.length });
+});
+
+app.post('/api/transactions', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; role?: string };
+  const body = await parseJsonBody(c, createTransactionSchema);
+  const transaction = await createTransactionD1(c.env.DB, user.id!, user.role as string, body);
+  return c.json({ message: 'Transaction created successfully', data: transaction }, 201);
+});
+
+app.get('/api/transactions/submission/:submissionId', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; role?: string };
+  const submissionId = c.req.param('submissionId');
+  const result = await getTransactionsBySubmissionD1(c.env.DB, user.id!, user.role as string, submissionId);
+  return jsonList(c, result.results);
+});
+
+app.get('/api/transactions/user', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const result = await getTransactionsByUserD1(c.env.DB, user.id!);
+  return jsonList(c, result.results);
+});
+
+app.get('/api/transactions/partner/:partnerId', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; role?: string };
+  const result = await getTransactionsByPartnerD1(c.env.DB, user.id!, user.role as string, c.req.param('partnerId'));
+  return jsonList(c, result.results);
+});
+
+app.put('/api/transactions/:id', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; role?: string };
+  const transactionId = c.req.param('id');
+  const body = await parseJsonBody(c, updateTransactionStatusSchema);
+  const result = await updateTransactionStatusD1(c.env.DB, user.id!, user.role as string, transactionId, body.status, body.notes);
+  return c.json({ message: 'Transaction updated successfully', data: result });
+});
+
+app.all('*', (c) => c.json({ error: 'Route not found' }, 404));
 
 export default app;
-

@@ -166,6 +166,10 @@ export interface Partner {
   contact_person?: string;
   rating?: number;
   verified?: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
+  distance_km?: number | null;
+  gis_rank_reason?: string;
 }
 
 export interface DssRecommendation {

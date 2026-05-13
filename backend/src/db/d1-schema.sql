@@ -10,18 +10,22 @@ CREATE TABLE IF NOT EXISTS partners (
   email TEXT UNIQUE NOT NULL,
   phone TEXT,
   address TEXT,
+  user_id TEXT UNIQUE REFERENCES users(id) ON DELETE SET NULL,
   website TEXT,
   service_types TEXT,
   contact_person TEXT,
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'inactive', 'rejected')),
   verified INTEGER DEFAULT 0,
   rating REAL DEFAULT 0,
+  latitude REAL CHECK (latitude IS NULL OR (latitude >= -90 AND latitude <= 90)),
+  longitude REAL CHECK (longitude IS NULL OR (longitude >= -180 AND longitude <= 180)),
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_partners_status ON partners(status);
 CREATE INDEX IF NOT EXISTS idx_partners_email ON partners(email);
+CREATE INDEX IF NOT EXISTS idx_partners_user_id ON partners(user_id);
 
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
@@ -194,7 +198,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   from_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   to_partner_id TEXT NOT NULL REFERENCES partners(id) ON DELETE SET NULL,
   type TEXT NOT NULL CHECK (type IN ('recycle', 'donate', 'upcycle', 'buyback')),
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'rejected')),
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'in_progress', 'completed', 'rejected')),
   amount REAL,
   notes TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
