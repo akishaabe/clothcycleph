@@ -2,15 +2,63 @@ name = "clothcycle-api"
 main = "src/worker.ts"
 compatibility_date = "2026-05-12"
 
-[vars]
-EMAIL_PROVIDER = "console"
-EMAIL_FROM = "ClothCycle PH <no-reply@yourdomain.com>"
+name = "clothcycle-api"
+main = "src/worker.ts"
+compatibility_date = "2026-05-13"
 
+# Cloudflare Pages / Workers deployment configuration
+[build]
+command = "npm run worker:build"
+
+[env.production]
+name = "clothcycle-api"
+routes = [
+  { pattern = "api.clothcycleph.com/*", zone_id = "replace-with-zone-id" }
+]
+
+[env.staging]
+name = "clothcycle-api-staging"
+
+[vars]
+# Email Configuration
+EMAIL_PROVIDER = "sendgrid"
+EMAIL_FROM = "ClothCycle PH <noreply@clothcycleph.com>"
+SENDGRID_API_KEY = "replace-with-sendgrid-key"
+
+# Security
+JWT_SECRET = "replace-with-secure-jwt-secret"
+TWO_FACTOR_ENCRYPTION_KEY = "replace-with-encryption-key"
+
+# R2 (Object Storage)
+R2_BUCKET_NAME = "clothcycle-uploads"
+R2_ACCOUNT_ID = "replace-with-account-id"
+
+# Fallback proxy (for endpoints not yet ported to D1)
+# Once all endpoints are ported to D1, this can be removed
+BACKEND_ORIGIN = "https://api.clothcycleph.com"
+
+# D1 Database - Update database_id after creating database
 [[d1_databases]]
 binding = "DB"
 database_name = "clothcycle"
-database_id = "replace-with-cloudflare-d1-database-id"
+database_id = "replace-with-d1-database-id"
 
+# R2 Bucket
 [[r2_buckets]]
 binding = "R2_BUCKET"
 bucket_name = "clothcycle-uploads"
+jurisdiction = "eu"
+
+# Queues (optional - for async tasks)
+# [[queues.producers]]
+# binding = "QUEUE"
+# 
+# [[queues.consumers]]
+# queue = "clothcycle-tasks"
+# max_batch_size = 10
+# max_batch_timeout = 30
+
+# KV Namespace (optional - for caching)
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "replace-with-kv-id"
