@@ -81,6 +81,8 @@ npx wrangler r2 bucket create clothcycle-uploads
 npx wrangler secret put JWT_SECRET
 npx wrangler secret put TWO_FACTOR_ENCRYPTION_KEY
 npx wrangler secret put SENDGRID_API_KEY
+npx wrangler secret put TWILIO_ACCOUNT_SID
+npx wrangler secret put TWILIO_AUTH_TOKEN
 ```
 
 6. Build and deploy.
@@ -114,3 +116,4 @@ VITE_API_URL=http://localhost:8787/api
 - `BACKEND_ORIGIN` is no longer used because the Worker does not proxy to Express.
 - Queue-backed jobs were replaced with direct D1 side effects for migrated routes, such as creating notifications when transactions change.
 - GIS partner discovery uses partner coordinates in D1 and returns `distance_km` plus rank reasoning when `lat` and `lng` are supplied.
+- SMS 2FA uses Twilio over `fetch` in the Worker. Configure `SMS_PROVIDER=twilio`, `TWILIO_FROM_NUMBER`, and store `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` as secrets.

@@ -21,6 +21,10 @@ EMAIL_PROVIDER = "sendgrid"
 EMAIL_FROM = "ClothCycle PH <noreply@clothcycleph.com>"
 SENDGRID_API_KEY = "replace-with-sendgrid-key"
 
+# SMS Configuration
+SMS_PROVIDER = "twilio"
+TWILIO_FROM_NUMBER = "+15551234567"
+
 # Security
 JWT_SECRET = "replace-with-secure-jwt-secret"
 TWO_FACTOR_ENCRYPTION_KEY = "replace-with-encryption-key"

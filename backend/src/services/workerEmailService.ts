@@ -1,4 +1,5 @@
 export type EmailProvider = 'sendgrid' | 'brevo';
+export type SmsProvider = 'twilio';
 
 interface SendEmailParams {
   provider: EmailProvider;
@@ -89,4 +90,47 @@ export async function sendPasswordResetLink(
   const subject = 'Reset your ClothCycle password';
   const html = `<p>Click the link below to reset your password:</p><p><a href="${resetLink}">${resetLink}</a></p><p>If you did not request this, ignore this email.</p>`;
   return sendEmail({ provider, apiKey, fromEmail, toEmail, subject, html });
+}
+
+export async function sendSmsTwoFactorCode(
+  provider: SmsProvider,
+  options: {
+    accountSid?: string;
+    authToken?: string;
+    fromNumber?: string;
+  },
+  toPhone: string,
+  oneTimeCode: string
+) {
+  if (provider !== 'twilio') {
+    throw new Error(`Unsupported SMS provider: ${provider}`);
+  }
+
+  if (!options.accountSid || !options.authToken || !options.fromNumber) {
+    throw new Error('Twilio SMS is not configured');
+  }
+
+  const body = new URLSearchParams({
+    To: toPhone,
+    From: options.fromNumber,
+    Body: `Your ClothCycle verification code is ${oneTimeCode}. It expires in 10 minutes.`,
+  });
+
+  const credentials = btoa(`${options.accountSid}:${options.authToken}`);
+  const response = await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${options.accountSid}/Messages.json`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    }
+  );
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Twilio SMS failed: ${response.status} ${errorBody}`);
+  }
 }

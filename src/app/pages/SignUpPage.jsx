@@ -61,7 +61,9 @@ export function SignUpPage() {
                 setSuccessMessage(
                   authResponse.two_factor_method === "totp"
                     ? "Enter your authenticator code to continue."
-                    : "Check your email for the 6-digit verification code."
+                    : authResponse.two_factor_method === "sms"
+                      ? `Check your phone for the 6-digit verification code.${authResponse.dev_code ? ` Dev code: ${authResponse.dev_code}` : ""}`
+                      : "Check your email for the 6-digit verification code."
                 );
                 return;
               }
@@ -130,7 +132,9 @@ export function SignUpPage() {
         setSuccessMessage(
           response.two_factor_method === "totp"
             ? "Enter your authenticator code to continue."
-            : "Check your email for the 6-digit verification code."
+            : response.two_factor_method === "sms"
+              ? `Check your phone for the 6-digit verification code.${response.dev_code ? ` Dev code: ${response.dev_code}` : ""}`
+              : "Check your email for the 6-digit verification code."
         );
         return;
       }
@@ -191,7 +195,9 @@ export function SignUpPage() {
             {twoFactorToken
               ? twoFactorMethod === "totp"
                 ? "Enter your authenticator code before opening your dashboard"
-                : "Enter the code sent to your email before opening your dashboard"
+                : twoFactorMethod === "sms"
+                  ? "Enter the code sent to your phone before opening your dashboard"
+                  : "Enter the code sent to your email before opening your dashboard"
               : "Create your account to get started"}
           </p>
 

@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context, type Next } from 'hono';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
 import { z } from 'zod';
@@ -9,6 +9,7 @@ import {
   continueWithGoogleD1,
   verifyTwoFactorD1,
   resendTwoFactorCodeD1,
+  sendAuthenticatedSmsTwoFactorCodeD1,
   forgotPasswordD1,
   resetPasswordD1,
   verifyResetCodeD1,
@@ -89,15 +90,27 @@ interface CloudflareEnv {
   JWT_SECRET: string;
   TWO_FACTOR_ENCRYPTION_KEY: string;
   EMAIL_PROVIDER?: EmailProvider;
+  SMS_PROVIDER?: 'twilio';
   BREVO_API_KEY?: string;
   SENDGRID_API_KEY?: string;
   EMAIL_FROM?: string;
+  TWILIO_ACCOUNT_SID?: string;
+  TWILIO_AUTH_TOKEN?: string;
+  TWILIO_FROM_NUMBER?: string;
   GOOGLE_CLIENT_ID?: string;
   APP_URL?: string;
   NODE_ENV?: string;
 }
 
-const app = new Hono<{ Bindings: CloudflareEnv }>();
+type Variables = {
+  user: {
+    id: string;
+    email: string;
+    role: string;
+  };
+};
+
+const app = new Hono<{ Bindings: CloudflareEnv; Variables: Variables }>();
 
 app.use('*', secureHeaders());
 app.use(
@@ -124,12 +137,19 @@ const getAuthOptions = (c: any) => ({
   emailProvider: c.env.EMAIL_PROVIDER,
   emailApiKey: c.env.BREVO_API_KEY || c.env.SENDGRID_API_KEY,
   emailFrom: c.env.EMAIL_FROM,
+  smsProvider: c.env.SMS_PROVIDER,
+  twilioAccountSid: c.env.TWILIO_ACCOUNT_SID,
+  twilioAuthToken: c.env.TWILIO_AUTH_TOKEN,
+  twilioFromNumber: c.env.TWILIO_FROM_NUMBER,
   appUrl: c.env.APP_URL,
   googleClientId: c.env.GOOGLE_CLIENT_ID,
   exposeDevSecrets: Boolean(!c.env.EMAIL_PROVIDER),
 });
 
-const requireAuth = async (c: any, next: any) => {
+const requireAuth = async (
+  c: Context<{ Bindings: CloudflareEnv; Variables: Variables }>,
+  next: Next
+) => {
   const authorizationHeader = c.req.header('Authorization');
   if (!authorizationHeader || !authorizationHeader.startsWith('Bearer ')) {
     return c.json({ error: 'Unauthorized' }, 401);
@@ -138,7 +158,7 @@ const requireAuth = async (c: any, next: any) => {
   const token = authorizationHeader.replace('Bearer ', '');
   try {
     const payload = await verifyJwt(token, c.env.JWT_SECRET || 'CHANGE_ME');
-    c.set('user', payload);
+    c.set('user', payload as any);
     return await next();
   } catch (error) {
     return c.json({ error: 'Unauthorized' }, 401);
@@ -227,6 +247,7 @@ app.post('/api/auth/signup', async (c) => {
     two_factor_token: result.twoFactorToken,
     requiresTwoFactor: result.requiresTwoFactor,
     two_factor_method: result.twoFactorMethod,
+    dev_code: result.devCode,
   });
 });
 
@@ -251,6 +272,7 @@ app.post('/api/auth/login', async (c) => {
       requiresTwoFactor: true,
       two_factor_token: result.twoFactorToken,
       two_factor_method: result.twoFactorMethod,
+      dev_code: result.devCode,
     });
   }
 
@@ -278,6 +300,7 @@ app.post('/api/auth/google', async (c) => {
       requiresTwoFactor: true,
       two_factor_token: result.twoFactorToken,
       two_factor_method: result.twoFactorMethod,
+      dev_code: result.devCode,
     });
   }
 
@@ -314,7 +337,8 @@ app.post('/api/auth/2fa/resend', async (c) => {
     message: 'A new verification code has been sent.',
     requiresTwoFactor: true,
     two_factor_token: result.twoFactorToken,
-    two_factor_method: 'email',
+    two_factor_method: result.twoFactorMethod,
+    dev_code: result.devCode,
   });
 });
 
@@ -355,13 +379,13 @@ app.post('/api/auth/verify-reset-code', async (c) => {
 });
 
 app.get('/api/auth/profile', requireAuth, async (c) => {
-  const user = (c as any).get('user') as { id?: string };
+  const user = c.get('user');
   const profile = await getProfileD1(c.env.DB, user.id!);
   return jsonData(c, profile);
 });
 
 app.put('/api/auth/profile', requireAuth, async (c) => {
-  const user = (c as any).get('user') as { id?: string };
+  const user = c.get('user');
   const body = await c.req.json();
   const profile = await updateProfileD1(c.env.DB, user.id!, body);
   return c.json({ message: 'Profile updated', data: profile });
@@ -385,7 +409,7 @@ app.post('/api/auth/2fa/setup', requireAuth, async (c) => {
     return c.json({ error: 'Missing password' }, 400);
   }
 
-  const result = await setupTwoFactorD1(c.env.DB, user.id!, password, getAuthOptions(c));
+  const result = await setupTwoFactorD1(c.env.DB, user.id!, password, getAuthOptions(c), body.method, body.phone);
   return c.json(result);
 });
 
@@ -399,6 +423,12 @@ app.post('/api/auth/2fa/enable', requireAuth, async (c) => {
 
   const result = await enableTwoFactorD1(c.env.DB, user.id!, password, code, getAuthOptions(c));
   return c.json(result);
+});
+
+app.post('/api/auth/2fa/sms/send', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const result = await sendAuthenticatedSmsTwoFactorCodeD1(c.env.DB, user.id!, getAuthOptions(c));
+  return c.json({ message: result.message, dev_code: result.devCode });
 });
 
 app.post('/api/auth/2fa/disable', requireAuth, async (c) => {
@@ -424,7 +454,7 @@ app.get('/api/submissions', requireAuth, async (c) => {
 
 app.get('/api/submissions/:id', requireAuth, async (c) => {
   const submissionId = c.req.param('id');
-  const submission = await getSubmissionByIdD1(c.env.DB, submissionId);
+  const submission = await getSubmissionByIdD1(c.env.DB, submissionId!);
   if (!submission) {
     return c.json({ error: 'Submission not found' }, 404);
   }
@@ -434,7 +464,7 @@ app.get('/api/submissions/:id', requireAuth, async (c) => {
 app.put('/api/submissions/:id/status', requireAuth, async (c) => {
   const submissionId = c.req.param('id');
   const body = await parseJsonBody(c, updateSubmissionStatusSchema);
-  const updated = await updateSubmissionStatusD1(c.env.DB, submissionId, body.status);
+  const updated = await updateSubmissionStatusD1(c.env.DB, submissionId!, body.status);
   if (!updated) {
     return c.json({ error: 'Submission not found' }, 404);
   }
@@ -453,7 +483,7 @@ app.get('/api/dss/partners', requireAuth, async (c) => {
 
 app.get('/api/dss/submissions/:submissionId', requireAuth, async (c) => {
   const user = (c as any).get('user') as { id?: string; role?: string };
-  const data = await getSubmissionDssD1(c.env.DB, c.req.param('submissionId'), user.id!, user.role);
+  const data = await getSubmissionDssD1(c.env.DB, c.req.param('submissionId')!, user.id!, user.role);
   return jsonData(c, data);
 });
 
@@ -539,7 +569,7 @@ app.post('/api/dss/rule-change-requests', requireAuth, async (c) => {
 app.post('/api/dss/requests/:id/remind', requireAuth, async (c) => {
   const user = (c as any).get('user') as { id?: string };
   const body = await parseJsonBody(c, remindDssRequestSchema);
-  const result = await remindDssRequestD1(c.env.DB, user.id!, c.req.param('id'), body.message);
+  const result = await remindDssRequestD1(c.env.DB, user.id!, c.req.param('id')!, body.message);
   return c.json({ message: `Reminder sent to ${result.partnerName}.`, data: result.request });
 });
 
@@ -551,7 +581,7 @@ app.put('/api/dss/requests/:id/status', requireAuth, async (c) => {
     user.id!,
     user.email,
     user.role,
-    c.req.param('id'),
+    c.req.param('id')!,
     body.status,
     body.notes
   );
@@ -582,7 +612,7 @@ app.get('/api/messages/unread-count', requireAuth, async (c) => {
 app.get('/api/messages/:userId', requireAuth, async (c) => {
   const user = (c as any).get('user') as { id?: string };
   const otherUserId = c.req.param('userId');
-  const result = await getMessagesD1(c.env.DB, user.id!, otherUserId);
+  const result = await getMessagesD1(c.env.DB, user.id!, otherUserId!);
   return jsonList(c, result.results);
 });
 
@@ -596,7 +626,7 @@ app.post('/api/messages', requireAuth, async (c) => {
 app.put('/api/messages/:id/read', requireAuth, async (c) => {
   const user = (c as any).get('user') as { id?: string };
   const messageId = c.req.param('id');
-  const updated = await markMessageAsReadD1(c.env.DB, messageId, user.id!);
+  const updated = await markMessageAsReadD1(c.env.DB, messageId!, user.id!);
   if (!updated) {
     return c.json({ error: 'Message not found' }, 404);
   }
@@ -685,7 +715,7 @@ app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (c) => {
 app.put('/api/notifications/:id/read', requireAuth, async (c) => {
   const user = (c as any).get('user') as { id?: string };
   const notificationId = c.req.param('id');
-  const updated = await markNotificationAsReadD1(c.env.DB, notificationId, user.id!);
+  const updated = await markNotificationAsReadD1(c.env.DB, notificationId!, user.id!);
   if (!updated) {
     return c.json({ error: 'Notification not found' }, 404);
   }
@@ -708,7 +738,7 @@ app.post('/api/transactions', requireAuth, async (c) => {
 app.get('/api/transactions/submission/:submissionId', requireAuth, async (c) => {
   const user = (c as any).get('user') as { id?: string; role?: string };
   const submissionId = c.req.param('submissionId');
-  const result = await getTransactionsBySubmissionD1(c.env.DB, user.id!, user.role as string, submissionId);
+  const result = await getTransactionsBySubmissionD1(c.env.DB, user.id!, user.role as string, submissionId!);
   return jsonList(c, result.results);
 });
 
@@ -720,7 +750,7 @@ app.get('/api/transactions/user', requireAuth, async (c) => {
 
 app.get('/api/transactions/partner/:partnerId', requireAuth, async (c) => {
   const user = (c as any).get('user') as { id?: string; role?: string };
-  const result = await getTransactionsByPartnerD1(c.env.DB, user.id!, user.role as string, c.req.param('partnerId'));
+  const result = await getTransactionsByPartnerD1(c.env.DB, user.id!, user.role as string, c.req.param('partnerId')!);
   return jsonList(c, result.results);
 });
 
@@ -728,7 +758,7 @@ app.put('/api/transactions/:id', requireAuth, async (c) => {
   const user = (c as any).get('user') as { id?: string; role?: string };
   const transactionId = c.req.param('id');
   const body = await parseJsonBody(c, updateTransactionStatusSchema);
-  const result = await updateTransactionStatusD1(c.env.DB, user.id!, user.role as string, transactionId, body.status, body.notes);
+  const result = await updateTransactionStatusD1(c.env.DB, user.id!, user.role as string, transactionId!, body.status, body.notes);
   return c.json({ message: 'Transaction updated successfully', data: result });
 });
 

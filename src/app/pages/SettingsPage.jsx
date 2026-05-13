@@ -34,7 +34,7 @@ const actionButtonClass =
   "inline-flex min-w-[190px] items-center justify-center gap-2 px-6 py-3 bg-[#336158] text-white rounded-xl hover:bg-[#2a4c48] transition-all hover:shadow-lg";
 
 export function SettingsPage() {
-  const { user, updateProfile, changePassword, getTwoFactorStatus, setupTwoFactor, enableTwoFactor, disableTwoFactor } =
+  const { user, updateProfile, changePassword, getTwoFactorStatus, setupTwoFactor, enableTwoFactor, disableTwoFactor, sendSmsTwoFactorCode } =
     useAuth();
   const { uploadFile, isLoading: isPhotoUploading } = useFileUpload();
   const [searchParams] = useSearchParams();
@@ -73,6 +73,8 @@ export function SettingsPage() {
   });
   const [twoFactorPassword, setTwoFactorPassword] = useState("");
   const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [twoFactorMethod, setTwoFactorMethod] = useState("totp");
+  const [twoFactorSmsPhone, setTwoFactorSmsPhone] = useState("");
   const [twoFactorSetup, setTwoFactorSetup] = useState(null);
   const [twoFactorRecoveryCodes, setTwoFactorRecoveryCodes] = useState([]);
   const [twoFactorPanel, setTwoFactorPanel] = useState("idle");
@@ -204,6 +206,8 @@ export function SettingsPage() {
   const resetTwoFactorInputs = () => {
     setTwoFactorPassword("");
     setTwoFactorCode("");
+    setTwoFactorMethod("totp");
+    setTwoFactorSmsPhone("");
     setTwoFactorSetup(null);
     setTwoFactorPanel("idle");
   };
@@ -214,15 +218,29 @@ export function SettingsPage() {
       return;
     }
 
+    if (twoFactorMethod === "sms" && !twoFactorSmsPhone.trim()) {
+      showSaveMessage("error", "Enter a phone number for SMS 2FA.");
+      return;
+    }
+
     setIsTwoFactorBusy(true);
     setTwoFactorRecoveryCodes([]);
 
     try {
-      const setup = await setupTwoFactor(twoFactorPassword);
+      const setup = await setupTwoFactor(
+        twoFactorPassword,
+        twoFactorMethod,
+        twoFactorMethod === "sms" ? twoFactorSmsPhone.trim() : undefined,
+      );
       setTwoFactorSetup(setup);
       setTwoFactorPanel("setup");
       setTwoFactorCode("");
-      showSaveMessage("success", "Two-factor setup started.");
+      showSaveMessage(
+        "success",
+        setup.dev_code
+          ? `Two-factor setup started. Dev SMS code: ${setup.dev_code}`
+          : "Two-factor setup started.",
+      );
     } catch (setupError) {
       showSaveMessage("error", setupError.message || "Two-factor setup failed.");
     } finally {
@@ -232,14 +250,18 @@ export function SettingsPage() {
 
   const handleConfirmTwoFactor = async () => {
     if (!twoFactorPassword || !twoFactorCode) {
-      showSaveMessage("error", "Enter your password and authenticator code.");
+      showSaveMessage("error", "Enter your password and verification code.");
       return;
     }
 
     setIsTwoFactorBusy(true);
 
     try {
-      const response = await enableTwoFactor(twoFactorPassword, twoFactorCode);
+      const response = await enableTwoFactor(
+        twoFactorPassword,
+        twoFactorCode,
+        twoFactorSetup?.method || twoFactorMethod,
+      );
       setTwoFactorRecoveryCodes(response.recovery_codes || []);
       setTwoFactorSetup(null);
       setTwoFactorCode("");
@@ -252,6 +274,24 @@ export function SettingsPage() {
         "error",
         enableError.message || "Could not enable two-factor authentication."
       );
+    } finally {
+      setIsTwoFactorBusy(false);
+    }
+  };
+
+  const handleSendDisableSmsCode = async () => {
+    setIsTwoFactorBusy(true);
+
+    try {
+      const response = await sendSmsTwoFactorCode();
+      showSaveMessage(
+        "success",
+        response.dev_code
+          ? `SMS code sent. Dev code: ${response.dev_code}`
+          : "SMS code sent.",
+      );
+    } catch (smsError) {
+      showSaveMessage("error", smsError.message || "Could not send SMS code.");
     } finally {
       setIsTwoFactorBusy(false);
     }
@@ -631,7 +671,7 @@ export function SettingsPage() {
                       <div>
                         <div className="text-[#19221d]">Two-Factor Authentication</div>
                         <div className="text-sm text-[#5f6f67]">
-                          Protect sign-ins with an authenticator code.
+                          Protect sign-ins with an authenticator app or SMS code.
                         </div>
                       </div>
                       <div
@@ -690,7 +730,9 @@ export function SettingsPage() {
                     !isDisablePanelOpen &&
                     !isRecoveryPanelOpen ? (
                       <div className="rounded-xl border border-dashed border-[#dce4da] bg-white/70 px-4 py-3 text-sm text-[#5f6f67]">
-                        Authenticator protection is active for future sign-ins.
+                        {twoFactorStatus.method === "sms"
+                          ? "SMS protection is active for future sign-ins."
+                          : "Authenticator protection is active for future sign-ins."}
                       </div>
                     ) : null}
 
@@ -699,11 +741,11 @@ export function SettingsPage() {
                         <div className="flex items-start justify-between gap-4">
                           <div>
                             <div className="text-base text-[#19221d]">
-                              Authenticator App Setup
+                              Two-Factor Setup
                             </div>
                             <div className="text-sm text-[#5f6f67]">
-                              Enter your password, scan the QR, then confirm with
-                              the 6-digit code from your app.
+                              Choose an authenticator app or SMS, then confirm
+                              with the 6-digit verification code.
                             </div>
                           </div>
                           <button
@@ -716,7 +758,36 @@ export function SettingsPage() {
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
-                          <div>
+                          <div className="space-y-4">
+                            <div>
+                              <label className="mb-2 block text-sm text-[#19221d]">
+                                2FA Method
+                              </label>
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                {[
+                                  ["totp", "Authenticator App"],
+                                  ["sms", "SMS Code"],
+                                ].map(([method, label]) => (
+                                  <button
+                                    key={method}
+                                    type="button"
+                                    onClick={() => {
+                                      setTwoFactorMethod(method);
+                                      setTwoFactorSetup(null);
+                                      setTwoFactorCode("");
+                                    }}
+                                    className={`rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
+                                      twoFactorMethod === method
+                                        ? "border-[#336158] bg-[#edf7ed] text-[#19221d]"
+                                        : "border-[#dce4da] bg-white text-[#5f6f67] hover:bg-[#f3f5f2]"
+                                    }`}
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
                             <label className="mb-2 block text-sm text-[#19221d]">
                               Current Password
                             </label>
@@ -732,6 +803,29 @@ export function SettingsPage() {
                                 placeholder="Enter your password"
                               />
                             </div>
+
+                            {twoFactorMethod === "sms" ? (
+                              <div>
+                                <label className="mb-2 block text-sm text-[#19221d]">
+                                  SMS Phone Number
+                                </label>
+                                <div className="relative">
+                                  <Phone className={iconClass} />
+                                  <input
+                                    type="tel"
+                                    value={twoFactorSmsPhone}
+                                    onChange={(event) =>
+                                      setTwoFactorSmsPhone(event.target.value)
+                                    }
+                                    className={inputClass}
+                                    placeholder="+639171234567"
+                                  />
+                                </div>
+                                <div className="mt-2 text-xs text-[#5f6f67]">
+                                  Use international format, for example +639171234567.
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                           {!twoFactorSetup ? (
                             <button
@@ -748,28 +842,37 @@ export function SettingsPage() {
 
                         {twoFactorSetup ? (
                           <div className="space-y-4 rounded-xl border border-[#e7ebe6] bg-[#f8faf6] p-4">
-                            <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
-                              <div className="flex justify-center">
-                                <img
-                                  src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(twoFactorSetup.otpauth_url)}`}
-                                  alt="Authenticator QR code"
-                                  className="h-[220px] w-[220px] rounded-xl border border-[#dce4da] bg-white p-3"
-                                />
-                              </div>
+                            <div className={twoFactorSetup.method === "sms" ? "grid gap-4" : "grid gap-4 lg:grid-cols-[240px_1fr]"}>
+                              {twoFactorSetup.method === "totp" ? (
+                                <div className="flex justify-center">
+                                  <img
+                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(twoFactorSetup.otpauth_url)}`}
+                                    alt="Authenticator QR code"
+                                    className="h-[220px] w-[220px] rounded-xl border border-[#dce4da] bg-white p-3"
+                                  />
+                                </div>
+                              ) : null}
 
                               <div className="space-y-4">
-                                <div>
+                                {twoFactorSetup.method === "totp" ? (
+                                  <div>
                                   <div className="text-sm text-[#5f6f67]">
                                     Manual Setup Key
                                   </div>
                                   <div className="mt-1 break-all rounded-xl bg-white px-4 py-3 font-mono text-sm text-[#19221d]">
                                     {twoFactorSetup.secret}
                                   </div>
-                                </div>
+                                  </div>
+                                ) : (
+                                  <div className="rounded-xl border border-[#dce4da] bg-white px-4 py-3 text-sm text-[#5f6f67]">
+                                    SMS code sent to {twoFactorSetup.masked_phone}.
+                                    {twoFactorSetup.dev_code ? ` Dev code: ${twoFactorSetup.dev_code}` : ""}
+                                  </div>
+                                )}
 
                                 <div>
                                   <label className="mb-2 block text-sm text-[#19221d]">
-                                    Authenticator Code
+                                    Verification Code
                                   </label>
                                   <div className="relative">
                                     <Shield className={iconClass} />
@@ -865,7 +968,9 @@ export function SettingsPage() {
                             </div>
                             <div className="text-sm text-red-600">
                               Confirm with your password and a current
-                              authenticator or recovery code.
+                              {twoFactorStatus.method === "sms"
+                                ? " SMS code."
+                                : " authenticator or recovery code."}
                             </div>
                           </div>
                           <button
@@ -898,7 +1003,9 @@ export function SettingsPage() {
 
                           <div>
                             <label className="mb-2 block text-sm text-[#19221d]">
-                              Authenticator or Recovery Code
+                              {twoFactorStatus.method === "sms"
+                                ? "SMS Code"
+                                : "Authenticator or Recovery Code"}
                             </label>
                             <div className="relative">
                               <Shield className={iconClass} />
@@ -916,6 +1023,18 @@ export function SettingsPage() {
                             </div>
                           </div>
                         </div>
+
+                        {twoFactorStatus.method === "sms" ? (
+                          <button
+                            type="button"
+                            onClick={handleSendDisableSmsCode}
+                            disabled={isTwoFactorBusy}
+                            className="inline-flex min-w-[190px] items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-6 py-3 text-red-600 transition-all hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-70"
+                          >
+                            <Phone className="h-5 w-5" />
+                            Send SMS Code
+                          </button>
+                        ) : null}
 
                         <button
                           type="button"
