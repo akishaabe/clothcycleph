@@ -63,8 +63,8 @@
   --settings-card: rgba(18, 18, 18, 0.94);
   --settings-subtle: #1f1f1f;
   --settings-border: rgba(255, 255, 255, 0.14);
-  --settings-primary: #f5f5f5;
-  --settings-primary-hover: #ffffff;
+  --settings-primary: #3f3f46;
+  --settings-primary-hover: #52525b;
   --settings-text: #f5f5f5;
   --settings-muted: #b7b7b7;
   --settings-ring: rgba(255, 255, 255, 0.2);
@@ -126,6 +126,7 @@
 .settings-theme-partner [class*="bg-[#336158]"],
 .settings-theme-admin [class*="bg-[#336158]"] {
   background-color: var(--settings-primary) !important;
+  color: #ffffff !important;
 }
 
 .settings-theme-partner [class*="hover:bg-[#2a4c48]"]:hover,

@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS submission_details (
   cleanliness TEXT,
   knows_fabric_type BOOLEAN,
   fabric_types TEXT,
+  custom_fabric_text TEXT,
   fabric_identification TEXT,
   brand TEXT,
   no_brand_visible BOOLEAN DEFAULT false,

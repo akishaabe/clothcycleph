@@ -94,25 +94,43 @@ export const createSubmission = async (req: Request, res: Response) => {
            cleanliness,
            knows_fabric_type,
            fabric_types,
+           custom_fabric_text,
            fabric_identification,
            brand,
            no_brand_visible,
-           fabric_description
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         ON CONFLICT (submission_id)
-         DO UPDATE SET
-           item_types = EXCLUDED.item_types,
-           other_item_type = EXCLUDED.other_item_type,
-           condition = EXCLUDED.condition,
-           cleanliness = EXCLUDED.cleanliness,
-           knows_fabric_type = EXCLUDED.knows_fabric_type,
-           fabric_types = EXCLUDED.fabric_types,
-           fabric_identification = EXCLUDED.fabric_identification,
-           brand = EXCLUDED.brand,
-           no_brand_visible = EXCLUDED.no_brand_visible,
-           fabric_description = EXCLUDED.fabric_description,
-           updated_at = NOW()`,
+           fabric_description,
+           restricted_category,
+           fiber_composition,
+           wearability,
+           repairability,
+           contamination_level,
+           damage_classification,
+           repurposing_potential,
+           trim_removal
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          ON CONFLICT (submission_id)
+          DO UPDATE SET
+            item_types = EXCLUDED.item_types,
+            other_item_type = EXCLUDED.other_item_type,
+            condition = EXCLUDED.condition,
+            cleanliness = EXCLUDED.cleanliness,
+            knows_fabric_type = EXCLUDED.knows_fabric_type,
+            fabric_types = EXCLUDED.fabric_types,
+            custom_fabric_text = EXCLUDED.custom_fabric_text,
+            fabric_identification = EXCLUDED.fabric_identification,
+            brand = EXCLUDED.brand,
+            no_brand_visible = EXCLUDED.no_brand_visible,
+            fabric_description = EXCLUDED.fabric_description,
+            restricted_category = EXCLUDED.restricted_category,
+            fiber_composition = EXCLUDED.fiber_composition,
+            wearability = EXCLUDED.wearability,
+            repairability = EXCLUDED.repairability,
+            contamination_level = EXCLUDED.contamination_level,
+            damage_classification = EXCLUDED.damage_classification,
+            repurposing_potential = EXCLUDED.repurposing_potential,
+            trim_removal = EXCLUDED.trim_removal,
+            updated_at = NOW()`,
         [
           id,
           joinTextValues(details.item_types),
@@ -121,10 +139,19 @@ export const createSubmission = async (req: Request, res: Response) => {
           details.cleanliness ?? cleanliness,
           details.knows_fabric_type ?? null,
           joinTextValues(details.fabric_types),
+          details.custom_fabric_text ?? null,
           joinTextValues(details.fabric_identification),
           details.brand ?? null,
           details.no_brand_visible ?? false,
           joinTextValues(details.fabric_description),
+          details.restricted_category ?? 'none',
+          details.fiber_composition ?? null,
+          details.wearability ?? null,
+          details.repairability ?? null,
+          details.contamination_level ?? null,
+          details.damage_classification ?? null,
+          details.repurposing_potential ?? null,
+          details.trim_removal ?? null,
         ]
       );
     }

@@ -237,6 +237,7 @@ function materialCategory(submission: any, burnAnalysis: any) {
   const signal = normalizeList([
     details.fiber_composition,
     details.fabric_types,
+    details.custom_fabric_text,
     details.fabric_description,
     submission.fabric,
     burnAnalysis.top_fibers?.[0]?.fiber,
@@ -398,6 +399,7 @@ function pathwayRuleScore(pathway: Exclude<Pathway, 'buyback' | 'rejected'>, sub
   const fabricSignal = [
     submission.fabric,
     submission.details?.fabric_types,
+    submission.details?.custom_fabric_text,
     submission.details?.fabric_description,
     burnAnalysis.top_fibers?.[0]?.fiber,
   ].filter(Boolean).flat();

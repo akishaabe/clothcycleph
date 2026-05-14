@@ -21,6 +21,9 @@ import {
   X,
   Save,
   Download,
+  CheckCircle,
+  XCircle,
+  HelpCircle,
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { dssService, messageService, notificationService, adminService } from "../../services/api";
@@ -130,6 +133,8 @@ export function AdminDashboard() {
   const [dssAuditError, setDssAuditError] = useState("");
   const [ruleChangeRequests, setRuleChangeRequests] = useState([]);
   const [ruleRequestSort, setRuleRequestSort] = useState("newest");
+  const [showAllRuleRequests, setShowAllRuleRequests] = useState(false);
+  const [ruleRequestNotes, setRuleRequestNotes] = useState({});
   const [showAllDssAudit, setShowAllDssAudit] = useState(false);
   const [dssAuditSort, setDssAuditSort] = useState("newest");
   const [isActivityExpanded, setIsActivityExpanded] = useState(false);
@@ -278,6 +283,26 @@ export function AdminDashboard() {
     });
   }, [ruleChangeRequests, ruleRequestSort]);
 
+  const systemActivity = useMemo(() => {
+    const accountEvents = accounts.slice(0, 4).map((account) => ({
+      time: account.joined || "Recent",
+      action: `${account.role} account ${account.status}`,
+      user: account.name,
+    }));
+    const dssEvents = dssAuditRuns.slice(0, 4).map((run) => ({
+      time: run.created_at ? new Date(run.created_at).toLocaleDateString("en-PH") : "Recent",
+      action: `DSS ${run.recommended_pathway} recommendation`,
+      user: run.submission_name || run.item_type || "Submission",
+    }));
+    const ruleEvents = ruleChangeRequests.slice(0, 4).map((request) => ({
+      time: request.created_at ? new Date(request.created_at).toLocaleDateString("en-PH") : "Recent",
+      action: `Partner rule request ${request.status || "pending"}`,
+      user: request.partner_name || request.requested_by_name || "Partner",
+    }));
+
+    return [...ruleEvents, ...dssEvents, ...accountEvents].slice(0, isActivityExpanded ? 12 : 4);
+  }, [accounts, dssAuditRuns, isActivityExpanded, ruleChangeRequests]);
+
   const openCreateModal = (role = activeRole) => {
     setActiveRole(role);
     setEditingAccount(null);
@@ -409,6 +434,29 @@ export function AdminDashboard() {
     }
   };
 
+  const handleExportSystemReport = () => {
+    const rows = [
+      ["metric", "value"],
+      ["users", roleCounts.User || 0],
+      ["admins", roleCounts.Admin || 0],
+      ["partners", roleCounts.Partner || 0],
+      ["dss_audit_runs", dssAuditRuns.length],
+      ["partner_rule_requests", ruleChangeRequests.length],
+      ["pending_rule_requests", ruleChangeRequests.filter((request) => request.status === "pending").length],
+      ["system_health", systemHealth.value],
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "clothcycle-system-report.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const handleExportAudit = async () => {
     try {
       const blob = await dssService.exportAuditReport();
@@ -422,6 +470,25 @@ export function AdminDashboard() {
       URL.revokeObjectURL(url);
     } catch (error) {
       setDssAuditError(error.message || "Unable to export DSS audit report.");
+    }
+  };
+
+  const updateRuleRequestStatus = async (request, status) => {
+    setDssAuditError("");
+
+    try {
+      const response = await dssService.updateRuleChangeRequestStatus(request.id, {
+        status,
+        admin_note: ruleRequestNotes[request.id] || undefined,
+      });
+      setRuleChangeRequests((current) =>
+        current.map((item) =>
+          item.id === request.id ? { ...item, ...response.data } : item,
+        ),
+      );
+      setRuleRequestNotes((current) => ({ ...current, [request.id]: "" }));
+    } catch (error) {
+      setDssAuditError(error.message || "Unable to update partner rule request.");
     }
   };
 
@@ -538,21 +605,36 @@ export function AdminDashboard() {
           transition={{ delay: 0.3 }}
           className="bg-white p-6 rounded-2xl shadow-lg mb-8"
         >
-          <h3 className="text-xl mb-6 text-gray-950">System Growth Analytics</h3>
+          <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="text-xl text-gray-950">System Growth Analytics</h3>
+              <p className="mt-1 text-sm text-gray-600">
+                Account growth overview with downloadable operational metrics.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleExportSystemReport}
+              className="inline-flex w-fit items-center gap-2 rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+            >
+              <Download className="h-4 w-4" />
+              Download report
+            </button>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={systemData}>
               <defs>
                 <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#111827" stopOpacity={0.22} />
-                  <stop offset="95%" stopColor="#111827" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="colorAdmins" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#4b5563" stopOpacity={0.22} />
-                  <stop offset="95%" stopColor="#4b5563" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#16a34a" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="colorPartners" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#9ca3af" stopOpacity={0.22} />
-                  <stop offset="95%" stopColor="#9ca3af" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#d97706" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#d97706" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -565,9 +647,9 @@ export function AdminDashboard() {
                   borderRadius: "12px"
                 }}
               />
-              <Area type="monotone" dataKey="users" stroke="#111827" fillOpacity={1} fill="url(#colorUsers)" strokeWidth={2} />
-              <Area type="monotone" dataKey="admins" stroke="#4b5563" fillOpacity={1} fill="url(#colorAdmins)" strokeWidth={2} />
-              <Area type="monotone" dataKey="partners" stroke="#9ca3af" fillOpacity={1} fill="url(#colorPartners)" strokeWidth={2} />
+              <Area type="monotone" dataKey="users" stroke="#2563eb" fillOpacity={1} fill="url(#colorUsers)" strokeWidth={2} />
+              <Area type="monotone" dataKey="admins" stroke="#16a34a" fillOpacity={1} fill="url(#colorAdmins)" strokeWidth={2} />
+              <Area type="monotone" dataKey="partners" stroke="#d97706" fillOpacity={1} fill="url(#colorPartners)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         </motion.div>
@@ -628,9 +710,9 @@ export function AdminDashboard() {
             {sortedDssAuditRuns.slice(0, showAllDssAudit ? 20 : 3).map((run) => (
               <details
                 key={run.result_id}
-                className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+                className="rounded-2xl border border-gray-200 bg-gray-50 p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04]"
               >
-                <summary className="flex cursor-pointer list-none flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <summary className="flex cursor-pointer list-none flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <div className="font-semibold text-gray-950">
                       {run.submission_name || run.item_type || "Submission"} · {run.recommended_pathway}
@@ -683,15 +765,24 @@ export function AdminDashboard() {
                 Requests sent by partners for DSS criteria, preference, capacity, or pickup-area updates.
               </p>
             </div>
-            <select
-              value={ruleRequestSort}
-              onChange={(event) => setRuleRequestSort(event.target.value)}
-              className="w-fit rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
-            >
-              <option value="newest">Newest</option>
-              <option value="partner">Partner</option>
-              <option value="status">Status</option>
-            </select>
+            <div className="flex flex-wrap gap-2">
+              <select
+                value={ruleRequestSort}
+                onChange={(event) => setRuleRequestSort(event.target.value)}
+                className="w-fit rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+              >
+                <option value="newest">Newest</option>
+                <option value="partner">Partner</option>
+                <option value="status">Status</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowAllRuleRequests((current) => !current)}
+                className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+              >
+                {showAllRuleRequests ? "Show less" : "View all"}
+              </button>
+            </div>
           </div>
 
           <div className="grid gap-3">
@@ -701,30 +792,89 @@ export function AdminDashboard() {
               </div>
             )}
 
-            {sortedRuleChangeRequests.slice(0, 8).map((request) => (
-              <details
+            {sortedRuleChangeRequests.slice(0, showAllRuleRequests ? 30 : 3).map((request, index) => (
+              <motion.details
                 key={request.id}
-                open={searchParams.get("request") === request.id}
-                className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.04 }}
+                whileHover={{ y: -2 }}
+                defaultOpen={searchParams.get("request") === request.id}
+                className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-all hover:border-gray-400 hover:shadow-xl dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/25"
               >
-                <summary className="flex cursor-pointer list-none flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <summary className="flex cursor-pointer list-none flex-col gap-3 bg-gradient-to-r from-gray-50 to-white px-5 py-4 md:flex-row md:items-center md:justify-between dark:from-white/[0.06] dark:to-transparent">
                   <div>
-                    <div className="font-semibold text-gray-950">
+                    <div className="font-semibold text-gray-950 dark:text-white">
                       {request.rule_area} · {request.partner_name || request.requested_by_name || "Partner"}
                     </div>
-                    <div className="mt-1 text-sm text-gray-600">
+                    <div className="mt-1 text-sm text-gray-600 dark:text-gray-300">
                       Requested by {request.requested_by_name || request.requested_by_email || "Unknown"} · {request.status || "pending"}
                     </div>
                   </div>
-                  <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-700">
-                    Admin review
+                  <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold capitalize ${getStatusClass(request.status || "pending")}`}>
+                    {(request.status || "pending").replace(/_/g, " ")}
                   </span>
                 </summary>
-                <div className="mt-4 space-y-3 text-sm leading-6 text-gray-700">
-                  <p><span className="font-semibold text-gray-950">Requested change:</span> {request.requested_change}</p>
-                  {request.reason && <p><span className="font-semibold text-gray-950">Reason:</span> {request.reason}</p>}
+                <div className="grid gap-4 border-t border-gray-200 p-5 dark:border-white/10 lg:grid-cols-[1fr_380px]">
+                  <div className="space-y-3 text-sm leading-6 text-gray-700 dark:text-gray-300">
+                    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-black/20">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Requested change</div>
+                      <p className="mt-2 text-base text-gray-950 dark:text-white">{request.requested_change}</p>
+                    </div>
+                    {request.reason && (
+                      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-black/20">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Partner reason</div>
+                        <p className="mt-2">{request.reason}</p>
+                      </div>
+                    )}
+                    {request.admin_notes && (
+                      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-black/20">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Last admin note</div>
+                        <p className="mt-2">{request.admin_notes}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-200 bg-gray-950 p-4 text-white shadow-lg dark:border-white/10 dark:bg-black/30">
+                    <div className="mb-3">
+                      <div className="font-semibold">Admin decision</div>
+                      <p className="mt-1 text-sm leading-6 text-gray-300">
+                        This note and status will be sent to the partner.
+                      </p>
+                    </div>
+                  <textarea
+                    value={ruleRequestNotes[request.id] || ""}
+                    onChange={(event) =>
+                      setRuleRequestNotes((current) => ({
+                        ...current,
+                        [request.id]: event.target.value,
+                      }))
+                    }
+                    rows={4}
+                    className="w-full resize-none rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none placeholder:text-gray-400 focus:border-white/40"
+                    placeholder="Optional message to partner before updating status"
+                  />
+                  <div className="mt-3 grid gap-2">
+                    {[
+                      ["accepted", "Accept", CheckCircle, "bg-emerald-600 hover:bg-emerald-500"],
+                      ["needs_more_information", "Need more info", HelpCircle, "bg-amber-500 hover:bg-amber-400"],
+                      ["declined", "Decline", XCircle, "bg-red-600 hover:bg-red-500"],
+                    ].map(([status, label, Icon, className]) => (
+                      <motion.button
+                        key={status}
+                        type="button"
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => updateRuleRequestStatus(request, status)}
+                        className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white transition-all ${className}`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {label}
+                      </motion.button>
+                    ))}
+                  </div>
+                  </div>
                 </div>
-              </details>
+              </motion.details>
             ))}
           </div>
         </motion.div>
@@ -904,12 +1054,7 @@ export function AdminDashboard() {
             </button>
           </div>
           <div className="space-y-3">
-            {[
-              { time: "10:45 AM", action: "New user registered", user: "Ana Reyes" },
-              { time: "10:30 AM", action: "Admin role assigned", user: "Maria Santos" },
-              { time: "10:15 AM", action: "Partner approved", user: "Juan Cruz" },
-              { time: "09:50 AM", action: "System backup completed", user: "System" }
-            ].slice(0, isActivityExpanded ? 4 : 2).map((log, index) => (
+            {systemActivity.map((log, index) => (
               <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-3">
                   <div className="w-2 h-2 rounded-full bg-gray-950"></div>
@@ -921,6 +1066,11 @@ export function AdminDashboard() {
                 <span className="text-sm text-gray-600">{log.time}</span>
               </div>
             ))}
+            {systemActivity.length === 0 && (
+              <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-600">
+                No live activity yet.
+              </div>
+            )}
           </div>
         </motion.div>
       </div>

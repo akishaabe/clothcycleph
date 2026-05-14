@@ -22,6 +22,7 @@ export async function createSubmissionD1(
       cleanliness?: string | null;
       knows_fabric_type?: boolean | null;
       fabric_types?: unknown[];
+      custom_fabric_text?: string | null;
       fabric_identification?: unknown[];
       brand?: string | null;
       no_brand_visible?: boolean;
@@ -77,12 +78,12 @@ export async function createSubmissionD1(
       db,
       `INSERT INTO submission_details (
          id, submission_id, item_types, other_item_type, condition, cleanliness,
-         knows_fabric_type, fabric_types, fabric_identification, brand,
+         knows_fabric_type, fabric_types, custom_fabric_text, fabric_identification, brand,
          no_brand_visible, fabric_description, restricted_category, fiber_composition,
          wearability, repairability, contamination_level, damage_classification,
          repurposing_potential, trim_removal
-       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         generateD1UUID(),
         id,
@@ -92,6 +93,7 @@ export async function createSubmissionD1(
         payload.details.cleanliness || null,
         payload.details.knows_fabric_type ? 1 : 0,
         jsonText(payload.details.fabric_types),
+        payload.details.custom_fabric_text || null,
         jsonText(payload.details.fabric_identification),
         payload.details.brand || null,
         payload.details.no_brand_visible ? 1 : 0,

@@ -42,6 +42,9 @@ import {
   getUnreadNotificationCountD1,
   markNotificationAsReadD1,
   markAllNotificationsAsReadD1,
+  deleteNotificationD1,
+  getNotificationPreferencesD1,
+  updateNotificationPreferencesD1,
 } from './services/d1NotificationService.js';
 import {
   createTransactionD1,
@@ -73,6 +76,7 @@ import {
   remindDssRequestD1,
   sendRecommendationToPartnerD1,
   updateDssRequestStatusD1,
+  updatePartnerRuleChangeRequestStatusD1,
 } from './services/d1DssService.js';
 import { listPartnerLocationsD1 } from './services/d1GisService.js';
 
@@ -577,6 +581,17 @@ app.post('/api/dss/rule-change-requests', requireAuth, async (c) => {
   return c.json({ message: 'Rule change request submitted for admin review', data }, 201);
 });
 
+app.put('/api/dss/rule-change-requests/:id/status', requireAuth, requireAdmin, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const requestId = c.req.param('id');
+  const body = await c.req.json();
+  const data = await updatePartnerRuleChangeRequestStatusD1(c.env.DB, user.id!, requestId!, {
+    status: String(body.status || ''),
+    admin_note: body.admin_note ? String(body.admin_note) : undefined,
+  });
+  return c.json({ message: 'Rule request status updated', data });
+});
+
 app.post('/api/dss/requests/:id/remind', requireAuth, async (c) => {
   const user = (c as any).get('user') as { id?: string };
   const body = await parseJsonBody(c, remindDssRequestSchema);
@@ -690,6 +705,23 @@ app.get('/api/notifications/count', requireAuth, async (c) => {
   return c.json({ unread_count: count });
 });
 
+app.get('/api/notifications/preferences', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const preferences = await getNotificationPreferencesD1(c.env.DB, user.id!);
+  return c.json({ data: preferences });
+});
+
+app.put('/api/notifications/preferences', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const body = await c.req.json();
+  const preferences = await updateNotificationPreferencesD1(c.env.DB, user.id!, {
+    email_notifications: body.email_notifications,
+    push_notifications: body.push_notifications,
+    sms_notifications: body.sms_notifications,
+  });
+  return c.json({ message: 'Notification preferences saved', data: preferences });
+});
+
 app.get('/api/admin/users', requireAuth, requireAdmin, async (c) => {
   const role = c.req.query('role')?.toString();
   const result = await getUsersD1(c.env.DB, role);
@@ -746,6 +778,16 @@ app.put('/api/notifications/read-all', requireAuth, async (c) => {
   const user = (c as any).get('user') as { id?: string };
   const updated = await markAllNotificationsAsReadD1(c.env.DB, user.id!);
   return c.json({ message: 'All notifications marked as read', count: updated.length });
+});
+
+app.delete('/api/notifications/:id', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const notificationId = c.req.param('id');
+  const deleted = await deleteNotificationD1(c.env.DB, notificationId!, user.id!);
+  if (!deleted) {
+    return c.json({ error: 'Notification not found' }, 404);
+  }
+  return c.json({ message: 'Notification deleted', data: deleted });
 });
 
 app.post('/api/transactions', requireAuth, async (c) => {

@@ -443,37 +443,11 @@ export function UserDashboard() {
               </p>
             </div>
             <button
-              onClick={() => navigate("/submit")}
-              className="rounded-xl bg-[#336158] px-4 py-2 text-sm text-white hover:bg-[#2a4c48]"
+              onClick={() => navigate("/dss-requests")}
+              className="rounded-xl border border-[#dce4da] px-4 py-2 text-sm font-semibold text-[#336158] hover:bg-[#f3f5f2]"
             >
-              New submission
+              View all
             </button>
-          </div>
-
-          <div className="mb-5 grid gap-3 md:grid-cols-[1fr_auto]">
-            <input
-              value={requestSearch}
-              onChange={(event) => setRequestSearch(event.target.value)}
-              className="rounded-xl border border-[#dce4da] bg-[#fbfcfa] px-4 py-3 text-sm text-[#19221d] outline-none focus:border-[#336158]"
-              placeholder="Search partner requests"
-            />
-            <div className="flex flex-wrap gap-2">
-              {["all", "pending", "accepted", "declined", "completed"].map(
-                (status) => (
-                  <button
-                    key={status}
-                    onClick={() => setRequestFilter(status)}
-                    className={`rounded-xl px-4 py-2 text-sm capitalize ${
-                      requestFilter === status
-                        ? "bg-[#336158] text-white"
-                        : "bg-[#f3f5f2] text-[#5f6f67] hover:bg-[#e7ebe6]"
-                    }`}
-                  >
-                    {status}
-                  </button>
-                ),
-              )}
-            </div>
           </div>
 
           {requestError && (
@@ -490,7 +464,7 @@ export function UserDashboard() {
               </div>
             )}
 
-            {filteredRequests.slice(0, 8).map((request) => (
+            {requests.slice(0, 3).map((request) => (
               <div
                 key={request.id}
                 className="flex flex-col gap-3 rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4 md:flex-row md:items-center md:justify-between"
@@ -522,6 +496,15 @@ export function UserDashboard() {
               </div>
             ))}
           </div>
+          {requests.length > 3 && (
+            <button
+              type="button"
+              onClick={() => navigate("/dss-requests")}
+              className="mt-4 w-full rounded-xl border border-[#dce4da] px-4 py-3 text-sm font-semibold text-[#336158] hover:bg-[#f3f5f2]"
+            >
+              View all sent DSS requests
+            </button>
+          )}
         </motion.section>
 
       </main>

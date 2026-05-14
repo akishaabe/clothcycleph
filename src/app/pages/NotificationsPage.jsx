@@ -3,14 +3,17 @@ import { ArrowLeft, Bell, CheckCircle2, PackageCheck, Recycle, X } from "lucide-
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { dssService, notificationService } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 import "./NotificationsPage.css";
 
 export function NotificationsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { user } = useAuth();
+  const inferredTheme = user?.role === "partner" || user?.role === "admin" ? user.role : "default";
   const notificationsTheme = ["partner", "admin"].includes(searchParams.get("theme"))
     ? searchParams.get("theme")
-    : "default";
+    : inferredTheme;
   const backPath =
     notificationsTheme === "partner"
       ? "/partner"
@@ -20,6 +23,7 @@ export function NotificationsPage() {
   const [notifications, setNotifications] = useState([]);
   const [ruleChangeRequests, setRuleChangeRequests] = useState([]);
   const [selectedRuleRequest, setSelectedRuleRequest] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [error, setError] = useState("");
 
   const loadNotifications = async () => {
@@ -134,6 +138,24 @@ export function NotificationsPage() {
       await loadNotifications();
     } catch (readError) {
       setError(readError.message || "Unable to mark notifications as read.");
+    }
+  };
+
+  const deleteNotification = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    setError("");
+
+    try {
+      await notificationService.deleteNotification(deleteTarget.id);
+      setNotifications((current) =>
+        current.filter((notification) => notification.id !== deleteTarget.id),
+      );
+      setDeleteTarget(null);
+    } catch (deleteError) {
+      setError(deleteError.message || "Unable to delete notification.");
     }
   };
 
@@ -283,6 +305,18 @@ export function NotificationsPage() {
               {!notification.read && (
                 <span className="mt-2 h-3 w-3 shrink-0 rounded-full bg-[#336158]" />
               )}
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setDeleteTarget(notification);
+                }}
+                className="rounded-xl p-2 text-[#5f6f67] transition-colors hover:bg-red-50 hover:text-red-600"
+                aria-label="Delete notification"
+                title="Delete notification"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </motion.article>
           ))}
         </section>
@@ -340,6 +374,35 @@ export function NotificationsPage() {
               </button>
             </div>
           </motion.div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-6 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-[#dce4da] bg-white p-6 shadow-[0_24px_70px_rgba(0,0,0,0.24)] dark:border-white/10 dark:bg-[#161a22]">
+            <h2 className="text-xl font-bold text-[#19221d] dark:text-white">
+              Delete notification?
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
+              This removes the notification from your list. This cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-xl border border-[#dce4da] px-4 py-2 text-sm text-[#5f6f67] hover:bg-[#f3f5f2] dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={deleteNotification}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

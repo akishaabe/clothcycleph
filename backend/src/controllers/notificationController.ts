@@ -6,6 +6,9 @@ import {
   getUnreadNotificationCount,
   markNotificationAsRead,
   markAllNotificationsAsRead,
+  deleteNotification,
+  getNotificationPreferences,
+  updateNotificationPreferences,
 } from '../services/notificationService.js';
 
 export const getNotifications = async (req: AuthRequest, res: Response) => {
@@ -39,6 +42,36 @@ export const getUnreadCount = async (req: AuthRequest, res: Response) => {
     const count = await getUnreadNotificationCount(userId);
 
     res.json({ unread_count: count });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+};
+
+export const getPreferences = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    const preferences = await getNotificationPreferences(userId);
+    res.json({ data: preferences });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+};
+
+export const updatePreferences = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    const preferences = await updateNotificationPreferences(userId, req.body || {});
+    res.json({ message: 'Notification preferences saved', data: preferences });
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
   }
@@ -85,6 +118,30 @@ export const markAllAsRead = async (req: AuthRequest, res: Response) => {
     res.json({
       message: 'All notifications marked as read',
       count: notifications.length,
+    });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+};
+
+export const deleteNotificationById = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    const notification = await deleteNotification(id, userId);
+
+    if (!notification) {
+      throw new AppError(404, 'Notification not found');
+    }
+
+    res.json({
+      message: 'Notification deleted',
+      data: notification,
     });
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });

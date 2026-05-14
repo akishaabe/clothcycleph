@@ -172,6 +172,27 @@
   color: #f5f5f5 !important;
 }
 
+.dark .admin-dashboard .recharts-cartesian-axis-tick-value,
+.dark .admin-dashboard .recharts-legend-item-text,
+.dark .admin-dashboard .recharts-text,
+.dark .admin-dashboard .recharts-wrapper text,
+.dark .partner-dashboard .recharts-cartesian-axis-tick-value,
+.dark .partner-dashboard .recharts-legend-item-text,
+.dark .partner-dashboard .recharts-text,
+.dark .partner-dashboard .recharts-wrapper text {
+  fill: #d1d5db !important;
+  color: #d1d5db !important;
+}
+
+.dark .admin-dashboard .recharts-cartesian-grid line,
+.dark .admin-dashboard .recharts-cartesian-axis-line,
+.dark .admin-dashboard .recharts-cartesian-axis-tick-line,
+.dark .partner-dashboard .recharts-cartesian-grid line,
+.dark .partner-dashboard .recharts-cartesian-axis-line,
+.dark .partner-dashboard .recharts-cartesian-axis-tick-line {
+  stroke: rgba(255, 255, 255, 0.14) !important;
+}
+
 .dark .admin-dashboard .admin-crown-badge {
   background-color: #f4d56b !important;
   color: #2d2100 !important;

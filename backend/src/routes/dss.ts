@@ -4,6 +4,7 @@ import {
   getDssAuditRuns,
   exportDssAuditReport,
   getPartnerRuleChangeRequests,
+  updatePartnerRuleChangeRequestStatus,
   getSubmissionDss,
   getUserDssRequests,
   listPartners,
@@ -23,6 +24,7 @@ router.get('/partners', authMiddleware, listPartners);
 router.get('/audit', authMiddleware, getDssAuditRuns);
 router.get('/audit/export', authMiddleware, exportDssAuditReport);
 router.get('/rule-change-requests', authMiddleware, getPartnerRuleChangeRequests);
+router.put('/rule-change-requests/:id/status', authMiddleware, validate(uuidParamSchema, 'params'), updatePartnerRuleChangeRequestStatus);
 router.post('/rule-change-requests', authMiddleware, validate(partnerRuleChangeRequestSchema), createPartnerRuleChangeRequest);
 router.get('/submissions/:submissionId', authMiddleware, validate(submissionIdParamSchema, 'params'), getSubmissionDss);
 router.post('/send', authMiddleware, validate(sendDssRecommendationSchema), sendRecommendationToPartner);

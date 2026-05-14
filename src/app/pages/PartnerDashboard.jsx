@@ -51,6 +51,17 @@ const formatDate = (value) =>
       }).format(new Date(value))
     : "";
 
+const formatPercent = (value) =>
+  value == null ? "Not available" : `${Math.round(Number(value) * 100)}%`;
+
+const getDssRecommendation = (request) =>
+  request?.output_payload?.recommendation || {
+    recommended_pathway: request?.type,
+    confidence: request?.confidence,
+    explanation: request?.explanation,
+    checks: request?.output_payload?.rule_checks || [],
+  };
+
 export function PartnerDashboard() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -135,6 +146,19 @@ export function PartnerDashboard() {
       requestsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [searchParams, requests]);
+
+  useEffect(() => {
+    if (!selectedRequest) {
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [selectedRequest]);
 
   const metrics = useMemo(() => {
     const pending = requests.filter((request) => request.status === "pending").length;
@@ -553,8 +577,15 @@ export function PartnerDashboard() {
       </div>
 
       {selectedRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10233f]/35 p-4 backdrop-blur-sm md:p-8">
-          <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-[#d6e6f8] bg-white p-6 shadow-[0_24px_70px_rgba(16,35,63,0.24)] md:p-8">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#10233f]/35 p-4 backdrop-blur-sm md:p-8"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setSelectedRequest(null);
+            }
+          }}
+        >
+          <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-[#d6e6f8] bg-white p-6 shadow-[0_24px_70px_rgba(16,35,63,0.24)] md:p-8 dark:border-blue-400/20 dark:bg-[#111c2f]">
             <div className="mb-7 flex items-start justify-between gap-4">
               <div>
                 <div className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#41668f]">
@@ -593,25 +624,102 @@ export function PartnerDashboard() {
             </div>
 
             <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-              <div className="rounded-2xl border border-[#d6e6f8] bg-[#fbfdff] p-6">
-                <h3 className="mb-4 text-xl font-semibold text-[#10233f]">Brief sent by user</h3>
-                <pre className="whitespace-pre-wrap font-sans text-base leading-7 text-[#274568]">
+              <div className="rounded-2xl border border-[#d6e6f8] bg-[#fbfdff] p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
+                <h3 className="mb-4 text-xl font-semibold text-[#10233f] dark:text-white">Brief sent by user</h3>
+                <pre className="whitespace-pre-wrap font-sans text-base leading-7 text-[#41668f] dark:text-[#9fc5f8]">
                   {selectedRequest.output_payload?.brief || selectedRequest.notes || "No brief provided."}
                 </pre>
               </div>
 
               <div className="space-y-4">
-                <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6">
-                  <h3 className="mb-4 text-xl font-semibold text-[#10233f]">Submission details</h3>
-                  <div className="space-y-3 text-base leading-7 text-[#41668f]">
-                    <p><span className="font-semibold text-[#10233f]">Fabric:</span> {selectedRequest.fabric || selectedRequest.details?.fabric_types || "Not specified"}</p>
-                    <p><span className="font-semibold text-[#10233f]">Brand:</span> {selectedRequest.details?.no_brand_visible ? "No brand visible" : selectedRequest.details?.brand || "Not specified"}</p>
-                    <p><span className="font-semibold text-[#10233f]">Burn test:</span> {selectedRequest.burn_test?.performed ? "Performed" : "Not performed"}</p>
+                <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
+                  <h3 className="mb-4 text-xl font-semibold text-[#10233f] dark:text-white">DSS engine result</h3>
+                  {(() => {
+                    const recommendation = getDssRecommendation(selectedRequest);
+                    const checks = recommendation.checks || selectedRequest.output_payload?.rule_checks || [];
+
+                    return (
+                      <div className="space-y-4 text-base leading-7 text-[#41668f] dark:text-[#9fc5f8]">
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-xl bg-[#eff6ff] px-4 py-3 dark:bg-blue-400/10">
+                            <div className="text-xs uppercase tracking-wide">Pathway</div>
+                            <div className="mt-1 font-semibold text-[#10233f] dark:text-white">
+                              {pathwayLabels[recommendation.recommended_pathway] || selectedRequest.type}
+                            </div>
+                          </div>
+                          <div className="rounded-xl bg-[#eff6ff] px-4 py-3 dark:bg-blue-400/10">
+                            <div className="text-xs uppercase tracking-wide">Confidence</div>
+                            <div className="mt-1 font-semibold text-[#10233f] dark:text-white">
+                              {formatPercent(recommendation.confidence)}
+                            </div>
+                          </div>
+                          <div className="rounded-xl bg-[#eff6ff] px-4 py-3 dark:bg-blue-400/10">
+                            <div className="text-xs uppercase tracking-wide">Score</div>
+                            <div className="mt-1 font-semibold text-[#10233f] dark:text-white">
+                              {recommendation.score != null ? Number(recommendation.score).toFixed(1) : "N/A"}
+                            </div>
+                          </div>
+                        </div>
+                        <p>{recommendation.explanation || "No DSS explanation was saved for this request."}</p>
+                        {selectedRequest.output_payload?.recommendations?.length > 0 && (
+                          <div className="rounded-xl border border-[#d6e6f8] bg-[#fbfdff] p-4 dark:border-blue-400/20 dark:bg-white/[0.04]">
+                            <div className="mb-3 font-semibold text-[#10233f] dark:text-white">
+                              All pathway scores
+                            </div>
+                            <div className="space-y-2">
+                              {selectedRequest.output_payload.recommendations.map((item) => (
+                                <div
+                                  key={`${selectedRequest.id}-${item.recommended_pathway}`}
+                                  className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm dark:bg-white/[0.04]"
+                                >
+                                  <span className="font-semibold text-[#10233f] dark:text-white">
+                                    #{item.rank} {pathwayLabels[item.recommended_pathway] || item.recommended_pathway}
+                                  </span>
+                                  <span className="text-[#41668f] dark:text-[#9fc5f8]">
+                                    {formatPercent(item.confidence)} · {Number(item.score || 0).toFixed(1)}/100
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {checks.length > 0 && (
+                          <details className="rounded-xl border border-[#d6e6f8] bg-[#fbfdff] px-4 py-3 dark:border-blue-400/20 dark:bg-white/[0.04]">
+                            <summary className="cursor-pointer font-semibold text-[#4f6f9f] dark:text-[#9fc5f8]">
+                              View matched and missed DSS checks
+                            </summary>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {checks.map((check) => (
+                                <span
+                                  key={`${selectedRequest.id}-${check.question}`}
+                                  className={`rounded-full px-3 py-1 text-xs ${
+                                    check.matched
+                                      ? "bg-green-100 text-green-700 dark:bg-green-400/10 dark:text-green-200"
+                                      : "bg-amber-100 text-amber-700 dark:bg-amber-400/10 dark:text-amber-200"
+                                  }`}
+                                >
+                                  {check.question}: {check.matched ? "matched" : "missed"}
+                                </span>
+                              ))}
+                            </div>
+                          </details>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
+                  <h3 className="mb-4 text-xl font-semibold text-[#10233f] dark:text-white">Submission details</h3>
+                  <div className="space-y-3 text-base leading-7 text-[#41668f] dark:text-[#9fc5f8]">
+                    <p><span className="font-semibold text-[#10233f] dark:text-white">Fabric:</span> {selectedRequest.fabric || selectedRequest.details?.custom_fabric_text || selectedRequest.details?.fabric_types || "Not specified"}</p>
+                    <p><span className="font-semibold text-[#10233f] dark:text-white">Brand:</span> {selectedRequest.details?.no_brand_visible ? "No brand visible" : selectedRequest.details?.brand || "Not specified"}</p>
+                    <p><span className="font-semibold text-[#10233f] dark:text-white">Burn test:</span> {selectedRequest.burn_test?.performed ? "Performed" : "Not performed"}</p>
                     {selectedRequest.upcycle_request && (
-                      <p><span className="font-semibold text-[#10233f]">Upcycle request:</span> {selectedRequest.upcycle_request}</p>
+                      <p><span className="font-semibold text-[#10233f] dark:text-white">Upcycle request:</span> {selectedRequest.upcycle_request}</p>
                     )}
                     {selectedRequest.description && (
-                      <p><span className="font-semibold text-[#10233f]">User note:</span> {selectedRequest.description}</p>
+                      <p><span className="font-semibold text-[#10233f] dark:text-white">User note:</span> {selectedRequest.description}</p>
                     )}
                   </div>
                 </div>
@@ -624,9 +732,9 @@ export function PartnerDashboard() {
                   />
                 )}
 
-                <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6">
-                  <h3 className="mb-2 text-2xl font-semibold text-[#10233f]">Partner decision and message to user</h3>
-                  <p className="mb-4 text-sm leading-6 text-[#41668f]">
+                <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
+                  <h3 className="mb-2 text-2xl font-semibold text-[#10233f] dark:text-white">Partner decision and message to user</h3>
+                  <p className="mb-4 text-sm leading-6 text-[#41668f] dark:text-[#9fc5f8]">
                     Accept when your organization can handle the item. Decline
                     when capacity, location, cleanliness, or pathway fit is not
                     suitable. The note below will be sent back to the user as
@@ -637,7 +745,7 @@ export function PartnerDashboard() {
                     onChange={(event) => setStatusNote(event.target.value)}
                     rows={7}
                     placeholder="Example: Accepted for donation. Please pack clean items separately and bring them on Friday afternoon."
-                    className="mb-3 w-full resize-y rounded-xl border border-[#d6e6f8] p-4 text-base leading-7 text-[#10233f] outline-none focus:border-[#4f6f9f]"
+                    className="mb-3 w-full resize-y rounded-xl border border-[#d6e6f8] p-4 text-base leading-7 text-[#10233f] outline-none focus:border-[#4f6f9f] dark:border-blue-400/20 dark:bg-[#0f1b33] dark:text-white"
                   />
                   <div className="grid gap-2 sm:grid-cols-3">
                     {[

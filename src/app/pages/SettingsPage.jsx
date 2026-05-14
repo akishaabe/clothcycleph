@@ -18,6 +18,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useFileUpload } from "../../hooks/useFileUpload";
+import { notificationService } from "../../services/api";
 import { isStrongPassword, PasswordChecklist } from "../../utils/passwordPolicy";
 import "./SettingsPage.css";
 
@@ -38,9 +39,10 @@ export function SettingsPage() {
     useAuth();
   const { uploadFile, isLoading: isPhotoUploading } = useFileUpload();
   const [searchParams] = useSearchParams();
+  const inferredTheme = user?.role === "partner" || user?.role === "admin" ? user.role : "default";
   const settingsTheme = ["partner", "admin"].includes(searchParams.get("theme"))
     ? searchParams.get("theme")
-    : "default";
+    : inferredTheme;
   const backPath =
     settingsTheme === "partner"
       ? "/partner"
@@ -86,6 +88,45 @@ export function SettingsPage() {
     smsNotifications: false,
     newsletter: true,
   });
+
+  useEffect(() => {
+    notificationService
+      .getPreferences()
+      .then((response) => {
+        setNotifications((current) => ({
+          ...current,
+          emailNotifications: Boolean(response.data.email_notifications),
+          pushNotifications: Boolean(response.data.push_notifications),
+          smsNotifications: Boolean(response.data.sms_notifications),
+        }));
+      })
+      .catch(() => {
+        try {
+          const saved = window.localStorage.getItem("clothcycle_notification_preferences");
+          if (saved) {
+            setNotifications((current) => ({ ...current, ...JSON.parse(saved) }));
+          }
+        } catch {
+          // Keep defaults when local storage is unavailable.
+        }
+      });
+  }, []);
+
+  const updateNotificationPreference = (key) => {
+    setNotifications((current) => {
+      const next = { ...current, [key]: !current[key] };
+      window.localStorage.setItem("clothcycle_notification_preferences", JSON.stringify(next));
+      notificationService
+        .updatePreferences({
+          email_notifications: next.emailNotifications,
+          push_notifications: next.pushNotifications,
+          sms_notifications: next.smsNotifications,
+        })
+        .then(() => showSaveMessage("success", "Notification preferences were saved."))
+        .catch(() => showSaveMessage("error", "Saved locally, but database sync failed."));
+      return next;
+    });
+  };
 
   const tabs = [
     { id: "profile", icon: User, label: "Profile" },
@@ -465,8 +506,8 @@ export function SettingsPage() {
             ref={messageRef}
             className={`mb-6 rounded-2xl border px-5 py-4 text-sm ${
               saveMessage.type === "success"
-                ? "border-[#b9d3bd] bg-[#eef7ef] text-[#2f5f3a]"
-                : "border-red-200 bg-red-50 text-red-700"
+                ? "border-[#b9d3bd] bg-[#eef7ef] text-[#2f5f3a] dark:border-emerald-400/25 dark:bg-emerald-400/10 dark:text-emerald-200"
+                : "border-red-200 bg-red-50 text-red-700 dark:border-red-400/25 dark:bg-red-400/10 dark:text-red-200"
             }`}
           >
             {saveMessage.text}
@@ -1139,12 +1180,7 @@ export function SettingsPage() {
                         </div>
                       </div>
                       <button
-                        onClick={() =>
-                          setNotifications({
-                            ...notifications,
-                            [item.key]: !notifications[item.key],
-                          })
-                        }
+                        onClick={() => updateNotificationPreference(item.key)}
                         className={`h-6 w-12 rounded-full transition-all ${
                           notifications[item.key] ? "bg-[#336158]" : "bg-[#d7ddd5]"
                         }`}
