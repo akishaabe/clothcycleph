@@ -56,6 +56,12 @@ function normalizePathway(value) {
   return normalized;
 }
 
+function formatStatusLabel(status) {
+  return String(status || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function stripSelectedServiceBriefLines(value) {
   return String(value || "")
     .split("\n")
@@ -716,7 +722,7 @@ export function DssConfirmationPage() {
                           statusClass[request.status] || statusClass.pending
                         }`}
                       >
-                        {request.status}
+                        {formatStatusLabel(request.status)}
                       </span>
                     </div>
                     <div className="mt-1 text-sm text-[#5f6f67]">

@@ -10,7 +10,6 @@ import {
   Clock,
   TrendingUp,
   MessageSquare,
-  Menu,
   Bell,
   User,
   Settings,
@@ -92,6 +91,11 @@ const pathwayLabels = {
   upcycle: "Upcycle",
   buyback: "Buyback",
 };
+
+const formatStatusLabel = (status) =>
+  String(status || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 export function UserDashboard() {
   const navigate = useNavigate();
@@ -192,9 +196,6 @@ export function UserDashboard() {
       <nav className="sticky top-0 z-20 bg-white/85 backdrop-blur-xl border-b border-[#e1e7df] px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
-            <button className="md:hidden">
-              <Menu className="w-6 h-6 text-[#19221d]" />
-            </button>
             <div className="flex items-center gap-2">
               <Recycle className="w-6 h-6 text-[#336158]" />
               <span className="text-xl text-[#19221d] font-gloock">
@@ -366,6 +367,96 @@ export function UserDashboard() {
           ))}
         </section>
 
+        <motion.section
+          ref={requestsRef}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.65 }}
+          className={`${cardClass} mb-8 rounded-2xl p-6`}
+        >
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-xl text-[#19221d]">Requests</h3>
+              <p className="mt-1 text-sm text-[#5f6f67]">
+                Track DSS briefs you sent to partners.
+              </p>
+            </div>
+          </div>
+
+          <div className="mb-5 grid gap-3 md:grid-cols-[1fr_auto]">
+            <input
+              value={requestSearch}
+              onChange={(event) => setRequestSearch(event.target.value)}
+              className="rounded-xl border border-[#dce4da] bg-[#fbfcfa] px-4 py-3 text-sm text-[#19221d] outline-none focus:border-[#336158]"
+              placeholder="Search partner requests"
+            />
+            <div className="flex flex-wrap gap-2">
+              {["all", "pending", "accepted", "declined", "completed"].map(
+                (status) => (
+                  <button
+                    key={status}
+                    onClick={() => setRequestFilter(status)}
+                    className={`rounded-xl px-4 py-2 text-sm capitalize ${
+                      requestFilter === status
+                        ? "bg-[#336158] text-white"
+                        : "bg-[#f3f5f2] text-[#5f6f67] hover:bg-[#e7ebe6]"
+                    }`}
+                  >
+                    {formatStatusLabel(status)}
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+
+          {requestError && (
+            <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {requestError}
+            </div>
+          )}
+
+          <div className="grid gap-3">
+            {filteredRequests.length === 0 && (
+              <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] px-4 py-5 text-sm text-[#5f6f67]">
+                No partner requests yet. Submit textile details, review the DSS
+                recommendation, then send the brief to a partner.
+              </div>
+            )}
+
+            {filteredRequests.slice(0, 8).map((request) => (
+              <div
+                key={request.id}
+                className="flex flex-col gap-3 rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4 md:flex-row md:items-center md:justify-between"
+              >
+                <div>
+                  <div className="font-semibold text-[#19221d]">
+                    {request.submission_name || request.item_type} · {pathwayLabels[request.type] || request.type}
+                  </div>
+                  <div className="mt-1 text-sm text-[#5f6f67]">
+                    Sent to {request.partner_name || "partner"}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs ${
+                      requestStatusClass[request.status] ||
+                      requestStatusClass.pending
+                    }`}
+                  >
+                    {formatStatusLabel(request.status)}
+                  </span>
+                  <button
+                    onClick={() => navigate(`/dss/${request.submission_id}?request=${request.id}`)}
+                    className="rounded-xl border border-[#dce4da] px-3 py-2 text-sm text-[#5f6f67] hover:bg-[#f3f5f2]"
+                  >
+                    View
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.section>
+
         <section className="grid md:grid-cols-2 gap-6 mb-8">
           <motion.div
             initial={{ opacity: 0, x: -20 }}
@@ -427,102 +518,6 @@ export function UserDashboard() {
             </ResponsiveContainer>
           </motion.div>
         </section>
-
-        <motion.section
-          ref={requestsRef}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.65 }}
-          className={`${cardClass} mb-8 rounded-2xl p-6`}
-        >
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <div>
-              <h3 className="text-xl text-[#19221d]">Partner Requests</h3>
-              <p className="mt-1 text-sm text-[#5f6f67]">
-                Track DSS briefs you sent to partners.
-              </p>
-            </div>
-            <button
-              onClick={() => navigate("/submit")}
-              className="rounded-xl bg-[#336158] px-4 py-2 text-sm text-white hover:bg-[#2a4c48]"
-            >
-              New submission
-            </button>
-          </div>
-
-          <div className="mb-5 grid gap-3 md:grid-cols-[1fr_auto]">
-            <input
-              value={requestSearch}
-              onChange={(event) => setRequestSearch(event.target.value)}
-              className="rounded-xl border border-[#dce4da] bg-[#fbfcfa] px-4 py-3 text-sm text-[#19221d] outline-none focus:border-[#336158]"
-              placeholder="Search partner requests"
-            />
-            <div className="flex flex-wrap gap-2">
-              {["all", "pending", "accepted", "declined", "completed"].map(
-                (status) => (
-                  <button
-                    key={status}
-                    onClick={() => setRequestFilter(status)}
-                    className={`rounded-xl px-4 py-2 text-sm capitalize ${
-                      requestFilter === status
-                        ? "bg-[#336158] text-white"
-                        : "bg-[#f3f5f2] text-[#5f6f67] hover:bg-[#e7ebe6]"
-                    }`}
-                  >
-                    {status}
-                  </button>
-                ),
-              )}
-            </div>
-          </div>
-
-          {requestError && (
-            <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {requestError}
-            </div>
-          )}
-
-          <div className="grid gap-3">
-            {filteredRequests.length === 0 && (
-              <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] px-4 py-5 text-sm text-[#5f6f67]">
-                No partner requests yet. Submit textile details, review the DSS
-                recommendation, then send the brief to a partner.
-              </div>
-            )}
-
-            {filteredRequests.slice(0, 8).map((request) => (
-              <div
-                key={request.id}
-                className="flex flex-col gap-3 rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4 md:flex-row md:items-center md:justify-between"
-              >
-                <div>
-                  <div className="font-semibold text-[#19221d]">
-                    {request.submission_name || request.item_type} · {pathwayLabels[request.type] || request.type}
-                  </div>
-                  <div className="mt-1 text-sm text-[#5f6f67]">
-                    Sent to {request.partner_name || "partner"}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs ${
-                      requestStatusClass[request.status] ||
-                      requestStatusClass.pending
-                    }`}
-                  >
-                    {request.status}
-                  </span>
-                  <button
-                    onClick={() => navigate(`/dss/${request.submission_id}?request=${request.id}`)}
-                    className="rounded-xl border border-[#dce4da] px-3 py-2 text-sm text-[#5f6f67] hover:bg-[#f3f5f2]"
-                  >
-                    View
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </motion.section>
 
       </main>
 

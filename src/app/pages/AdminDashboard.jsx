@@ -92,6 +92,11 @@ const getStatusClass = (status) => {
   return "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300";
 };
 
+const formatStatusLabel = (status) =>
+  String(status || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
 const canCreateRole = (role) => role === "Admin" || role === "Partner";
 const canSuspendRole = (role) => role === "User" || role === "Partner";
 
@@ -713,7 +718,7 @@ export function AdminDashboard() {
                       {request.rule_area} · {request.partner_name || request.requested_by_name || "Partner"}
                     </div>
                     <div className="mt-1 text-sm text-gray-600">
-                      Requested by {request.requested_by_name || request.requested_by_email || "Unknown"} · {request.status || "pending"}
+                      Requested by {request.requested_by_name || request.requested_by_email || "Unknown"} · {formatStatusLabel(request.status || "pending")}
                     </div>
                   </div>
                   <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-700">
@@ -847,7 +852,7 @@ export function AdminDashboard() {
                     <td className="py-3 px-4 text-sm text-gray-600">{item.organization}</td>
                     <td className="py-3 px-4">
                       <span className={`px-3 py-1 rounded-full text-xs ${getStatusClass(item.status)}`}>
-                        {item.status}
+                        {formatStatusLabel(item.status)}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-600">{item.joined}</td>
@@ -1157,7 +1162,7 @@ function AccountModal({
               <span className="mb-2 block text-sm text-gray-600">Status</span>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <span className={`w-fit rounded-full px-3 py-1 text-xs ${getStatusClass(formData.status)}`}>
-                  {formData.status}
+                  {formatStatusLabel(formData.status)}
                 </span>
                 {showSuspendAction && (
                   <button

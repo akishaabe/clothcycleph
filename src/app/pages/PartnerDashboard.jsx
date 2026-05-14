@@ -42,6 +42,11 @@ const statusStyles = {
   completed: "bg-green-100 text-green-700",
 };
 
+const formatStatusLabel = (status) =>
+  String(status || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
 const formatDate = (value) =>
   value
     ? new Intl.DateTimeFormat("en-PH", {
@@ -396,7 +401,7 @@ export function PartnerDashboard() {
                         : "bg-[#eff6ff] text-[#41668f] hover:bg-[#dbeafe]"
                     }`}
                   >
-                    {status}
+                    {formatStatusLabel(status)}
                   </button>
                 ),
               )}
@@ -454,7 +459,7 @@ export function PartnerDashboard() {
                           statusStyles[request.status] || statusStyles.pending
                         }`}
                       >
-                        {request.status_label || request.status}
+                        {request.status_label || formatStatusLabel(request.status)}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm text-[#41668f]">{formatDate(request.created_at)}</td>

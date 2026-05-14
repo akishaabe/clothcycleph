@@ -11,6 +11,11 @@ const statusClass = {
   completed: "bg-[#eef5ff] text-[#3f5f8f] border-[#cfe0f4]",
 };
 
+const formatStatusLabel = (status) =>
+  String(status || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
 const pathwayLabels = {
   recycle: "Recycle",
   donate: "Donate",
@@ -142,7 +147,7 @@ export function DssRequestsPage() {
                       : "bg-[#f3f5f2] text-[#5f6f67] hover:bg-[#e7ebe6]"
                   }`}
                 >
-                  {status}
+                  {formatStatusLabel(status)}
                 </button>
               ))}
             </div>
@@ -192,7 +197,7 @@ export function DssRequestsPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full border px-3 py-1 text-xs ${statusClass[request.status] || statusClass.pending}`}>
-                      {request.status}
+                      {formatStatusLabel(request.status)}
                     </span>
                     {request.status === "accepted" && <CheckCircle className="h-4 w-4 text-[#336158]" />}
                     {request.status === "pending" && <Clock className="h-4 w-4 text-[#7a5427]" />}
