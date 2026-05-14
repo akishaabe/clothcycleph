@@ -1,5 +1,5 @@
 import { D1Database, executeD1, generateD1UUID, queryD1, queryD1First } from '../config/d1.js';
-import { analyzeBurnTest, buildPathwayRecommendations, DSS_ENGINE_VERSION } from './dssEngine.js';
+import { analyzeBurnTest, buildPathwayRecommendations, DSS_ENGINE_VERSION, evaluateEligibility } from './dssEngine.js';
 import { createNotificationD1 } from './d1NotificationService.js';
 import { createSystemMessageD1 } from './d1MessageService.js';
 import { listPartnerLocationsD1, PartnerSearchOptions } from './d1GisService.js';
@@ -40,6 +40,11 @@ export async function sendRecommendationToPartnerD1(
   }
 ) {
   const submission = await getSubmissionForUserD1(db, payload.submission_id, userId, role);
+  const eligibility = evaluateEligibility(submission);
+  if (!eligibility.eligible) {
+    throw new Error(eligibility.message || 'This submission is not eligible for partner recommendation.');
+  }
+
   const partner = await queryD1First(
     db,
     `SELECT id, name, user_id
@@ -314,6 +319,14 @@ export async function getPartnerDssRequestsD1(db: D1Database, userId: string, em
        sd.brand,
        sd.no_brand_visible,
        sd.fabric_description,
+       sd.restricted_category,
+       sd.fiber_composition,
+       sd.wearability,
+       sd.repairability,
+       sd.contamination_level,
+       sd.damage_classification,
+       sd.repurposing_potential,
+       sd.trim_removal,
        bt.performed AS burn_performed,
        bt.page AS burn_page,
        bt.moment AS burn_moment,
@@ -453,6 +466,14 @@ async function getSubmissionForUserD1(db: D1Database, submissionId: string, user
        sd.brand,
        sd.no_brand_visible,
        sd.fabric_description,
+       sd.restricted_category,
+       sd.fiber_composition,
+       sd.wearability,
+       sd.repairability,
+       sd.contamination_level,
+       sd.damage_classification,
+       sd.repurposing_potential,
+       sd.trim_removal,
        bt.performed AS burn_performed,
        bt.page AS burn_page,
        bt.moment AS burn_moment,
@@ -493,6 +514,14 @@ function normalizeSubmissionForDss(row: any) {
       brand: row.brand,
       no_brand_visible: Boolean(row.no_brand_visible),
       fabric_description: parseJsonArray(row.fabric_description),
+      restricted_category: row.restricted_category || 'none',
+      fiber_composition: row.fiber_composition,
+      wearability: row.wearability,
+      repairability: row.repairability,
+      contamination_level: row.contamination_level,
+      damage_classification: row.damage_classification,
+      repurposing_potential: row.repurposing_potential,
+      trim_removal: row.trim_removal,
     },
     burn_test: {
       performed: Boolean(row.burn_performed),
@@ -533,6 +562,14 @@ function normalizePartnerRequest(row: any) {
       no_brand_visible: Boolean(row.no_brand_visible),
       fabric_description: parseJsonArray(row.fabric_description),
       fabric_description_list: parseJsonArray(row.fabric_description),
+      restricted_category: row.restricted_category || 'none',
+      fiber_composition: row.fiber_composition,
+      wearability: row.wearability,
+      repairability: row.repairability,
+      contamination_level: row.contamination_level,
+      damage_classification: row.damage_classification,
+      repurposing_potential: row.repurposing_potential,
+      trim_removal: row.trim_removal,
     },
     burn_test: {
       performed: Boolean(row.burn_performed),
@@ -549,6 +586,15 @@ function normalizePartnerRequest(row: any) {
 function buildBrief(submission: any, recommendation: any) {
   const details = submission.details || {};
   const burnTest = submission.burn_test || {};
+  if (recommendation?.recommended_pathway === 'rejected') {
+    return [
+      'Eligibility status: Rejected',
+      `Restricted category: ${details.restricted_category || recommendation.eligibility?.reason || 'Not specified'}`,
+      `Reason: ${recommendation.explanation}`,
+      'DSS evaluation stopped before donation, upcycling, or recycling recommendations.',
+    ].join('\n');
+  }
+
   const lines = [
     `Recommended pathway: ${titleCase(recommendation.recommended_pathway)} (${Math.round(recommendation.confidence * 100)}% confidence)`,
     `Item: ${submission.item_type}`,

@@ -139,6 +139,19 @@ export interface SubmissionDetails {
   brand?: string;
   no_brand_visible?: boolean;
   fabric_description?: string[] | string;
+  restricted_category?:
+    | 'hospital_medical_uniform'
+    | 'ppe_contaminated_workwear'
+    | 'used_undergarments'
+    | 'mold_chemical_contaminated'
+    | 'none';
+  fiber_composition?: string | null;
+  wearability?: string | null;
+  repairability?: string | null;
+  contamination_level?: string | null;
+  damage_classification?: string | null;
+  repurposing_potential?: string | null;
+  trim_removal?: string | null;
 }
 
 export interface BurnTestDetails {
@@ -204,7 +217,7 @@ export interface Partner {
 }
 
 export interface DssRecommendation {
-  recommended_pathway: 'recycle' | 'donate' | 'upcycle' | 'buyback';
+  recommended_pathway: 'recycle' | 'donate' | 'upcycle' | 'buyback' | 'rejected';
   rank: number;
   score: number;
   confidence: number;
@@ -216,6 +229,12 @@ export interface DssRecommendation {
     expected: string;
     selected: string;
   }>;
+  eligibility?: {
+    eligible: boolean;
+    category: string;
+    reason?: string;
+    message?: string;
+  };
 }
 
 export interface DssPreview {

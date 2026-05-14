@@ -473,73 +473,75 @@ export function SettingsPage() {
           </div>
         )}
 
-        <div className="grid gap-6 md:grid-cols-[260px_1fr]">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className={`${panelClass} rounded-2xl p-6 text-center md:col-start-1 md:row-start-1`}
-          >
-            <div className="mx-auto mb-5 flex h-32 w-32 items-center justify-center overflow-hidden rounded-full bg-[#e5e7eb]">
-              {profilePhoto ? (
-                <img
-                  src={profilePhoto}
-                  alt="Profile"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <User className="h-16 w-16 text-[#4b5563]" />
-              )}
-            </div>
-
-            <h2
-              className={`${profileNameSize} font-bold leading-tight text-[#19221d]`}
+        <div className="grid gap-6 md:grid-cols-[260px_1fr] md:items-start">
+          <div className="space-y-6 md:col-start-1">
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className={`${panelClass} h-fit rounded-2xl p-6 text-center`}
             >
-              {savedProfile.name}
-            </h2>
-            <p className="mt-2 break-all text-[#6f7f77]">{savedProfile.email}</p>
+              <div className="mx-auto mb-5 flex h-32 w-32 items-center justify-center overflow-hidden rounded-full bg-[#e5e7eb]">
+                {profilePhoto ? (
+                  <img
+                    src={profilePhoto}
+                    alt="Profile"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <User className="h-16 w-16 text-[#4b5563]" />
+                )}
+              </div>
 
-            <label
-              htmlFor="profile-photo"
-              className="profile-photo-button mt-4 inline-flex cursor-pointer rounded-full border border-[#6b7280] bg-[#9ca3af] px-5 py-2 text-white transition-colors hover:bg-[#6b7280]"
+              <h2
+                className={`${profileNameSize} font-bold leading-tight text-[#19221d]`}
+              >
+                {savedProfile.name}
+              </h2>
+              <p className="mt-2 break-all text-[#6f7f77]">{savedProfile.email}</p>
+
+              <label
+                htmlFor="profile-photo"
+                className="profile-photo-button mt-4 inline-flex cursor-pointer rounded-full border border-[#6b7280] bg-[#9ca3af] px-5 py-2 text-white transition-colors hover:bg-[#6b7280]"
+              >
+                {isPhotoUploading ? "Uploading..." : "Change Photo"}
+              </label>
+              <input
+                id="profile-photo"
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoChange}
+                className="hidden"
+              />
+            </motion.div>
+
+            <motion.aside
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className={`${panelClass} h-fit rounded-2xl p-3`}
             >
-              {isPhotoUploading ? "Uploading..." : "Change Photo"}
-            </label>
-            <input
-              id="profile-photo"
-              type="file"
-              accept="image/*"
-              onChange={handlePhotoChange}
-              className="hidden"
-            />
-          </motion.div>
-
-          <motion.aside
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className={`${panelClass} h-fit rounded-2xl p-3 md:col-start-1 md:row-start-2`}
-          >
-            <div className="space-y-2">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 transition-all ${
-                    activeTab === tab.id
-                      ? "bg-[#336158] text-white shadow-md"
-                      : "text-[#5f6f67] hover:bg-[#f3f5f2] hover:text-[#19221d]"
-                  }`}
-                >
-                  <tab.icon className="h-5 w-5" />
-                  <span>{tab.label}</span>
-                </button>
-              ))}
-            </div>
-          </motion.aside>
+              <div className="space-y-2">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 transition-all ${
+                      activeTab === tab.id
+                        ? "bg-[#336158] text-white shadow-md"
+                        : "text-[#5f6f67] hover:bg-[#f3f5f2] hover:text-[#19221d]"
+                    }`}
+                  >
+                    <tab.icon className="h-5 w-5" />
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+            </motion.aside>
+          </div>
 
           <motion.section
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            className={`${panelClass} rounded-2xl p-6 md:col-start-2 md:row-span-2 md:row-start-1 md:flex md:min-h-full md:p-7`}
+            className={`${panelClass} rounded-2xl p-6 md:col-start-2 md:row-start-1 md:flex md:p-7`}
           >
             {activeTab === "profile" && (
               <div className="flex w-full flex-col">

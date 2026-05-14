@@ -110,6 +110,17 @@ type Variables = {
   };
 };
 
+const MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5MB
+const MIN_UPLOAD_SIZE = 10 * 1024; // 10KB
+const ALLOWED_UPLOAD_MIMETYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+];
+
 const app = new Hono<{ Bindings: CloudflareEnv; Variables: Variables }>();
 
 app.use('*', secureHeaders());
@@ -634,7 +645,7 @@ app.put('/api/messages/:id/read', requireAuth, async (c) => {
 });
 
 app.post('/api/upload', requireAuth, async (c) => {
-  if (!c.env.R2_BUCKET) {
+  if (!c.env.R2_BUCKET || typeof c.env.R2_BUCKET.put !== 'function') {
     return c.json({ error: 'R2 bucket is not configured' }, 503);
   }
 
@@ -644,16 +655,25 @@ app.post('/api/upload', requireAuth, async (c) => {
     return c.json({ error: 'Missing file' }, 400);
   }
 
-  const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-  if (!allowedMimes.includes(file.type)) {
+  if (!ALLOWED_UPLOAD_MIMETYPES.includes(file.type)) {
     return c.json({ error: 'Only image files are allowed' }, 400);
   }
 
-  if (file.size != null && file.size > 10 * 1024 * 1024) {
-    return c.json({ error: 'File size must be less than 10MB' }, 400);
+  if (file.size != null) {
+    if (file.size < MIN_UPLOAD_SIZE) {
+      return c.json({ error: 'File size must be at least 10KB' }, 400);
+    }
+
+    if (file.size > MAX_UPLOAD_SIZE) {
+      return c.json({ error: 'File size must be less than 5MB' }, 400);
+    }
   }
 
   const fileData = await file.arrayBuffer();
+  if (fileData.byteLength > MAX_UPLOAD_SIZE) {
+    return c.json({ error: 'File size must be less than 5MB' }, 400);
+  }
+
   const upload = await uploadFileToR2(c.env.R2_BUCKET, fileData, file.name, file.type);
   return c.json({ message: 'File uploaded successfully', ...upload }, 201);
 });
@@ -694,7 +714,7 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (c) => {
 app.put('/api/admin/users/:id', requireAuth, requireAdmin, async (c) => {
   const userId = c.req.param('id');
   const body = await c.req.json();
-  const user = await updateUserD1(c.env.DB, userId, {
+  const user = await updateUserD1(c.env.DB, userId!, {
     name: body.name,
     email: body.email,
     role: body.role,
@@ -708,7 +728,7 @@ app.put('/api/admin/users/:id', requireAuth, requireAdmin, async (c) => {
 
 app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (c) => {
   const userId = c.req.param('id');
-  await deleteUserD1(c.env.DB, userId);
+  await deleteUserD1(c.env.DB, userId!);
   return c.json({ message: 'User deleted successfully' });
 });
 

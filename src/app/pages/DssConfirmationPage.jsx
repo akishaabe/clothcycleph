@@ -22,7 +22,10 @@ const pathwayLabels = {
   donate: "Donate",
   upcycle: "Upcycle",
   buyback: "Buyback",
+  rejected: "Rejected",
 };
+
+const fixedServicePathways = ["recycle", "donate", "upcycle"];
 
 const statusClass = {
   pending: "bg-[#fff8e8] text-[#7a5427] border-[#ead6ae]",
@@ -41,6 +44,59 @@ function formatDate(value) {
     day: "numeric",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function normalizePathway(value) {
+  const normalized = String(value || "").toLowerCase().trim();
+
+  if (normalized === "recycling") {
+    return "recycle";
+  }
+
+  return normalized;
+}
+
+function stripSelectedServiceBriefLines(value) {
+  return String(value || "")
+    .split("\n")
+    .filter((line) => {
+      const normalizedLine = line.toLowerCase();
+
+      return (
+        !normalizedLine.startsWith("recommended pathway:") &&
+        !normalizedLine.startsWith("recommendation note:")
+      );
+    })
+    .join("\n")
+    .trim();
+}
+
+function BriefPreview({ brief }) {
+  const lines = String(brief || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return (
+    <div className="rounded-2xl border border-[#dce4da] bg-[#fbfcfa] p-4 text-sm leading-7 text-[#19221d] dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-100">
+      {lines.map((line, index) => {
+        const separatorIndex = line.indexOf(":");
+
+        if (separatorIndex <= 0) {
+          return <p key={`${line}-${index}`}>{line}</p>;
+        }
+
+        return (
+          <p key={`${line}-${index}`}>
+            <span className="font-semibold dark:text-white">
+              {line.slice(0, separatorIndex + 1)}
+            </span>{" "}
+            {line.slice(separatorIndex + 1).trim()}
+          </p>
+        );
+      })}
+    </div>
+  );
 }
 
 export function DssConfirmationPage() {
@@ -82,13 +138,22 @@ export function DssConfirmationPage() {
         }
 
         const nextPreview = previewResponse.data;
+        const lockedServicePathway = normalizePathway(
+          nextPreview.submission?.service_type || nextPreview.submission?.action,
+        );
         const topRecommendation = nextPreview.recommendations[0];
-        const partnersResponse = await dssService.listPartners({
-          lat: browserLocation?.lat,
-          lng: browserLocation?.lng,
-          pathway: topRecommendation?.recommended_pathway,
-          radiusKm: 120,
-        });
+        const initialPathway = fixedServicePathways.includes(lockedServicePathway)
+          ? lockedServicePathway
+          : topRecommendation?.recommended_pathway;
+        const partnersResponse =
+          initialPathway === "rejected"
+            ? { data: [] }
+            : await dssService.listPartners({
+                lat: browserLocation?.lat,
+                lng: browserLocation?.lng,
+                pathway: initialPathway,
+                radiusKm: 120,
+              });
 
         if (!isMounted) {
           return;
@@ -103,8 +168,12 @@ export function DssConfirmationPage() {
             ? "Partners are ranked by distance from your current location."
             : "Location access is off. Partners are ranked by verification and rating.",
         );
-        setSelectedPathway(topRecommendation?.recommended_pathway || "");
-        setBrief(nextPreview.brief || "");
+        setSelectedPathway(initialPathway || "");
+        setBrief(
+          fixedServicePathways.includes(lockedServicePathway)
+            ? stripSelectedServiceBriefLines(nextPreview.brief)
+            : nextPreview.brief || "",
+        );
       } catch (loadError) {
         if (isMounted) {
           setError(loadError.message || "Unable to load DSS confirmation.");
@@ -129,6 +198,32 @@ export function DssConfirmationPage() {
         recommendation.recommended_pathway === selectedPathway,
     );
   }, [preview, selectedPathway]);
+
+  const selectedServicePathway = useMemo(() => {
+    const servicePathway = normalizePathway(
+      preview?.submission?.service_type || preview?.submission?.action,
+    );
+
+    return fixedServicePathways.includes(servicePathway) ? servicePathway : "";
+  }, [preview]);
+
+  const hasSelectedService = Boolean(selectedServicePathway);
+  const isRejected = preview?.recommendations?.[0]?.recommended_pathway === "rejected";
+
+  const recommendationOptions = useMemo(() => {
+    if (!preview?.recommendations) {
+      return [];
+    }
+
+    if (!hasSelectedService) {
+      return preview.recommendations;
+    }
+
+    return preview.recommendations.filter(
+      (recommendation) =>
+        recommendation.recommended_pathway !== selectedServicePathway,
+    );
+  }, [hasSelectedService, preview, selectedServicePathway]);
 
   const matchingPartners = useMemo(() => {
     if (!selectedPathway) {
@@ -194,6 +289,11 @@ export function DssConfirmationPage() {
   };
 
   const handleSend = async () => {
+    if (isRejected) {
+      setError("This submission is ineligible and cannot be sent to a partner.");
+      return;
+    }
+
     if (!selectedPartnerId || !selectedPathway) {
       setError("Choose a pathway and partner first.");
       return;
@@ -266,19 +366,19 @@ export function DssConfirmationPage() {
   }
 
   return (
-    <div className="app-darkable-page min-h-screen bg-[radial-gradient(circle_at_top_left,_#e7ebe6,_transparent_28%),linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)] text-[#19221d]">
-      <nav className="sticky top-0 z-20 border-b border-[#e1e7df] bg-white/85 px-6 py-4 backdrop-blur-xl">
+    <div className="app-darkable-page min-h-screen bg-[radial-gradient(circle_at_top_left,_#e7ebe6,_transparent_28%),linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)] text-[#19221d] dark:bg-[radial-gradient(circle_at_top_left,_#1d2a25,_transparent_30%),linear-gradient(135deg,#0f1412,#121821,#0d1016)] dark:text-zinc-100">
+      <nav className="sticky top-0 z-20 border-b border-[#e1e7df] bg-white/85 px-6 py-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#0f1412]/85">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <button
             onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-2 text-sm text-[#5f6f67] hover:text-[#19221d]"
+            className="flex items-center gap-2 text-sm text-[#5f6f67] hover:text-[#19221d] dark:text-zinc-400 dark:hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" />
             Dashboard
           </button>
           <Link to="/" className="flex items-center gap-2">
             <Recycle className="h-6 w-6 text-[#336158]" />
-            <span className="font-gloock text-xl text-[#19221d]">
+            <span className="font-gloock text-xl text-[#19221d] dark:text-white">
               ClothCycle PH
             </span>
           </Link>
@@ -289,24 +389,24 @@ export function DssConfirmationPage() {
         <motion.section
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-6 overflow-hidden rounded-[28px] border border-[#dce4da] bg-white/85 p-8 shadow-[0_24px_80px_rgba(25,34,29,0.1)]"
+          className="mb-6 overflow-hidden rounded-[28px] border border-[#dce4da] bg-white/85 p-8 shadow-[0_24px_80px_rgba(25,34,29,0.1)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_24px_80px_rgba(0,0,0,0.35)]"
         >
           <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div>
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#336158]">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#336158] dark:text-emerald-300">
                 <Sparkles className="h-4 w-4" />
                 DSS confirmation
               </div>
-              <h1 className="font-gloock text-4xl text-[#19221d]">
+              <h1 className="font-gloock text-4xl text-[#19221d] dark:text-white">
                 Review recommendation and send to a partner
               </h1>
-              <p className="mt-3 max-w-2xl text-[#5f6f67]">
+              <p className="mt-3 max-w-2xl text-[#5f6f67] dark:text-zinc-300">
                 The DSS engine reviews your saved submission details, then
                 registers a partner request when you send the brief.
               </p>
             </div>
-            <div className="rounded-2xl border border-[#dce4da] bg-[#f7faf5] px-5 py-4 text-sm text-[#5f6f67]">
-              <div className="font-semibold text-[#19221d]">
+            <div className="rounded-2xl border border-[#dce4da] bg-[#f7faf5] px-5 py-4 text-sm text-[#5f6f67] dark:border-white/10 dark:bg-white/[0.05] dark:text-zinc-400">
+              <div className="font-semibold text-[#19221d] dark:text-white">
                 {preview.submission.submission_name || preview.submission.item_type}
               </div>
               <div>{formatDate(preview.submission.created_at)}</div>
@@ -316,28 +416,28 @@ export function DssConfirmationPage() {
 
         <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="space-y-6">
-            <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)]">
+            <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_12px_34px_rgba(0,0,0,0.3)]">
               {preview.burn_test_analysis?.performed && (
-                <div className="mb-6 rounded-2xl border border-[#dce4da] bg-[#f7faf5] p-5">
+                <div className="mb-6 rounded-2xl border border-[#dce4da] bg-[#f7faf5] p-5 dark:border-white/10 dark:bg-white/[0.05]">
                   <h2 className="mb-2 text-xl font-semibold">
                     Burn-test fabric result
                   </h2>
-                  <p className="mb-4 text-sm leading-6 text-[#5f6f67]">
+                  <p className="mb-4 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
                     {preview.burn_test_analysis.summary}
                   </p>
                   <div className="grid gap-3 md:grid-cols-3">
                     {preview.burn_test_analysis.top_fibers.map((fiber, index) => (
                       <div
                         key={fiber.fiber}
-                        className="rounded-xl border border-[#e1e7df] bg-white p-4"
+                        className="rounded-xl border border-[#e1e7df] bg-white p-4 dark:border-white/10 dark:bg-white/[0.04]"
                       >
-                        <div className="text-xs uppercase tracking-wide text-[#5f6f67]">
+                        <div className="text-xs uppercase tracking-wide text-[#5f6f67] dark:text-zinc-400">
                           Top {index + 1}
                         </div>
-                        <div className="mt-1 font-semibold capitalize text-[#19221d]">
+                        <div className="mt-1 font-semibold capitalize text-[#19221d] dark:text-white">
                           {fiber.fiber}
                         </div>
-                        <div className="mt-2 text-sm text-[#336158]">
+                        <div className="mt-2 text-sm text-[#336158] dark:text-emerald-300">
                           {Math.round(fiber.confidence * 100)}% confidence
                         </div>
                       </div>
@@ -346,82 +446,139 @@ export function DssConfirmationPage() {
                 </div>
               )}
 
-              <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
-                <ClipboardList className="h-5 w-5 text-[#336158]" />
-                Recommendation options
-              </h2>
-              <div className="grid gap-3">
-                {preview.recommendations.map((recommendation) => (
-                  <button
-                    key={recommendation.recommended_pathway}
-                    onClick={() =>
-                      handlePathwayChange(recommendation.recommended_pathway)
-                    }
-                    className={`rounded-2xl border p-4 text-left transition-all ${
-                      selectedPathway === recommendation.recommended_pathway
-                        ? "border-[#336158] bg-[#f1f7ef]"
-                        : "border-[#e1e7df] bg-white hover:border-[#9bb39c]"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-4">
+              {hasSelectedService && (
+                <div className="mb-6">
+                  <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
+                    <ClipboardList className="h-5 w-5 text-[#336158] dark:text-emerald-300" />
+                    Selected service
+                  </h2>
+                  <div className="rounded-2xl border border-[#336158] bg-[#f1f7ef] p-5 dark:border-emerald-400/40 dark:bg-emerald-400/10">
+                    <div className="flex items-start justify-between gap-4">
                       <div>
-                        <div className="text-lg font-semibold text-[#19221d]">
-                          #{recommendation.rank}{" "}
-                          {pathwayLabels[recommendation.recommended_pathway]}
+                        <div className="text-2xl font-semibold text-[#19221d] dark:text-white">
+                          {pathwayLabels[selectedServicePathway]}
                         </div>
-                        <p className="mt-1 text-sm leading-6 text-[#5f6f67]">
-                          {recommendation.explanation}
+                        <p className="mt-2 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
+                          {selectedRecommendation?.explanation ||
+                            `You selected ${pathwayLabels[selectedServicePathway]} for this textile submission.`}
                         </p>
-                        {recommendation.checks?.length > 0 && (
-                          <details className="mt-3 rounded-xl border border-[#e1e7df] bg-white/80 px-4 py-3 text-sm text-[#5f6f67]">
-                            <summary className="cursor-pointer font-semibold text-[#336158]">
-                              Why this was recommended
-                            </summary>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {recommendation.checks.map((check) => (
-                                <span
-                                  key={`${recommendation.recommended_pathway}-${check.question}`}
-                                  className={`rounded-full px-3 py-1 text-xs ${
-                                    check.matched
-                                      ? "bg-[#edf7ed] text-[#336158]"
-                                      : "bg-[#fff8e8] text-[#7a5427]"
-                                  }`}
-                                >
-                                  {check.question}: {check.matched ? "matched" : "not matched"}
-                                </span>
-                              ))}
-                            </div>
-                          </details>
-                        )}
                       </div>
-                      <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-center text-sm text-[#336158]">
-                        <div className="font-bold">
-                          {Math.round(recommendation.confidence * 100)}%
+                      {selectedRecommendation && !hasSelectedService && (
+                        <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-center text-sm text-[#336158] dark:bg-white/10 dark:text-emerald-200">
+                          <div className="font-bold">
+                            {Math.round(selectedRecommendation.confidence * 100)}%
+                          </div>
+                          <div>confidence</div>
                         </div>
-                        <div>confidence</div>
-                      </div>
+                      )}
                     </div>
-                  </button>
-                ))}
-              </div>
+                  </div>
+                </div>
+              )}
+
+              {recommendationOptions.length > 0 && (
+                <>
+                  <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
+                    <ClipboardList className="h-5 w-5 text-[#336158] dark:text-emerald-300" />
+                    Recommendation options
+                  </h2>
+                  <div className="grid gap-3">
+                    {recommendationOptions.map((recommendation) => {
+                      const isSelected =
+                        selectedPathway === recommendation.recommended_pathway;
+                      const CardElement = hasSelectedService ? "div" : "button";
+
+                      return (
+                        <CardElement
+                          key={recommendation.recommended_pathway}
+                          onClick={
+                            hasSelectedService
+                              ? undefined
+                              : () =>
+                                  handlePathwayChange(
+                                    recommendation.recommended_pathway,
+                                  )
+                          }
+                          className={`rounded-2xl border p-4 text-left transition-all ${
+                            isSelected
+                              ? "border-[#336158] bg-[#f1f7ef] dark:border-emerald-400/40 dark:bg-emerald-400/10"
+                              : "border-[#e1e7df] bg-white hover:border-[#9bb39c] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-emerald-300/50"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <div className="text-lg font-semibold text-[#19221d] dark:text-white">
+                                {!hasSelectedService && `#${recommendation.rank} `}
+                                {pathwayLabels[recommendation.recommended_pathway]}
+                              </div>
+                              <p className="mt-1 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
+                                {recommendation.explanation}
+                              </p>
+                              {recommendation.checks?.length > 0 && (
+                                <details className="mt-3 rounded-xl border border-[#e1e7df] bg-white/80 px-4 py-3 text-sm text-[#5f6f67] dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300">
+                                  <summary className="cursor-pointer font-semibold text-[#336158] dark:text-emerald-300">
+                                    Why this was recommended
+                                  </summary>
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {recommendation.checks.map((check) => (
+                                      <span
+                                        key={`${recommendation.recommended_pathway}-${check.question}`}
+                                        className={`rounded-full px-3 py-1 text-xs ${
+                                          check.matched
+                                            ? "bg-[#edf7ed] text-[#336158] dark:bg-emerald-400/10 dark:text-emerald-200"
+                                            : "bg-[#fff8e8] text-[#7a5427] dark:bg-amber-400/10 dark:text-amber-200"
+                                        }`}
+                                      >
+                                        {check.question}: {check.matched ? "matched" : "not matched"}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </details>
+                              )}
+                            </div>
+                            <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-center text-sm text-[#336158] dark:bg-white/10 dark:text-emerald-200">
+                              <div className="font-bold">
+                                {Math.round(recommendation.confidence * 100)}%
+                              </div>
+                              <div>confidence</div>
+                            </div>
+                          </div>
+                        </CardElement>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {isRejected && (
+                <div className="rounded-2xl border border-red-100 bg-red-50 p-5 text-sm leading-6 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">
+                  <div className="text-lg font-semibold">Eligibility screening failed</div>
+                  <p className="mt-2">
+                    {preview.recommendations[0]?.explanation}
+                  </p>
+                  <p className="mt-2 font-semibold">
+                    DSS evaluation stopped before donation, upcycling, or recycling recommendations.
+                  </p>
+                </div>
+              )}
             </div>
 
-            <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)]">
+            {!isRejected && <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_12px_34px_rgba(0,0,0,0.3)]">
               <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <h2 className="flex items-center gap-2 text-xl font-semibold">
-                  <Building2 className="h-5 w-5 text-[#336158]" />
+                  <Building2 className="h-5 w-5 text-[#336158] dark:text-emerald-300" />
                   Choose partner
                 </h2>
                 <button
                   onClick={refreshNearbyPartners}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#dce4da] px-3 py-2 text-sm text-[#5f6f67] hover:bg-[#f3f5f2]"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#dce4da] px-3 py-2 text-sm text-[#5f6f67] hover:bg-[#f3f5f2] dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/10"
                 >
                   <Navigation className="h-4 w-4" />
                   Rank nearby
                 </button>
               </div>
               {locationMessage && (
-                <div className="mb-4 rounded-xl bg-[#f7faf5] px-4 py-3 text-sm text-[#5f6f67]">
+                <div className="mb-4 rounded-xl bg-[#f7faf5] px-4 py-3 text-sm text-[#5f6f67] dark:bg-white/[0.05] dark:text-zinc-300">
                   {locationMessage}
                 </div>
               )}
@@ -438,55 +595,51 @@ export function DssConfirmationPage() {
                     onClick={() => setSelectedPartnerId(partner.id)}
                     className={`rounded-2xl border p-4 text-left transition-all ${
                       selectedPartnerId === partner.id
-                        ? "border-[#336158] bg-[#f1f7ef]"
-                        : "border-[#e1e7df] bg-white hover:border-[#9bb39c]"
+                        ? "border-[#336158] bg-[#f1f7ef] dark:border-emerald-400/40 dark:bg-emerald-400/10"
+                        : "border-[#e1e7df] bg-white hover:border-[#9bb39c] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-emerald-300/50"
                     }`}
                   >
-                    <div className="font-semibold text-[#19221d]">
+                    <div className="font-semibold text-[#19221d] dark:text-white">
                       {partner.name}
                     </div>
-                    <p className="mt-1 line-clamp-2 text-sm text-[#5f6f67]">
+                    <p className="mt-1 line-clamp-2 text-sm text-[#5f6f67] dark:text-zinc-300">
                       {partner.description || partner.service_types || partner.email}
                     </p>
-                    <div className="mt-3 text-xs uppercase tracking-wide text-[#336158]">
+                    <div className="mt-3 text-xs uppercase tracking-wide text-[#336158] dark:text-emerald-300">
                       {partner.service_types || "General textile partner"}
                     </div>
                     {(partner.accepted_service_types || partner.pickup_areas || partner.capacity_notes) && (
-                      <div className="mt-3 space-y-1 text-xs text-[#5f6f67]">
+                      <div className="mt-3 space-y-1 text-xs text-[#5f6f67] dark:text-zinc-400">
                         {partner.accepted_service_types && <div>Accepts: {partner.accepted_service_types}</div>}
                         {partner.pickup_areas && <div>Pickup areas: {partner.pickup_areas}</div>}
                         {partner.accepts_clean_only && <div>Clean textiles only</div>}
                         {partner.capacity_notes && <div>{partner.capacity_notes}</div>}
                       </div>
                     )}
-                    <div className="mt-2 flex items-center gap-2 text-sm text-[#5f6f67]">
-                      <MapPin className="h-4 w-4 text-[#336158]" />
+
+                    <div className="mt-2 flex items-center gap-2 text-sm text-[#5f6f67] dark:text-zinc-300">
+                      <MapPin className="h-4 w-4 text-[#336158] dark:text-emerald-300" />
                       {partner.distance_km != null
                         ? `${partner.distance_km} km away`
                         : partner.address || "Location pending"}
                     </div>
                     {partner.gis_rank_reason && (
-                      <div className="mt-2 text-xs text-[#6d7c73]">
+                      <div className="mt-2 text-xs text-[#6d7c73] dark:text-zinc-400">
                         {partner.gis_rank_reason}
                       </div>
                     )}
                   </button>
                 ))}
               </div>
-            </div>
+            </div>}
           </div>
 
           <aside className="space-y-6">
-            <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)]">
+            <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_12px_34px_rgba(0,0,0,0.3)]">
               <h2 className="mb-3 text-xl font-semibold">Partner brief</h2>
-              <textarea
-                value={brief}
-                onChange={(event) => setBrief(event.target.value)}
-                rows={14}
-                className="w-full resize-none rounded-2xl border border-[#dce4da] bg-[#fbfcfa] p-4 text-sm leading-6 text-[#19221d] focus:border-[#336158] focus:outline-none"
-              />
-              {selectedRecommendation && (
-                <div className="mt-3 rounded-xl bg-[#f7faf5] px-4 py-3 text-sm text-[#5f6f67]">
+              <BriefPreview brief={brief} />
+              {selectedRecommendation && !hasSelectedService && (
+                <div className="mt-3 rounded-xl bg-[#f7faf5] px-4 py-3 text-sm text-[#5f6f67] dark:bg-white/[0.05] dark:text-zinc-300">
                   Score: {selectedRecommendation.score.toFixed(1)} / 100
                 </div>
               )}
@@ -494,8 +647,8 @@ export function DssConfirmationPage() {
                 <div
                   className={`mt-3 rounded-xl border px-4 py-3 text-sm ${
                     sentMessage
-                      ? "border-[#cfe2cf] bg-[#edf7ed] text-[#336158]"
-                      : "border-red-100 bg-red-50 text-red-700"
+                      ? "border-[#cfe2cf] bg-[#edf7ed] text-[#336158] dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200"
+                      : "border-red-100 bg-red-50 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200"
                   }`}
                 >
                   {sentMessage || error}
@@ -503,8 +656,8 @@ export function DssConfirmationPage() {
               )}
               <button
                 onClick={handleSend}
-                disabled={isSending || !selectedPartnerId || !selectedPathway}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#336158] px-5 py-3 text-white transition-all hover:bg-[#2a4c48] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isRejected || isSending || !selectedPartnerId || !selectedPathway}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#336158] px-5 py-3 text-white transition-all hover:bg-[#2a4c48] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-500/80 dark:text-[#07110d] dark:hover:bg-emerald-400 dark:disabled:bg-emerald-500/30 dark:disabled:text-zinc-400"
               >
                 {isSending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -522,20 +675,20 @@ export function DssConfirmationPage() {
               />
             )}
 
-            <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)]">
+            <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_12px_34px_rgba(0,0,0,0.3)]">
               <h2 className="mb-2 text-xl font-semibold">Sent requests</h2>
-              <p className="text-sm leading-6 text-[#5f6f67]">
+              <p className="text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
                 Partner replies and reminder controls now live on a separate page so this DSS confirmation stays focused.
               </p>
               {highlightedRequestId && (
-                <div className="mt-4 rounded-xl border border-[#cfe2cf] bg-[#edf7ed] px-4 py-3 text-sm text-[#336158]">
+                <div className="mt-4 rounded-xl border border-[#cfe2cf] bg-[#edf7ed] px-4 py-3 text-sm text-[#336158] dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200">
                   A request from messages is highlighted in your sent requests page.
                 </div>
               )}
               <button
                 type="button"
                 onClick={() => navigate(highlightedRequestId ? `/dss-requests?request=${highlightedRequestId}` : "/dss-requests")}
-                className="mt-4 w-full rounded-xl border border-[#dce4da] px-4 py-3 text-sm font-semibold text-[#336158] hover:bg-[#f3f5f2]"
+                className="mt-4 w-full rounded-xl border border-[#dce4da] px-4 py-3 text-sm font-semibold text-[#336158] hover:bg-[#f3f5f2] dark:border-white/10 dark:text-emerald-300 dark:hover:bg-white/10"
               >
                 View sent requests
               </button>

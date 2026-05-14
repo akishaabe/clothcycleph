@@ -45,6 +45,14 @@ CREATE TABLE IF NOT EXISTS submission_details (
   brand TEXT,
   no_brand_visible BOOLEAN DEFAULT false,
   fabric_description TEXT,
+  restricted_category TEXT DEFAULT 'none',
+  fiber_composition TEXT,
+  wearability TEXT,
+  repairability TEXT,
+  contamination_level TEXT,
+  damage_classification TEXT,
+  repurposing_potential TEXT,
+  trim_removal TEXT,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
