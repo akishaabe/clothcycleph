@@ -1,6 +1,6 @@
-type Pathway = 'recycle' | 'donate' | 'upcycle' | 'buyback';
+type Pathway = 'recycle' | 'donate' | 'upcycle' | 'buyback' | 'rejected';
 
-export const DSS_ENGINE_VERSION = 'dssEngine-v1';
+export const DSS_ENGINE_VERSION = 'dssEngine-v2-textile-recovery';
 
 interface RuleCheck {
   question: string;
@@ -10,6 +10,31 @@ interface RuleCheck {
   score?: number;
   total?: number;
 }
+
+interface EligibilityResult {
+  eligible: boolean;
+  category: string;
+  reason?: string;
+  message?: string;
+}
+
+const restrictedCategoryLabels: Record<string, string> = {
+  hospital_medical_uniform: 'Hospital/medical uniform',
+  ppe_contaminated_workwear: 'PPE or contaminated workwear',
+  used_undergarments: 'Used undergarments',
+  mold_chemical_contaminated: 'Mold- or chemical-contaminated textile',
+};
+
+const restrictedMessages: Record<string, string> = {
+  hospital_medical_uniform:
+    'This item is not eligible for DSS assessment because medical textiles may carry safety and contamination risks.',
+  ppe_contaminated_workwear:
+    'This item is rejected because PPE or contaminated workwear may contain hazardous residues or biological exposure risks.',
+  used_undergarments:
+    'This item is not eligible due to hygiene restrictions and will not be assessed for donation, upcycling, or recycling.',
+  mold_chemical_contaminated:
+    'This item is rejected because mold or chemical contamination can pose health and material safety risks.',
+};
 
 interface FabricRule {
   fiber: string;
@@ -104,7 +129,7 @@ const fabricRules: FabricRule[] = [
 ];
 
 const pathwayRules: Record<
-  Exclude<Pathway, 'buyback'>,
+  Exclude<Pathway, 'buyback' | 'rejected'>,
   {
     conditions: string[];
     cleanliness: string[];
@@ -203,7 +228,169 @@ function includesAnyText(value: unknown, hints: string[]) {
   return hints.some((hint) => normalize(haystack).includes(normalize(hint)));
 }
 
-function pathwayRuleScore(pathway: Exclude<Pathway, 'buyback'>, submission: any, burnAnalysis: any) {
+function firstDetail(submission: any, key: string, fallback?: string) {
+  return submission.details?.[key] || submission[key] || fallback || '';
+}
+
+function materialCategory(submission: any, burnAnalysis: any) {
+  const details = submission.details || {};
+  const signal = normalizeList([
+    details.fiber_composition,
+    details.fabric_types,
+    details.fabric_description,
+    submission.fabric,
+    burnAnalysis.top_fibers?.[0]?.fiber,
+  ].filter(Boolean).flat() as any);
+  const joined = signal.join(' ');
+
+  if (/cotton|linen|rayon|tencel|viscose|natural/.test(joined)) {
+    return 'cotton_natural';
+  }
+  if (/polyester|nylon|acrylic|spandex|synthetic|acetate|fleece/.test(joined)) {
+    return 'polyester_synthetic';
+  }
+  if (/blend|cotton-spandex|poly-spandex|cotton.*poly|poly.*cotton/.test(joined)) {
+    return 'cotton_poly_blend';
+  }
+  if (/wool|silk/.test(joined)) {
+    return 'wool_silk_delicate';
+  }
+
+  return details.fiber_composition || 'mixed_unknown';
+}
+
+function inferWearability(submission: any) {
+  const explicit = firstDetail(submission, 'wearability');
+  if (explicit) {
+    return explicit;
+  }
+
+  const condition = normalize(firstDetail(submission, 'condition'));
+  if (condition.includes('good')) {
+    return 'wearable_as_is';
+  }
+  if (condition.includes('minor')) {
+    return 'wearable_after_minor_repair';
+  }
+  if (condition.includes('heavily')) {
+    return 'not_wearable_fabric_usable';
+  }
+
+  return 'not_usable';
+}
+
+function inferDamage(submission: any) {
+  const explicit = firstDetail(submission, 'damage_classification');
+  if (explicit) {
+    return explicit;
+  }
+
+  const condition = normalize(firstDetail(submission, 'condition'));
+  if (condition.includes('good')) {
+    return 'none';
+  }
+  if (condition.includes('minor')) {
+    return 'small_hole_tear';
+  }
+  if (condition.includes('heavily')) {
+    return 'large_tear_heavy_damage';
+  }
+
+  return 'fabric_degradation';
+}
+
+function inferRepairability(submission: any) {
+  const explicit = firstDetail(submission, 'repairability');
+  if (explicit) {
+    return explicit;
+  }
+
+  const damage = normalize(inferDamage(submission));
+  if (damage === 'none') {
+    return 'no_repair_needed';
+  }
+  if (/minor|missing|loose|small/.test(damage)) {
+    return 'minor_repair';
+  }
+  if (/large|heavy/.test(damage)) {
+    return 'moderate_repair';
+  }
+
+  return 'not_practical';
+}
+
+function inferContamination(submission: any) {
+  const explicit = firstDetail(submission, 'contamination_level');
+  if (explicit) {
+    return explicit;
+  }
+
+  const cleanliness = normalize(firstDetail(submission, 'cleanliness'));
+  if (cleanliness.includes('clean and ready')) {
+    return 'clean';
+  }
+  if (cleanliness.includes('needs cleaning')) {
+    return 'washable_dirt_odor';
+  }
+  if (cleanliness.includes('contaminated')) {
+    return 'oil_paint_biological';
+  }
+
+  return cleanliness || 'washable_dirt_odor';
+}
+
+function inferRepurposingPotential(submission: any) {
+  const explicit = firstDetail(submission, 'repurposing_potential');
+  if (explicit) {
+    return explicit;
+  }
+
+  const itemSignal = normalizeList([submission.item_type, submission.details?.item_types, submission.details?.other_item_type].filter(Boolean).flat() as any).join(' ');
+  const damage = normalize(inferDamage(submission));
+  if (/curtains|bedsheets|denim|pants|jeans|dress|fabric scraps|household textile/.test(itemSignal)) {
+    return damage.includes('fabric_degradation') ? 'medium' : 'high';
+  }
+  if (/small|minor|large/.test(damage)) {
+    return 'medium';
+  }
+
+  return 'low';
+}
+
+function inferTrimRemoval(submission: any) {
+  return firstDetail(submission, 'trim_removal', 'easy');
+}
+
+export function evaluateEligibility(submission: any): EligibilityResult {
+  const restrictedCategory = normalize(firstDetail(submission, 'restricted_category', 'none')).replace(/\s+/g, '_');
+  if (restrictedCategory && restrictedCategory !== 'none' && restrictedCategory !== 'none_of_the_above') {
+    return {
+      eligible: false,
+      category: restrictedCategory,
+      reason: restrictedCategoryLabels[restrictedCategory] || 'Restricted textile category',
+      message:
+        restrictedMessages[restrictedCategory] ||
+        'This item is not eligible for the normal textile recovery DSS stream.',
+    };
+  }
+
+  const contamination = normalize(inferContamination(submission));
+  if (contamination.includes('chemical') || contamination.includes('mold')) {
+    return {
+      eligible: false,
+      category: 'mold_chemical_contaminated',
+      reason: restrictedCategoryLabels.mold_chemical_contaminated,
+      message: restrictedMessages.mold_chemical_contaminated,
+    };
+  }
+
+  return {
+    eligible: true,
+    category: 'none',
+  };
+}
+
+function pathwayRuleScore(pathway: Exclude<Pathway, 'buyback' | 'rejected'>, submission: any, burnAnalysis: any) {
   const rule = pathwayRules[pathway];
   const condition = submission.condition || submission.details?.condition || '';
   const cleanliness = submission.cleanliness || submission.details?.cleanliness || '';
@@ -214,17 +401,19 @@ function pathwayRuleScore(pathway: Exclude<Pathway, 'buyback'>, submission: any,
     submission.details?.fabric_description,
     burnAnalysis.top_fibers?.[0]?.fiber,
   ].filter(Boolean).flat();
+  const material = materialCategory(submission, burnAnalysis);
+  const wearability = inferWearability(submission);
+  const damage = inferDamage(submission);
+  const repairability = inferRepairability(submission);
+  const contamination = inferContamination(submission);
+  const repurposing = inferRepurposingPotential(submission);
+  const trimRemoval = inferTrimRemoval(submission);
+  const quantity = Number(submission.quantity || 1);
   const conditionMatched = rule.conditions.map(normalize).includes(normalize(condition));
   const cleanlinessMatched = rule.cleanliness.map(normalize).includes(normalize(cleanliness));
   const itemMatched = includesAnyText(itemSignal, rule.itemHints);
   const fabricMatched = includesAnyText(fabricSignal, rule.fabricHints);
-  const brandMatched =
-    pathway === 'donate'
-      ? !submission.details?.no_brand_visible
-      : pathway === 'upcycle'
-        ? true
-        : Boolean(submission.details?.no_brand_visible || !submission.details?.brand);
-  const checks = [
+  const scoringChecks = [
     {
       question: 'Condition',
       matched: conditionMatched,
@@ -250,25 +439,135 @@ function pathwayRuleScore(pathway: Exclude<Pathway, 'buyback'>, submission: any,
       selected: Array.isArray(fabricSignal) ? fabricSignal.join(', ') : String(fabricSignal || 'None'),
     },
     {
-      question: 'Brand handling',
-      matched: brandMatched,
+      question: 'Material/fiber composition',
+      matched:
+        pathway === 'recycle'
+          ? ['cotton_natural', 'polyester_synthetic', 'cotton_poly_blend'].includes(material)
+          : pathway === 'donate'
+            ? material !== 'mixed_unknown'
+            : true,
       expected:
         pathway === 'donate'
-          ? 'Brand/identity visible preferred'
+          ? 'Identifiable safe textile fiber'
           : pathway === 'recycle'
-            ? 'Unbranded or unknown brand acceptable'
-            : 'Brand not restrictive',
-      selected: submission.details?.no_brand_visible ? 'No brand visible' : submission.details?.brand || 'Not specified',
+            ? 'Identifiable cotton/natural, polyester/synthetic, or accepted blend'
+            : 'Any clean textile with usable fabric sections',
+      selected: material,
+    },
+    {
+      question: 'Wearability',
+      matched:
+        pathway === 'donate'
+          ? ['wearable_as_is', 'wearable_after_minor_repair'].includes(wearability)
+          : pathway === 'upcycle'
+            ? wearability !== 'not_usable'
+            : wearability !== 'wearable_as_is',
+      expected:
+        pathway === 'donate'
+          ? 'Wearable as-is or after minor repair'
+          : pathway === 'upcycle'
+            ? 'Not necessarily wearable, but fabric remains usable'
+            : 'No longer suitable for direct reuse',
+      selected: wearability,
+    },
+    {
+      question: 'Repairability',
+      matched:
+        pathway === 'donate'
+          ? ['no_repair_needed', 'minor_repair'].includes(repairability)
+          : pathway === 'upcycle'
+            ? ['minor_repair', 'moderate_repair', 'not_practical'].includes(repairability)
+            : ['moderate_repair', 'not_practical'].includes(repairability),
+      expected:
+        pathway === 'donate'
+          ? 'No repair or minor repair'
+          : pathway === 'upcycle'
+            ? 'Repair or redesign can preserve material value'
+            : 'Repair is not the main route',
+      selected: repairability,
+    },
+    {
+      question: 'Contamination level',
+      matched:
+        pathway === 'donate'
+          ? ['clean', 'washable_dirt_odor'].includes(contamination)
+          : pathway === 'upcycle'
+            ? ['clean', 'washable_dirt_odor', 'permanent_stain'].includes(contamination)
+            : ['clean', 'washable_dirt_odor', 'permanent_stain'].includes(contamination),
+      expected:
+        pathway === 'donate'
+          ? 'Clean or washable only'
+          : 'No chemical, mold, oil, paint, or biological contamination',
+      selected: contamination,
+    },
+    {
+      question: 'Damage classification',
+      matched:
+        pathway === 'donate'
+          ? ['none', 'minor_cosmetic', 'missing_button_loose_seam'].includes(damage)
+          : pathway === 'upcycle'
+            ? ['minor_cosmetic', 'missing_button_loose_seam', 'small_hole_tear', 'large_tear_heavy_damage'].includes(damage)
+            : ['large_tear_heavy_damage', 'fabric_degradation', 'small_hole_tear'].includes(damage),
+      expected:
+        pathway === 'donate'
+          ? 'No damage or minor repairable damage'
+          : pathway === 'upcycle'
+            ? 'Localized or structural damage with usable sections'
+            : 'Damaged enough for material recovery',
+      selected: damage,
+    },
+    {
+      question: 'Repurposing potential',
+      matched:
+        pathway === 'upcycle'
+          ? ['high', 'medium'].includes(repurposing)
+          : pathway === 'recycle'
+            ? ['low', 'medium'].includes(repurposing)
+            : repurposing !== 'low',
+      expected:
+        pathway === 'upcycle'
+          ? 'High or medium usable fabric sections'
+          : pathway === 'recycle'
+            ? 'Low or medium repurposing value'
+            : 'Item retains original-use value',
+      selected: repurposing,
+    },
+    {
+      question: 'Trim/accessory removal',
+      matched:
+        pathway === 'recycle'
+          ? ['none', 'easy'].includes(trimRemoval)
+          : pathway === 'upcycle'
+            ? trimRemoval !== 'many_mixed_components'
+            : true,
+      expected:
+        pathway === 'recycle'
+          ? 'No trims or easy-to-remove trims'
+          : pathway === 'upcycle'
+            ? 'Components manageable for redesign'
+            : 'Not restrictive for direct reuse',
+      selected: trimRemoval,
+    },
+    {
+      question: 'Quantity/batch suitability',
+      matched: pathway === 'recycle' ? quantity >= 2 || material !== 'mixed_unknown' : true,
+      expected: pathway === 'recycle' ? 'Similar identifiable batch preferred' : 'Any quantity accepted',
+      selected: String(quantity),
     },
   ];
-  const weights = [30, 25, 20, 15, 10];
-  const score = checks.reduce((total, check, index) => total + (check.matched ? weights[index] : 0), 0);
-  const matched = checks.filter((check) => check.matched).length;
+  const weights =
+    pathway === 'donate'
+      ? [12, 15, 8, 5, 8, 20, 10, 15, 7, 0, 0, 0]
+      : pathway === 'upcycle'
+        ? [5, 10, 10, 5, 5, 5, 15, 15, 15, 15, 5, 5]
+        : [8, 15, 5, 20, 20, 0, 5, 15, 15, 5, 10, 7];
+  const score = scoringChecks.reduce((total, check, index) => total + (check.matched ? weights[index] : 0), 0);
+  const matched = scoringChecks.filter((check) => check.matched).length;
 
   return {
     matched,
     score,
-    checks,
+    checks: scoringChecks,
   };
 }
 
@@ -320,6 +619,30 @@ export function analyzeBurnTest(burnTest: any) {
 export function buildPathwayRecommendations(submission: any) {
   const preferred = normalize(submission.service_type || submission.action);
   const burnAnalysis = analyzeBurnTest(submission.burn_test);
+  const eligibility = evaluateEligibility(submission);
+
+  if (!eligibility.eligible) {
+    return [
+      {
+        recommended_pathway: 'rejected' as const,
+        score: 100,
+        rawScore: 100,
+        confidence: 1,
+        explanation: eligibility.message || 'This item is not eligible for the normal textile recovery DSS stream.',
+        checks: [
+          {
+            question: 'Q0 Restricted category screening',
+            matched: true,
+            expected: 'None of the above',
+            selected: eligibility.reason || eligibility.category,
+          },
+        ],
+        rank: 1,
+        burn_test_result: burnAnalysis.top_fibers[0]?.fiber || null,
+        eligibility,
+      },
+    ];
+  }
 
   const recommendations: Array<{
     recommended_pathway: Pathway;
@@ -328,6 +651,7 @@ export function buildPathwayRecommendations(submission: any) {
     confidence: number;
     explanation: string;
     checks: RuleCheck[];
+    eligibility?: EligibilityResult;
   }> = (['recycle', 'donate', 'upcycle'] as const).map((pathway) => {
     const ruleResult = pathwayRuleScore(pathway, submission, burnAnalysis);
     const preferenceBoost = preferred === pathway ? 8 : 0;
@@ -340,8 +664,9 @@ export function buildPathwayRecommendations(submission: any) {
       score,
       rawScore,
       confidence,
-      explanation: buildPathwayExplanation(pathway, ruleResult.checks, preferenceBoost),
+      explanation: buildPathwayExplanation(pathway, ruleResult.checks),
       checks: ruleResult.checks,
+      eligibility,
     };
   });
 
@@ -361,6 +686,7 @@ export function buildPathwayRecommendations(submission: any) {
           selected: 'Yes',
         },
       ],
+      eligibility,
     });
   }
 
@@ -373,12 +699,12 @@ export function buildPathwayRecommendations(submission: any) {
     }));
 }
 
-function buildPathwayExplanation(pathway: Pathway, checks: RuleCheck[], preferenceBoost: number) {
+function buildPathwayExplanation(pathway: Pathway, checks: RuleCheck[]) {
   const matched = checks.filter((check) => check.matched).map((check) => check.question);
   const missing = checks.filter((check) => !check.matched).map((check) => check.question);
   const pathwayLabel = pathway === 'donate' ? 'donation' : pathway;
   const parts = [
-    `${pathwayLabel} is based on DSS item-detail rules for condition and cleanliness.`,
+    `${pathwayLabel} is based on textile recovery DSS rules for condition, cleanliness, fiber composition, wearability, repairability, contamination, damage, and repurposing potential.`,
   ];
 
   if (matched.length > 0) {
@@ -387,10 +713,6 @@ function buildPathwayExplanation(pathway: Pathway, checks: RuleCheck[], preferen
 
   if (missing.length > 0) {
     parts.push(`Not matched: ${missing.join(', ')}.`);
-  }
-
-  if (preferenceBoost > 0) {
-    parts.push('The user preferred this pathway, so it received a small preference boost.');
   }
 
   return parts.join(' ');

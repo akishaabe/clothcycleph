@@ -40,6 +40,62 @@ const cleanlinessOptions = [
   "Heavily soiled or contaminated",
 ];
 
+const restrictedCategoryOptions = [
+  { value: "hospital_medical_uniform", label: "Hospital/medical uniform" },
+  { value: "ppe_contaminated_workwear", label: "PPE or contaminated workwear" },
+  { value: "used_undergarments", label: "Used undergarments" },
+  { value: "mold_chemical_contaminated", label: "Mold- or chemical-contaminated textile" },
+  { value: "none", label: "None of the above" },
+];
+
+const restrictedCategoryMessages = {
+  hospital_medical_uniform:
+    "This item is not eligible for DSS assessment because medical textiles may carry safety and contamination risks.",
+  ppe_contaminated_workwear:
+    "This item is rejected because PPE or contaminated workwear may contain hazardous residues or biological exposure risks.",
+  used_undergarments:
+    "This item is not eligible due to hygiene restrictions and will not be assessed for donation, upcycling, or recycling.",
+  mold_chemical_contaminated:
+    "This item is rejected because mold or chemical contamination can pose health and material safety risks.",
+};
+
+const damageClassificationOptions = [
+  "No damage",
+  "Minor cosmetic issue",
+  "Missing button/loose seam",
+  "Small hole/tear",
+  "Large tear/heavy damage",
+  "Fabric degradation",
+];
+
+const repairabilityOptions = [
+  "No repair needed",
+  "Minor repair",
+  "Moderate repair",
+  "Not practical to repair",
+];
+
+const repurposingPotentialOptions = [
+  "High: large usable fabric panels",
+  "Medium: some usable sections",
+  "Low: mostly damaged/small scraps",
+];
+
+const trimRemovalOptions = [
+  "None",
+  "Easy to remove",
+  "Difficult to remove",
+  "Many mixed components",
+];
+
+const fiberCompositionOptions = [
+  { value: "cotton_natural", label: "100% cotton or natural fiber" },
+  { value: "polyester_synthetic", label: "100% polyester or synthetic fiber" },
+  { value: "cotton_poly_blend", label: "Cotton-polyester or stretch blend" },
+  { value: "wool_silk_delicate", label: "Wool, silk, or delicate fiber" },
+  { value: "mixed_unknown", label: "Mixed or unknown fiber" },
+];
+
 const fabricOptions = [
   {
     value: "Cotton / Linen",
@@ -295,6 +351,7 @@ export function SubmissionFormPage() {
   const [isReviewEditing, setIsReviewEditing] = useState(false);
 
   const [formData, setFormData] = useState({
+    restrictedCategory: "",
     submissionName: "",
     itemTypes: [],
     otherItemType: "",
@@ -302,11 +359,18 @@ export function SubmissionFormPage() {
     cleanliness: "",
     quantity: "",
     knowsFabricType: "",
+    fiberComposition: "",
     fabricTypes: [],
     fabricIdentification: [],
     brand: "",
     noBrandVisible: false,
     fabricDescription: [],
+    wearability: "",
+    damageClassification: "",
+    repairability: "",
+    contaminationLevel: "",
+    repurposingPotential: "",
+    trimRemoval: "",
     action: selectedService,
     buybackInterest: "",
     upcycleRequest: "",
@@ -399,6 +463,38 @@ export function SubmissionFormPage() {
     return formData.action.toLowerCase();
   };
 
+  const toValueKey = (value) =>
+    String(value || "")
+      .split(":")[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "");
+
+  const toFiberComposition = () => {
+    if (formData.fiberComposition) {
+      return formData.fiberComposition;
+    }
+
+    const fabricText = [
+      ...formData.fabricTypes,
+      ...formData.fabricDescription,
+    ].join(" ").toLowerCase();
+
+    if (/cotton|linen|viscose|rayon/.test(fabricText)) {
+      return "cotton_natural";
+    }
+    if (/polyester|nylon|acrylic|spandex/.test(fabricText)) {
+      return /cotton|blend/.test(fabricText)
+        ? "cotton_poly_blend"
+        : "polyester_synthetic";
+    }
+    if (/wool|silk/.test(fabricText)) {
+      return "wool_silk_delicate";
+    }
+
+    return "mixed_unknown";
+  };
+
   const handleImageUpload = async (files) => {
     const nextFiles = Array.from(files || []);
     setFormData((prev) => ({
@@ -448,9 +544,10 @@ export function SubmissionFormPage() {
       }));
 
       const fabricSummary =
-        formData.knowsFabricType === "Yes"
+        fiberCompositionOptions.find((option) => option.value === formData.fiberComposition)?.label ||
+        (formData.knowsFabricType === "Yes"
           ? formData.fabricTypes.join(", ")
-          : formData.fabricDescription.join(", ");
+          : formData.fabricDescription.join(", "));
 
       const createdSubmission = await createSubmission({
         submission_name: formData.submissionName || null,
@@ -477,6 +574,14 @@ export function SubmissionFormPage() {
           brand: formData.noBrandVisible ? null : formData.brand || null,
           no_brand_visible: formData.noBrandVisible,
           fabric_description: formData.fabricDescription,
+          restricted_category: formData.restrictedCategory || "none",
+          fiber_composition: toFiberComposition(),
+          wearability: toValueKey(formData.wearability) || null,
+          repairability: toValueKey(formData.repairability) || null,
+          contamination_level: toValueKey(formData.contaminationLevel) || null,
+          damage_classification: toValueKey(formData.damageClassification) || null,
+          repurposing_potential: toValueKey(formData.repurposingPotential) || null,
+          trim_removal: toValueKey(formData.trimRemoval) || null,
         },
         burn_test: {
           performed: formData.burnTestChoice === "Yes",
@@ -489,7 +594,7 @@ export function SubmissionFormPage() {
         },
       });
 
-      setStep(6);
+      setStep(7);
       setIsReviewEditing(false);
 
       setTimeout(() => {
@@ -524,9 +629,13 @@ export function SubmissionFormPage() {
     formData.itemTypes.length > 0 &&
     (!formData.itemTypes.includes("Other") || formData.otherItemType.trim());
 
+  const isRestrictedItem =
+    formData.restrictedCategory && formData.restrictedCategory !== "none";
+
   const isBurnTestComplete =
-    formData.burnTestChoice === "No" ||
-    (formData.burnTestChoice === "Yes" && formData.burnTestAshes.length > 0);
+    formData.restrictedCategory === "none" &&
+    (formData.burnTestChoice === "No" ||
+      (formData.burnTestChoice === "Yes" && formData.burnTestAshes.length > 0));
 
   const isStepTwoComplete =
     hasItemTypes &&
@@ -535,15 +644,25 @@ export function SubmissionFormPage() {
     formData.quantity;
 
   const isStepThreeComplete =
-    formData.knowsFabricType === "Yes"
+    formData.fiberComposition &&
+    (formData.knowsFabricType === "Yes"
       ? formData.fabricTypes.length > 0 &&
         formData.fabricIdentification.length > 0 &&
         (formData.noBrandVisible || formData.brand.trim())
       : formData.knowsFabricType === "No" &&
-        formData.fabricDescription.length > 0;
+        formData.fabricDescription.length > 0);
+
+  const isRecoveryCriteriaComplete =
+    formData.wearability &&
+    formData.damageClassification &&
+    formData.repairability &&
+    formData.contaminationLevel &&
+    formData.repurposingPotential &&
+    formData.trimRemoval;
 
   const isStepFourComplete =
     isBurnTestComplete &&
+    isRecoveryCriteriaComplete &&
     (!shouldShowPathwaySelection || formData.action) &&
     (formData.action !== "Upcycle" ||
       (formData.buybackInterest &&
@@ -552,6 +671,13 @@ export function SubmissionFormPage() {
   const burnTestResult = analyzeBurnTestAnswers(formData);
 
   const reviewRows = [
+    {
+      label: "Restricted Category Screening",
+      value:
+        restrictedCategoryOptions.find((option) => option.value === formData.restrictedCategory)?.label ||
+        formData.restrictedCategory,
+      step: 1,
+    },
     { label: "Submission Name", value: formData.submissionName, step: 2 },
     { label: "Burn Test", value: formData.burnTestChoice, step: 1 },
     { label: "Moment Flame", value: formData.burnTestMoment.join(", "), step: 1 },
@@ -565,6 +691,11 @@ export function SubmissionFormPage() {
     { label: "Quantity", value: `${formData.quantity} items`, step: 2 },
     { label: "Fabric Type Known", value: formData.knowsFabricType, step: 3 },
     {
+      label: "Material/Fiber Composition",
+      value: fiberCompositionOptions.find((option) => option.value === formData.fiberComposition)?.label,
+      step: 3,
+    },
+    {
       label: "Fabric Type",
       step: 3,
       value:
@@ -574,12 +705,18 @@ export function SubmissionFormPage() {
     },
     { label: "Fabric Identified By", value: formData.fabricIdentification.join(", "), step: 3 },
     { label: "Brand", value: formData.noBrandVisible ? "No brand visible" : formData.brand, step: 3 },
-    { label: "Intended Pathway", value: formData.action, step: 4 },
-    { label: "Buyback Interest", value: formData.buybackInterest, step: 4 },
-    { label: "Upcycle Request", value: formData.upcycleRequest, step: 4 },
+    { label: "Wearability", value: formData.wearability, step: 4 },
+    { label: "Damage Classification", value: formData.damageClassification, step: 4 },
+    { label: "Repairability", value: formData.repairability, step: 4 },
+    { label: "Contamination Level", value: formData.contaminationLevel, step: 4 },
+    { label: "Repurposing Potential", value: formData.repurposingPotential, step: 4 },
+    { label: "Trim/Accessory Removal", value: formData.trimRemoval, step: 4 },
+    { label: "Intended Pathway", value: formData.action, step: 5 },
+    { label: "Buyback Interest", value: formData.buybackInterest, step: 5 },
+    { label: "Upcycle Request", value: formData.upcycleRequest, step: 5 },
   ].filter(({ value }) => value);
 
-  if (step === 6) {
+  if (step === 7) {
     return (
       <BrandLoadingScreen
         title="Generating your path..."
@@ -591,9 +728,9 @@ export function SubmissionFormPage() {
 
   return (
     <div className="submission-page app-darkable-page min-h-screen bg-gradient-to-br from-[#f5f5f0] to-[#e8ebe4]">
-      {isReviewEditing && step !== 5 && (
+      {isReviewEditing && step !== 6 && (
         <button
-          onClick={() => setStep(5)}
+          onClick={() => setStep(6)}
           className="fixed right-6 top-24 z-40 rounded-full bg-[#336158] px-5 py-3 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(25,34,29,0.22)] hover:bg-[#2a4c48]"
         >
           Back to review
@@ -636,7 +773,7 @@ export function SubmissionFormPage() {
 
         <div className="mb-12">
           <div className="flex items-center justify-between mb-4">
-            {[1, 2, 3, 4, 5].map((num) => (
+            {[1, 2, 3, 4, 5, 6].map((num) => (
               <div key={num} className="flex items-center flex-1">
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
@@ -648,7 +785,7 @@ export function SubmissionFormPage() {
                   {step > num ? <CheckCircle className="w-5 h-5" /> : num}
                 </div>
 
-                {num < 5 && (
+                {num < 6 && (
                   <div
                     className={`flex-1 h-1 mx-2 transition-all ${
                       step > num ? "bg-[#6b8e6b]" : "bg-[#d4d8d0]"
@@ -659,10 +796,11 @@ export function SubmissionFormPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-5 text-center text-sm text-[#5a6f5a]">
-            <span>Burn Test</span>
+          <div className="grid grid-cols-6 text-center text-sm text-[#5a6f5a]">
+            <span>Screening</span>
             <span>Items</span>
             <span>Fabric</span>
+            <span>Recovery</span>
             <span>Pathway</span>
             <span>Review</span>
           </div>
@@ -676,9 +814,36 @@ export function SubmissionFormPage() {
 >
           {step === 1 && (
             <div className="space-y-7">
-              <h7 className="text-2xl text-[#2d4a2d]">Burn Test</h7>
+              <h7 className="text-2xl text-[#2d4a2d]">Eligibility Screening</h7>
 
-              {showBurnTestResult && (
+              <QuestionBlock label="Q0: Does the item belong to any restricted category?">
+                <div className="grid gap-3">
+                  {restrictedCategoryOptions.map((option) => (
+                    <RadioOption
+                      key={option.value}
+                      name="restrictedCategory"
+                      label={option.label}
+                      checked={formData.restrictedCategory === option.value}
+                      onChange={() => updateField("restrictedCategory", option.value)}
+                    />
+                  ))}
+                </div>
+              </QuestionBlock>
+
+              {isRestrictedItem && (
+                <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-4 text-sm leading-6 text-red-700">
+                  {restrictedCategoryMessages[formData.restrictedCategory]}
+                  <div className="mt-2 font-semibold">
+                    DSS evaluation stopped. This item will not be treated as donation, recycling, or upcycling material.
+                  </div>
+                </div>
+              )}
+
+              {formData.restrictedCategory === "none" && (
+                <h7 className="text-2xl text-[#2d4a2d]">Burn Test</h7>
+              )}
+
+              {formData.restrictedCategory === "none" && showBurnTestResult && (
                 <QuestionBlock label="Burn test fabric result">
                   <div className="rounded-2xl border border-[#d4d8d0] bg-[#f5f5f0] p-5">
                     <p className="mb-4 text-[#5a6f5a]">
@@ -724,7 +889,7 @@ export function SubmissionFormPage() {
                 </QuestionBlock>
               )}
 
-              {!showBurnTestResult && !formData.burnTestChoice && (
+              {formData.restrictedCategory === "none" && !showBurnTestResult && !formData.burnTestChoice && (
                 <QuestionBlock label="Do you want to do a burn test?">
                   <p className="text-sm text-[#5a6f5a]/80 mb-4">
                     A burn test can help determine if your textile item is
@@ -745,7 +910,7 @@ export function SubmissionFormPage() {
                 </QuestionBlock>
               )}
 
-              {!showBurnTestResult && formData.burnTestChoice === "No" && (
+              {formData.restrictedCategory === "none" && !showBurnTestResult && formData.burnTestChoice === "No" && (
                 <QuestionBlock label="Do you want to do a burn test?">
                   <p className="text-sm text-[#5a6f5a]/80 mb-4">
                     A burn test can help determine if your textile item is
@@ -773,7 +938,7 @@ export function SubmissionFormPage() {
                 </QuestionBlock>
               )}
 
-              {!showBurnTestResult && formData.burnTestChoice === "Yes" &&
+              {formData.restrictedCategory === "none" && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 1 && (
                   <div className="space-y-6">
                     <QuestionBlock label="How to do a burn test?">
@@ -815,7 +980,7 @@ export function SubmissionFormPage() {
                   </div>
                 )}
 
-              {!showBurnTestResult && formData.burnTestChoice === "Yes" &&
+              {formData.restrictedCategory === "none" && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 2 && (
                   <BurnTestCheckboxPage
                     label="How did it look like the moment flame touched the textile?"
@@ -830,7 +995,7 @@ export function SubmissionFormPage() {
                   />
                 )}
 
-              {!showBurnTestResult && formData.burnTestChoice === "Yes" &&
+              {formData.restrictedCategory === "none" && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 3 && (
                   <BurnTestCheckboxPage
                     label="How did it look like while in flames?"
@@ -845,7 +1010,7 @@ export function SubmissionFormPage() {
                   />
                 )}
 
-              {!showBurnTestResult && formData.burnTestChoice === "Yes" &&
+              {formData.restrictedCategory === "none" && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 4 && (
                   <BurnTestCheckboxPage
                     label="When there was no flame, what did you notice?"
@@ -860,7 +1025,7 @@ export function SubmissionFormPage() {
                   />
                 )}
 
-              {!showBurnTestResult && formData.burnTestChoice === "Yes" &&
+              {formData.restrictedCategory === "none" && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 5 && (
                   <div className="space-y-6">
                     <QuestionBlock label="Almost there, how did it smell like?">
@@ -908,7 +1073,7 @@ export function SubmissionFormPage() {
                   </div>
                 )}
 
-              {!showBurnTestResult && formData.burnTestChoice === "Yes" &&
+              {formData.restrictedCategory === "none" && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 6 && (
                   <BurnTestCheckboxPage
                     label="What were the characteristics of the ashes?"
@@ -942,7 +1107,7 @@ export function SubmissionFormPage() {
                 />
               </QuestionBlock>
 
-              <QuestionBlock label="What type of item/s are you submitting?">
+              <QuestionBlock label="Q1: What type of item/s are you submitting?">
                 <div className="grid md:grid-cols-2 gap-3">
                   {itemTypes.map((type) => (
                     <CheckboxOption
@@ -967,7 +1132,7 @@ export function SubmissionFormPage() {
                 )}
               </QuestionBlock>
 
-              <QuestionBlock label="What is the overall condition of the item?">
+              <QuestionBlock label="Q2: What is the overall condition of the item?">
                 <div className="space-y-3">
                   {conditionOptions.map((condition) => (
                     <RadioOption
@@ -981,7 +1146,7 @@ export function SubmissionFormPage() {
                 </div>
               </QuestionBlock>
 
-              <QuestionBlock label="Is/are the item/s clean?">
+              <QuestionBlock label="Q3: Is/are the item/s clean?">
                 <div className="space-y-3">
                   {cleanlinessOptions.map((cleanliness) => (
                     <RadioOption
@@ -1002,7 +1167,7 @@ export function SubmissionFormPage() {
                 )}
               </QuestionBlock>
 
-              <QuestionBlock label="Quantity (items)">
+              <QuestionBlock label="Q4: Quantity (items)">
                 <input
                   type="number"
                   value={formData.quantity}
@@ -1037,6 +1202,20 @@ export function SubmissionFormPage() {
           {step === 3 && (
             <div className="space-y-7">
               <h7 className="text-2xl text-[#2d4a2d]">Fabric Details</h7>
+
+              <QuestionBlock label="Q5: What is the main material/fiber composition?">
+                <div className="grid gap-3">
+                  {fiberCompositionOptions.map((option) => (
+                    <RadioOption
+                      key={option.value}
+                      name="fiberComposition"
+                      label={option.label}
+                      checked={formData.fiberComposition === option.value}
+                      onChange={() => updateField("fiberComposition", option.value)}
+                    />
+                  ))}
+                </div>
+              </QuestionBlock>
 
               <QuestionBlock label="Do you know the fabric type of the item/s?">
                 <div className="grid sm:grid-cols-2 gap-3">
@@ -1153,6 +1332,113 @@ export function SubmissionFormPage() {
           )}
 
           {step === 4 && (
+            <div className="space-y-7">
+              <h7 className="text-2xl text-[#2d4a2d]">Recovery Criteria</h7>
+
+              <QuestionBlock label="Q6: Is the item still wearable or usable in its original form?">
+                <div className="grid gap-3 md:grid-cols-2">
+                  {["Wearable as-is", "Wearable after minor repair", "Not wearable but fabric is usable", "Not usable"].map((option) => (
+                    <RadioOption
+                      key={option}
+                      name="wearability"
+                      label={option}
+                      checked={formData.wearability === option}
+                      onChange={() => updateField("wearability", option)}
+                    />
+                  ))}
+                </div>
+              </QuestionBlock>
+
+              <QuestionBlock label="Q7: What is the damage classification?">
+                <div className="grid gap-3 md:grid-cols-2">
+                  {damageClassificationOptions.map((option) => (
+                    <RadioOption
+                      key={option}
+                      name="damageClassification"
+                      label={option}
+                      checked={formData.damageClassification === option}
+                      onChange={() => updateField("damageClassification", option)}
+                    />
+                  ))}
+                </div>
+              </QuestionBlock>
+
+              <QuestionBlock label="Q8: Is the item repairable?">
+                <div className="grid gap-3 md:grid-cols-2">
+                  {repairabilityOptions.map((option) => (
+                    <RadioOption
+                      key={option}
+                      name="repairability"
+                      label={option}
+                      checked={formData.repairability === option}
+                      onChange={() => updateField("repairability", option)}
+                    />
+                  ))}
+                </div>
+              </QuestionBlock>
+
+              <QuestionBlock label="Q9: What is the contamination level?">
+                <div className="grid gap-3 md:grid-cols-2">
+                  {["Clean", "Washable dirt/odor", "Permanent stain", "Oil/paint/biological contamination", "Chemical/mold contamination"].map((option) => (
+                    <RadioOption
+                      key={option}
+                      name="contaminationLevel"
+                      label={option}
+                      checked={formData.contaminationLevel === option}
+                      onChange={() => updateField("contaminationLevel", option)}
+                    />
+                  ))}
+                </div>
+              </QuestionBlock>
+
+              <QuestionBlock label="Q10: What is the repurposing potential?">
+                <div className="grid gap-3">
+                  {repurposingPotentialOptions.map((option) => (
+                    <RadioOption
+                      key={option}
+                      name="repurposingPotential"
+                      label={option}
+                      checked={formData.repurposingPotential === option}
+                      onChange={() => updateField("repurposingPotential", option)}
+                    />
+                  ))}
+                </div>
+              </QuestionBlock>
+
+              <QuestionBlock label="Q11: Are trims/accessories easy to remove?">
+                <div className="grid gap-3 md:grid-cols-2">
+                  {trimRemovalOptions.map((option) => (
+                    <RadioOption
+                      key={option}
+                      name="trimRemoval"
+                      label={option}
+                      checked={formData.trimRemoval === option}
+                      onChange={() => updateField("trimRemoval", option)}
+                    />
+                  ))}
+                </div>
+              </QuestionBlock>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStep(3)}
+                  className="flex-1 py-3 bg-white text-[#6b8e6b] border-2 border-[#6b8e6b] rounded-xl hover:bg-[#f5f5f0] transition-all"
+                >
+                  Back
+                </button>
+
+                <button
+                  onClick={() => setStep(5)}
+                  disabled={!isRecoveryCriteriaComplete}
+                  className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 5 && (
             <div className="space-y-7">
               {shouldShowPathwaySelection && (
                 <>
@@ -1305,14 +1591,14 @@ export function SubmissionFormPage() {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setStep(3)}
+                  onClick={() => setStep(4)}
                   className="flex-1 py-3 bg-white text-[#6b8e6b] border-2 border-[#6b8e6b] rounded-xl hover:bg-[#f5f5f0] transition-all"
                 >
                   Back
                 </button>
 
                 <button
-                  onClick={() => setStep(5)}
+                  onClick={() => setStep(6)}
                   disabled={!isStepFourComplete}
                   className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -1322,7 +1608,7 @@ export function SubmissionFormPage() {
             </div>
           )}
 
-          {step === 5 && (
+          {step === 6 && (
             <div className="space-y-6">
               <h2 className="text-2xl text-[#2d4a2d]">
                 Review Your Submission
@@ -1370,7 +1656,7 @@ export function SubmissionFormPage() {
                 <button
                   onClick={() => {
                     setIsReviewEditing(false);
-                    setStep(4);
+                    setStep(5);
                   }}
                   className="flex-1 py-3 bg-white text-[#6b8e6b] border-2 border-[#6b8e6b] rounded-xl hover:bg-[#f5f5f0] transition-all"
                 >
@@ -1388,7 +1674,7 @@ export function SubmissionFormPage() {
             </div>
           )}
 
-          {step === 6 && (
+          {step === 8 && (
             <div className="text-center py-12">
               <motion.div
                 initial={{ scale: 0 }}

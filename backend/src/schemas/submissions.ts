@@ -30,6 +30,22 @@ export const createSubmissionSchema = z.object({
       brand: nullableTrimmedStringSchema,
       no_brand_visible: z.boolean().default(false),
       fabric_description: optionalStringArraySchema,
+      restricted_category: z
+        .enum([
+          'hospital_medical_uniform',
+          'ppe_contaminated_workwear',
+          'used_undergarments',
+          'mold_chemical_contaminated',
+          'none',
+        ])
+        .default('none'),
+      fiber_composition: nullableTrimmedStringSchema,
+      wearability: nullableTrimmedStringSchema,
+      repairability: nullableTrimmedStringSchema,
+      contamination_level: nullableTrimmedStringSchema,
+      damage_classification: nullableTrimmedStringSchema,
+      repurposing_potential: nullableTrimmedStringSchema,
+      trim_removal: nullableTrimmedStringSchema,
     })
     .optional(),
   burn_test: z

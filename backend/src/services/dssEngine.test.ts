@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeBurnTest, buildPathwayRecommendations, DSS_ENGINE_VERSION } from './dssEngine.js';
+import { analyzeBurnTest, buildPathwayRecommendations, DSS_ENGINE_VERSION, evaluateEligibility } from './dssEngine.js';
 
 describe('dssEngine', () => {
   it('labels cotton-like burn test answers with high confidence', () => {
@@ -50,7 +50,43 @@ describe('dssEngine', () => {
       burn_test: { performed: false },
     });
 
-    expect(DSS_ENGINE_VERSION).toBe('dssEngine-v1');
+    expect(DSS_ENGINE_VERSION).toBe('dssEngine-v2-textile-recovery');
     expect(recommendations[0].recommended_pathway).toBe('donate');
+  });
+
+  it('rejects restricted categories before normal DSS evaluation', () => {
+    const recommendations = buildPathwayRecommendations({
+      condition: 'Good condition (wearable, no major damage)',
+      cleanliness: 'Yes, clean and ready for use',
+      details: {
+        restricted_category: 'used_undergarments',
+      },
+      burn_test: { performed: false },
+    });
+
+    expect(evaluateEligibility({ details: { restricted_category: 'used_undergarments' } }).eligible).toBe(false);
+    expect(recommendations).toHaveLength(1);
+    expect(recommendations[0].recommended_pathway).toBe('rejected');
+  });
+
+  it('prioritizes upcycling for clean, non-wearable textiles with usable panels', () => {
+    const recommendations = buildPathwayRecommendations({
+      item_type: 'Household textile (curtains, bedsheets)',
+      condition: 'Heavily damaged (large tears, unusable as clothing)',
+      cleanliness: 'Yes, clean and ready for use',
+      details: {
+        restricted_category: 'none',
+        fiber_composition: 'cotton_natural',
+        wearability: 'not_wearable_fabric_usable',
+        damage_classification: 'large_tear_heavy_damage',
+        repairability: 'moderate_repair',
+        contamination_level: 'clean',
+        repurposing_potential: 'high',
+        trim_removal: 'easy',
+      },
+      burn_test: { performed: false },
+    });
+
+    expect(recommendations[0].recommended_pathway).toBe('upcycle');
   });
 });

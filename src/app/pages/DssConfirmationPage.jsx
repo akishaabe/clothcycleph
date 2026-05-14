@@ -22,6 +22,7 @@ const pathwayLabels = {
   donate: "Donate",
   upcycle: "Upcycle",
   buyback: "Buyback",
+  rejected: "Rejected",
 };
 
 const fixedServicePathways = ["recycle", "donate", "upcycle"];
@@ -144,12 +145,15 @@ export function DssConfirmationPage() {
         const initialPathway = fixedServicePathways.includes(lockedServicePathway)
           ? lockedServicePathway
           : topRecommendation?.recommended_pathway;
-        const partnersResponse = await dssService.listPartners({
-          lat: browserLocation?.lat,
-          lng: browserLocation?.lng,
-          pathway: initialPathway,
-          radiusKm: 120,
-        });
+        const partnersResponse =
+          initialPathway === "rejected"
+            ? { data: [] }
+            : await dssService.listPartners({
+                lat: browserLocation?.lat,
+                lng: browserLocation?.lng,
+                pathway: initialPathway,
+                radiusKm: 120,
+              });
 
         if (!isMounted) {
           return;
@@ -204,6 +208,7 @@ export function DssConfirmationPage() {
   }, [preview]);
 
   const hasSelectedService = Boolean(selectedServicePathway);
+  const isRejected = preview?.recommendations?.[0]?.recommended_pathway === "rejected";
 
   const recommendationOptions = useMemo(() => {
     if (!preview?.recommendations) {
@@ -284,6 +289,11 @@ export function DssConfirmationPage() {
   };
 
   const handleSend = async () => {
+    if (isRejected) {
+      setError("This submission is ineligible and cannot be sent to a partner.");
+      return;
+    }
+
     if (!selectedPartnerId || !selectedPathway) {
       setError("Choose a pathway and partner first.");
       return;
@@ -539,9 +549,21 @@ export function DssConfirmationPage() {
                   </div>
                 </>
               )}
+
+              {isRejected && (
+                <div className="rounded-2xl border border-red-100 bg-red-50 p-5 text-sm leading-6 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">
+                  <div className="text-lg font-semibold">Eligibility screening failed</div>
+                  <p className="mt-2">
+                    {preview.recommendations[0]?.explanation}
+                  </p>
+                  <p className="mt-2 font-semibold">
+                    DSS evaluation stopped before donation, upcycling, or recycling recommendations.
+                  </p>
+                </div>
+              )}
             </div>
 
-            <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_12px_34px_rgba(0,0,0,0.3)]">
+            {!isRejected && <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_12px_34px_rgba(0,0,0,0.3)]">
               <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <h2 className="flex items-center gap-2 text-xl font-semibold">
                   <Building2 className="h-5 w-5 text-[#336158] dark:text-emerald-300" />
@@ -609,7 +631,7 @@ export function DssConfirmationPage() {
                   </button>
                 ))}
               </div>
-            </div>
+            </div>}
           </div>
 
           <aside className="space-y-6">
@@ -634,7 +656,7 @@ export function DssConfirmationPage() {
               )}
               <button
                 onClick={handleSend}
-                disabled={isSending || !selectedPartnerId || !selectedPathway}
+                disabled={isRejected || isSending || !selectedPartnerId || !selectedPathway}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#336158] px-5 py-3 text-white transition-all hover:bg-[#2a4c48] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-500/80 dark:text-[#07110d] dark:hover:bg-emerald-400 dark:disabled:bg-emerald-500/30 dark:disabled:text-zinc-400"
               >
                 {isSending ? (
