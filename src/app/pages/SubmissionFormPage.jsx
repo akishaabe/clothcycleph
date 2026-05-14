@@ -283,6 +283,10 @@ export function SubmissionFormPage() {
     error: uploadError,
   } = useFileUpload();
   const selectedService = location.state?.service || "";
+  const selectedPathwayOptions = pathwayOptions.filter(
+    (option) => option.value === selectedService,
+  );
+  const shouldShowPathwaySelection = selectedPathwayOptions.length > 0;
   const [step, setStep] = useState(1);
   const [submitError, setSubmitError] = useState("");
   const fileInputRef = useRef(null);
@@ -540,7 +544,7 @@ export function SubmissionFormPage() {
 
   const isStepFourComplete =
     isBurnTestComplete &&
-    formData.action &&
+    (!shouldShowPathwaySelection || formData.action) &&
     (formData.action !== "Upcycle" ||
       (formData.buybackInterest &&
         (formData.buybackInterest !== "Yes" || formData.upcycleRequest.trim())));
@@ -1150,26 +1154,30 @@ export function SubmissionFormPage() {
 
           {step === 4 && (
             <div className="space-y-7">
-              <h7 className="text-2xl text-[#2d4a2d]">Intended Pathway</h7>
+              {shouldShowPathwaySelection && (
+                <>
+                  <h7 className="text-2xl text-[#2d4a2d]">Intended Pathway</h7>
 
-              <QuestionBlock label="What would you prefer to do with this item?">
-                <div className="grid md:grid-cols-3 gap-3">
-                  {pathwayOptions.map((action) => (
-                    <button
-                      key={action.value}
-                      onClick={() => updateAction(action.value)}
-                      className={`p-6 rounded-xl border-2 transition-all ${
-                        formData.action === action.value
-                          ? "border-[#6b8e6b] bg-[#6b8e6b]/10"
-                          : "border-[#d4d8d0] hover:border-[#6b8e6b]"
-                      }`}
-                    >
-                      <action.icon className="w-8 h-8 mx-auto mb-3 text-[#5a6f5a]" />
-                      <div className="text-[#2d4a2d]">{action.value}</div>
-                    </button>
-                  ))}
-                </div>
-              </QuestionBlock>
+                  <QuestionBlock label="What would you prefer to do with this item?">
+                    <div className="grid w-full grid-cols-1 gap-3">
+                      {selectedPathwayOptions.map((action) => (
+                        <button
+                          key={action.value}
+                          onClick={() => updateAction(action.value)}
+                          className={`flex min-h-[120px] flex-col items-center justify-center rounded-xl border-2 p-6 text-center transition-all ${
+                            formData.action === action.value
+                              ? "border-[#6b8e6b] bg-[#6b8e6b]/10"
+                              : "border-[#d4d8d0] hover:border-[#6b8e6b]"
+                          }`}
+                        >
+                          <action.icon className="mb-3 h-9 w-9 text-[#5a6f5a]" />
+                          <div className="text-[#2d4a2d]">{action.value}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </QuestionBlock>
+                </>
+              )}
 
               {formData.action === "Upcycle" && (
                 <>

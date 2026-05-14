@@ -24,6 +24,8 @@ const pathwayLabels = {
   buyback: "Buyback",
 };
 
+const fixedServicePathways = ["recycle", "donate", "upcycle"];
+
 const statusClass = {
   pending: "bg-[#fff8e8] text-[#7a5427] border-[#ead6ae]",
   accepted: "bg-[#edf7ed] text-[#336158] border-[#cfe2cf]",
@@ -41,6 +43,59 @@ function formatDate(value) {
     day: "numeric",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function normalizePathway(value) {
+  const normalized = String(value || "").toLowerCase().trim();
+
+  if (normalized === "recycling") {
+    return "recycle";
+  }
+
+  return normalized;
+}
+
+function stripSelectedServiceBriefLines(value) {
+  return String(value || "")
+    .split("\n")
+    .filter((line) => {
+      const normalizedLine = line.toLowerCase();
+
+      return (
+        !normalizedLine.startsWith("recommended pathway:") &&
+        !normalizedLine.startsWith("recommendation note:")
+      );
+    })
+    .join("\n")
+    .trim();
+}
+
+function BriefPreview({ brief }) {
+  const lines = String(brief || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return (
+    <div className="rounded-2xl border border-[#dce4da] bg-[#fbfcfa] p-4 text-sm leading-7 text-[#19221d]">
+      {lines.map((line, index) => {
+        const separatorIndex = line.indexOf(":");
+
+        if (separatorIndex <= 0) {
+          return <p key={`${line}-${index}`}>{line}</p>;
+        }
+
+        return (
+          <p key={`${line}-${index}`}>
+            <span className="font-semibold">
+              {line.slice(0, separatorIndex + 1)}
+            </span>{" "}
+            {line.slice(separatorIndex + 1).trim()}
+          </p>
+        );
+      })}
+    </div>
+  );
 }
 
 export function DssConfirmationPage() {
@@ -82,11 +137,17 @@ export function DssConfirmationPage() {
         }
 
         const nextPreview = previewResponse.data;
+        const lockedServicePathway = normalizePathway(
+          nextPreview.submission?.service_type || nextPreview.submission?.action,
+        );
         const topRecommendation = nextPreview.recommendations[0];
+        const initialPathway = fixedServicePathways.includes(lockedServicePathway)
+          ? lockedServicePathway
+          : topRecommendation?.recommended_pathway;
         const partnersResponse = await dssService.listPartners({
           lat: browserLocation?.lat,
           lng: browserLocation?.lng,
-          pathway: topRecommendation?.recommended_pathway,
+          pathway: initialPathway,
           radiusKm: 120,
         });
 
@@ -103,8 +164,12 @@ export function DssConfirmationPage() {
             ? "Partners are ranked by distance from your current location."
             : "Location access is off. Partners are ranked by verification and rating.",
         );
-        setSelectedPathway(topRecommendation?.recommended_pathway || "");
-        setBrief(nextPreview.brief || "");
+        setSelectedPathway(initialPathway || "");
+        setBrief(
+          fixedServicePathways.includes(lockedServicePathway)
+            ? stripSelectedServiceBriefLines(nextPreview.brief)
+            : nextPreview.brief || "",
+        );
       } catch (loadError) {
         if (isMounted) {
           setError(loadError.message || "Unable to load DSS confirmation.");
@@ -129,6 +194,31 @@ export function DssConfirmationPage() {
         recommendation.recommended_pathway === selectedPathway,
     );
   }, [preview, selectedPathway]);
+
+  const selectedServicePathway = useMemo(() => {
+    const servicePathway = normalizePathway(
+      preview?.submission?.service_type || preview?.submission?.action,
+    );
+
+    return fixedServicePathways.includes(servicePathway) ? servicePathway : "";
+  }, [preview]);
+
+  const hasSelectedService = Boolean(selectedServicePathway);
+
+  const recommendationOptions = useMemo(() => {
+    if (!preview?.recommendations) {
+      return [];
+    }
+
+    if (!hasSelectedService) {
+      return preview.recommendations;
+    }
+
+    return preview.recommendations.filter(
+      (recommendation) =>
+        recommendation.recommended_pathway !== selectedServicePathway,
+    );
+  }, [hasSelectedService, preview, selectedServicePathway]);
 
   const matchingPartners = useMemo(() => {
     if (!selectedPathway) {
@@ -346,64 +436,109 @@ export function DssConfirmationPage() {
                 </div>
               )}
 
-              <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
-                <ClipboardList className="h-5 w-5 text-[#336158]" />
-                Recommendation options
-              </h2>
-              <div className="grid gap-3">
-                {preview.recommendations.map((recommendation) => (
-                  <button
-                    key={recommendation.recommended_pathway}
-                    onClick={() =>
-                      handlePathwayChange(recommendation.recommended_pathway)
-                    }
-                    className={`rounded-2xl border p-4 text-left transition-all ${
-                      selectedPathway === recommendation.recommended_pathway
-                        ? "border-[#336158] bg-[#f1f7ef]"
-                        : "border-[#e1e7df] bg-white hover:border-[#9bb39c]"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-4">
+              {hasSelectedService && (
+                <div className="mb-6">
+                  <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
+                    <ClipboardList className="h-5 w-5 text-[#336158]" />
+                    Selected service
+                  </h2>
+                  <div className="rounded-2xl border border-[#336158] bg-[#f1f7ef] p-5">
+                    <div className="flex items-start justify-between gap-4">
                       <div>
-                        <div className="text-lg font-semibold text-[#19221d]">
-                          #{recommendation.rank}{" "}
-                          {pathwayLabels[recommendation.recommended_pathway]}
+                        <div className="text-2xl font-semibold text-[#19221d]">
+                          {pathwayLabels[selectedServicePathway]}
                         </div>
-                        <p className="mt-1 text-sm leading-6 text-[#5f6f67]">
-                          {recommendation.explanation}
+                        <p className="mt-2 text-sm leading-6 text-[#5f6f67]">
+                          {selectedRecommendation?.explanation ||
+                            `You selected ${pathwayLabels[selectedServicePathway]} for this textile submission.`}
                         </p>
-                        {recommendation.checks?.length > 0 && (
-                          <details className="mt-3 rounded-xl border border-[#e1e7df] bg-white/80 px-4 py-3 text-sm text-[#5f6f67]">
-                            <summary className="cursor-pointer font-semibold text-[#336158]">
-                              Why this was recommended
-                            </summary>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {recommendation.checks.map((check) => (
-                                <span
-                                  key={`${recommendation.recommended_pathway}-${check.question}`}
-                                  className={`rounded-full px-3 py-1 text-xs ${
-                                    check.matched
-                                      ? "bg-[#edf7ed] text-[#336158]"
-                                      : "bg-[#fff8e8] text-[#7a5427]"
-                                  }`}
-                                >
-                                  {check.question}: {check.matched ? "matched" : "not matched"}
-                                </span>
-                              ))}
-                            </div>
-                          </details>
-                        )}
                       </div>
-                      <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-center text-sm text-[#336158]">
-                        <div className="font-bold">
-                          {Math.round(recommendation.confidence * 100)}%
+                      {selectedRecommendation && !hasSelectedService && (
+                        <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-center text-sm text-[#336158]">
+                          <div className="font-bold">
+                            {Math.round(selectedRecommendation.confidence * 100)}%
+                          </div>
+                          <div>confidence</div>
                         </div>
-                        <div>confidence</div>
-                      </div>
+                      )}
                     </div>
-                  </button>
-                ))}
-              </div>
+                  </div>
+                </div>
+              )}
+
+              {recommendationOptions.length > 0 && (
+                <>
+                  <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
+                    <ClipboardList className="h-5 w-5 text-[#336158]" />
+                    Recommendation options
+                  </h2>
+                  <div className="grid gap-3">
+                    {recommendationOptions.map((recommendation) => {
+                      const isSelected =
+                        selectedPathway === recommendation.recommended_pathway;
+                      const CardElement = hasSelectedService ? "div" : "button";
+
+                      return (
+                        <CardElement
+                          key={recommendation.recommended_pathway}
+                          onClick={
+                            hasSelectedService
+                              ? undefined
+                              : () =>
+                                  handlePathwayChange(
+                                    recommendation.recommended_pathway,
+                                  )
+                          }
+                          className={`rounded-2xl border p-4 text-left transition-all ${
+                            isSelected
+                              ? "border-[#336158] bg-[#f1f7ef]"
+                              : "border-[#e1e7df] bg-white hover:border-[#9bb39c]"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <div className="text-lg font-semibold text-[#19221d]">
+                                {!hasSelectedService && `#${recommendation.rank} `}
+                                {pathwayLabels[recommendation.recommended_pathway]}
+                              </div>
+                              <p className="mt-1 text-sm leading-6 text-[#5f6f67]">
+                                {recommendation.explanation}
+                              </p>
+                              {recommendation.checks?.length > 0 && (
+                                <details className="mt-3 rounded-xl border border-[#e1e7df] bg-white/80 px-4 py-3 text-sm text-[#5f6f67]">
+                                  <summary className="cursor-pointer font-semibold text-[#336158]">
+                                    Why this was recommended
+                                  </summary>
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {recommendation.checks.map((check) => (
+                                      <span
+                                        key={`${recommendation.recommended_pathway}-${check.question}`}
+                                        className={`rounded-full px-3 py-1 text-xs ${
+                                          check.matched
+                                            ? "bg-[#edf7ed] text-[#336158]"
+                                            : "bg-[#fff8e8] text-[#7a5427]"
+                                        }`}
+                                      >
+                                        {check.question}: {check.matched ? "matched" : "not matched"}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </details>
+                              )}
+                            </div>
+                            <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-center text-sm text-[#336158]">
+                              <div className="font-bold">
+                                {Math.round(recommendation.confidence * 100)}%
+                              </div>
+                              <div>confidence</div>
+                            </div>
+                          </div>
+                        </CardElement>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)]">
@@ -480,13 +615,8 @@ export function DssConfirmationPage() {
           <aside className="space-y-6">
             <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)]">
               <h2 className="mb-3 text-xl font-semibold">Partner brief</h2>
-              <textarea
-                value={brief}
-                onChange={(event) => setBrief(event.target.value)}
-                rows={14}
-                className="w-full resize-none rounded-2xl border border-[#dce4da] bg-[#fbfcfa] p-4 text-sm leading-6 text-[#19221d] focus:border-[#336158] focus:outline-none"
-              />
-              {selectedRecommendation && (
+              <BriefPreview brief={brief} />
+              {selectedRecommendation && !hasSelectedService && (
                 <div className="mt-3 rounded-xl bg-[#f7faf5] px-4 py-3 text-sm text-[#5f6f67]">
                   Score: {selectedRecommendation.score.toFixed(1)} / 100
                 </div>
