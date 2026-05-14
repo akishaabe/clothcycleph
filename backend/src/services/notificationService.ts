@@ -98,6 +98,61 @@ export async function getUnreadNotificationCount(userId: string) {
   }
 }
 
+export async function getNotificationPreferences(userId: string) {
+  const result = await query(
+    `INSERT INTO user_preferences (id, user_id)
+     VALUES ($1, $2)
+     ON CONFLICT (user_id) DO NOTHING`,
+    [uuidv4(), userId]
+  );
+  void result;
+
+  const preferences = await query(
+    `SELECT email_notifications, push_notifications, sms_notifications
+     FROM user_preferences
+     WHERE user_id = $1`,
+    [userId]
+  );
+
+  return preferences.rows[0] || {
+    email_notifications: true,
+    push_notifications: true,
+    sms_notifications: false,
+  };
+}
+
+export async function updateNotificationPreferences(
+  userId: string,
+  preferences: {
+    email_notifications?: boolean;
+    push_notifications?: boolean;
+    sms_notifications?: boolean;
+  }
+) {
+  const result = await query(
+    `INSERT INTO user_preferences (
+       id, user_id, email_notifications, push_notifications, sms_notifications, updated_at
+     )
+     VALUES ($1, $2, COALESCE($3, true), COALESCE($4, true), COALESCE($5, false), NOW())
+     ON CONFLICT (user_id)
+     DO UPDATE SET
+       email_notifications = COALESCE(EXCLUDED.email_notifications, user_preferences.email_notifications),
+       push_notifications = COALESCE(EXCLUDED.push_notifications, user_preferences.push_notifications),
+       sms_notifications = COALESCE(EXCLUDED.sms_notifications, user_preferences.sms_notifications),
+       updated_at = NOW()
+     RETURNING email_notifications, push_notifications, sms_notifications`,
+    [
+      uuidv4(),
+      userId,
+      preferences.email_notifications,
+      preferences.push_notifications,
+      preferences.sms_notifications,
+    ]
+  );
+
+  return result.rows[0];
+}
+
 export async function markNotificationAsRead(notificationId: string) {
   try {
     const result = await query(
@@ -150,6 +205,31 @@ export async function markAllNotificationsAsRead(userId: string) {
     return result.rows;
   } catch (error) {
     console.error('Error marking all notifications as read:', error);
+    throw error;
+  }
+}
+
+export async function deleteNotification(notificationId: string, userId: string) {
+  try {
+    const result = await query(
+      `DELETE FROM notifications
+       WHERE id = $1 AND user_id = $2
+       RETURNING *`,
+      [notificationId, userId]
+    );
+
+    const redis = getRedisClient();
+    if (redis) {
+      try {
+        await redis.del(`notifications:${userId}:count`);
+      } catch (error) {
+        console.warn('Redis cache deletion failed:', error);
+      }
+    }
+
+    return result.rows[0];
+  } catch (error) {
+    console.error('Error deleting notification:', error);
     throw error;
   }
 }

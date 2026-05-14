@@ -26,6 +26,7 @@ export const createSubmissionSchema = z.object({
       cleanliness: nullableTrimmedStringSchema,
       knows_fabric_type: z.boolean().nullable().optional(),
       fabric_types: optionalStringArraySchema,
+      custom_fabric_text: nullableTrimmedStringSchema,
       fabric_identification: optionalStringArraySchema,
       brand: nullableTrimmedStringSchema,
       no_brand_visible: z.boolean().default(false),

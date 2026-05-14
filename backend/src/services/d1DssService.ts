@@ -102,6 +102,7 @@ export async function sendRecommendationToPartnerD1(
       JSON.stringify({
         engine_version: DSS_ENGINE_VERSION,
         recommendation,
+        recommendations,
         brief: payload.brief,
         burn_test_analysis: analyzeBurnTest(submission.burn_test),
         rule_checks: recommendation.checks || [],
@@ -261,6 +262,73 @@ export async function getPartnerRuleChangeRequestsD1(db: D1Database) {
   );
 }
 
+export async function updatePartnerRuleChangeRequestStatusD1(
+  db: D1Database,
+  adminUserId: string,
+  requestId: string,
+  payload: { status: string; admin_note?: string }
+) {
+  const allowedStatuses = ['pending', 'accepted', 'approved', 'declined', 'needs_more_information'];
+  if (!allowedStatuses.includes(payload.status)) {
+    throw new Error('Invalid rule request status');
+  }
+
+  const result = await executeD1(
+    db,
+    `UPDATE partner_rule_change_requests
+     SET status = ?,
+         admin_notes = ?,
+         reviewed_by_user_id = ?,
+         reviewed_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?
+     RETURNING *`,
+    [payload.status, payload.admin_note || null, adminUserId, requestId]
+  );
+  const request: any = result.results?.[0];
+
+  if (!request) {
+    throw new Error('Partner rule change request not found');
+  }
+
+  const partnerUsers = await queryD1(
+    db,
+    `SELECT DISTINCT u.id
+     FROM users u
+     WHERE u.id = ? OR u.partner_id = ?`,
+    [request.requested_by_user_id, request.partner_id || '']
+  );
+  const partnerActionUrl = '/partner#rule-requests';
+  const adminActionUrl = `/admin?panel=rule-requests&request=${request.id}`;
+  const statusLabel = payload.status === 'needs_more_information' ? 'needs more information' : payload.status;
+
+  await Promise.all(
+    (partnerUsers.results || []).map(async (partnerUser: any) => {
+      await createSystemMessageD1(db, {
+        fromUserId: adminUserId,
+        toUserId: partnerUser.id,
+        content: `Admin marked your rule request as ${statusLabel}.${payload.admin_note ? `\n${payload.admin_note}` : ''}`,
+        actionUrl: partnerActionUrl,
+        metadata: {
+          kind: 'partner_rule_change_request_status',
+          rule_change_request_id: request.id,
+          admin_action_url: adminActionUrl,
+          partner_action_url: partnerActionUrl,
+        },
+      });
+      await createNotificationD1(db, {
+        userId: partnerUser.id,
+        type: 'system',
+        title: 'Rule request updated',
+        body: `Your partner rule request is now ${statusLabel}.`,
+        data: { action_url: partnerActionUrl, ruleChangeRequestId: request.id },
+      });
+    })
+  );
+
+  return request;
+}
+
 export async function getUserDssRequestsD1(db: D1Database, userId: string) {
   const result = await queryD1(
     db,
@@ -315,6 +383,7 @@ export async function getPartnerDssRequestsD1(db: D1Database, userId: string, em
        sd.other_item_type,
        sd.knows_fabric_type,
        sd.fabric_types,
+       sd.custom_fabric_text,
        sd.fabric_identification,
        sd.brand,
        sd.no_brand_visible,
@@ -462,6 +531,7 @@ async function getSubmissionForUserD1(db: D1Database, submissionId: string, user
        sd.other_item_type,
        sd.knows_fabric_type,
        sd.fabric_types,
+       sd.custom_fabric_text,
        sd.fabric_identification,
        sd.brand,
        sd.no_brand_visible,
@@ -510,6 +580,7 @@ function normalizeSubmissionForDss(row: any) {
       cleanliness: row.cleanliness,
       knows_fabric_type: Boolean(row.knows_fabric_type),
       fabric_types: parseJsonArray(row.fabric_types),
+      custom_fabric_text: row.custom_fabric_text,
       fabric_identification: parseJsonArray(row.fabric_identification),
       brand: row.brand,
       no_brand_visible: Boolean(row.no_brand_visible),
@@ -557,6 +628,7 @@ function normalizePartnerRequest(row: any) {
       knows_fabric_type: Boolean(row.knows_fabric_type),
       fabric_types: parseJsonArray(row.fabric_types),
       fabric_types_list: parseJsonArray(row.fabric_types),
+      custom_fabric_text: row.custom_fabric_text,
       fabric_identification: parseJsonArray(row.fabric_identification),
       brand: row.brand,
       no_brand_visible: Boolean(row.no_brand_visible),

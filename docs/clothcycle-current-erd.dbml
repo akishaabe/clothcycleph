@@ -1,0 +1,272 @@
+Project clothcycle_ph {
+  database_type: "PostgreSQL / Cloudflare D1"
+  Note: "Documentation ERD snapshot for the current working ClothCycle PH schema."
+}
+
+Table users {
+  id uuid [pk]
+  email varchar [unique, not null]
+  name varchar [not null]
+  password_hash varchar
+  role varchar [not null, note: "user, partner, admin"]
+  status varchar
+  partner_id uuid [ref: > partners.id]
+  avatar_url text
+  bio text
+  phone varchar
+  address text
+  two_factor_enabled boolean
+  two_factor_method varchar
+  two_factor_secret_encrypted text
+  two_factor_confirmed_at timestamp
+  email_verified_at timestamp
+  terms_accepted_at timestamp
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table user_preferences {
+  id uuid [pk]
+  user_id uuid [not null, ref: > users.id]
+  email_notifications boolean
+  push_notifications boolean
+  sms_notifications boolean
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table partners {
+  id uuid [pk]
+  user_id uuid [ref: > users.id]
+  name varchar [not null]
+  description text
+  logo_url text
+  email varchar
+  phone varchar
+  address text
+  website text
+  service_types text
+  accepted_service_types text
+  accepts_clean_only boolean
+  capacity_notes text
+  pickup_areas text
+  contact_person varchar
+  rating decimal
+  verified boolean
+  status varchar
+  latitude decimal
+  longitude decimal
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table submissions {
+  id uuid [pk]
+  user_id uuid [not null, ref: > users.id]
+  submission_name varchar
+  submission_code varchar
+  item_type varchar [not null]
+  quantity int
+  condition varchar
+  cleanliness varchar
+  fabric varchar
+  description text
+  photos json
+  service_type varchar
+  action varchar
+  buyback_interest boolean
+  upcycle_request text
+  status varchar
+  assigned_partner_id uuid [ref: > partners.id]
+  scheduled_at timestamp
+  details json
+  burn_test json
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table submission_details {
+  id uuid [pk]
+  submission_id uuid [unique, not null, ref: > submissions.id]
+  item_types text
+  other_item_type text
+  condition text
+  cleanliness text
+  knows_fabric_type boolean
+  fabric_types text
+  custom_fabric_text text
+  fabric_identification text
+  brand text
+  no_brand_visible boolean
+  fabric_description text
+  restricted_category text
+  fiber_composition text
+  wearability text
+  repairability text
+  contamination_level text
+  damage_classification text
+  repurposing_potential text
+  trim_removal text
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table burn_tests {
+  id uuid [pk]
+  submission_id uuid [not null, ref: > submissions.id]
+  performed boolean
+  page int
+  moment json
+  flames json
+  no_flame json
+  smell varchar
+  ashes json
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table recommendation_runs {
+  id uuid [pk]
+  submission_id uuid [ref: > submissions.id]
+  requested_by_user_id uuid [ref: > users.id]
+  engine_name varchar
+  engine_version varchar
+  status varchar
+  criteria json
+  input_snapshot json
+  completed_at timestamp
+  created_at timestamp
+}
+
+Table recommendation_results {
+  id uuid [pk]
+  run_id uuid [ref: > recommendation_runs.id]
+  submission_id uuid [ref: > submissions.id]
+  partner_id uuid [ref: > partners.id]
+  recommended_pathway varchar
+  rank int
+  score decimal
+  confidence decimal
+  explanation text
+  output_payload json
+  selected boolean
+  created_at timestamp
+}
+
+Table recommendation_feedback {
+  id uuid [pk]
+  recommendation_result_id uuid [ref: > recommendation_results.id]
+  user_id uuid [ref: > users.id]
+  rating int
+  feedback text
+  created_at timestamp
+}
+
+Table transactions {
+  id uuid [pk]
+  submission_id uuid [not null, ref: > submissions.id]
+  from_user_id uuid [not null, ref: > users.id]
+  to_partner_id uuid [ref: > partners.id]
+  type varchar [note: "recycle, donate, upcycle, buyback"]
+  status varchar [note: "pending, accepted, declined, in_progress, completed, rejected"]
+  notes text
+  scheduled_at timestamp
+  completed_at timestamp
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table messages {
+  id uuid [pk]
+  from_user_id uuid [not null, ref: > users.id]
+  to_user_id uuid [not null, ref: > users.id]
+  conversation_id uuid [ref: > conversations.id]
+  sender_type varchar
+  content text [not null]
+  read boolean
+  read_at timestamp
+  related_submission_id uuid [ref: > submissions.id]
+  related_transaction_id uuid [ref: > transactions.id]
+  action_url text
+  metadata json
+  created_at timestamp
+}
+
+Table conversations {
+  id uuid [pk]
+  participant_a_id uuid [not null, ref: > users.id]
+  participant_b_id uuid [not null, ref: > users.id]
+  related_submission_id uuid [ref: > submissions.id]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table message_attachments {
+  id uuid [pk]
+  message_id uuid [not null, ref: > messages.id]
+  file_url text
+  file_name varchar
+  file_type varchar
+  file_size int
+  metadata json
+  created_at timestamp
+}
+
+Table notifications {
+  id uuid [pk]
+  user_id uuid [not null, ref: > users.id]
+  type varchar [not null]
+  title varchar [not null]
+  body text
+  message text
+  data json
+  read boolean
+  read_at timestamp
+  created_at timestamp
+}
+
+Table partner_rule_change_requests {
+  id uuid [pk]
+  partner_id uuid [ref: > partners.id]
+  requested_by_user_id uuid [ref: > users.id]
+  rule_area varchar [not null]
+  requested_change text [not null]
+  reason text
+  status varchar [note: "pending, accepted, approved, declined, needs_more_information, implemented"]
+  admin_notes text
+  reviewed_by_user_id uuid [ref: > users.id]
+  reviewed_at timestamp
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table audit_logs {
+  id uuid [pk]
+  user_id uuid [ref: > users.id]
+  event_type varchar
+  entity_type varchar
+  entity_id uuid
+  metadata json
+  created_at timestamp
+}
+
+Table password_reset_tokens {
+  id uuid [pk]
+  user_id uuid [ref: > users.id]
+  token_hash varchar
+  code_hash varchar
+  expires_at timestamp
+  used_at timestamp
+  created_at timestamp
+}
+
+Table two_factor_challenges {
+  id uuid [pk]
+  user_id uuid [ref: > users.id]
+  code_hash varchar
+  method varchar
+  purpose varchar
+  expires_at timestamp
+  used_at timestamp
+  created_at timestamp
+}

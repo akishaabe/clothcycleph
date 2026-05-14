@@ -351,7 +351,15 @@ export function MessagesPage() {
           : currentUser?.role === "user"
             ? message.metadata?.user_action_url
             : null;
-    const url = roleActionUrl || message.action_url;
+    const fallbackUrl =
+      currentUser?.role === "partner" && message.related_transaction_id
+        ? `/partner?request=${message.related_transaction_id}`
+        : currentUser?.role === "user" && message.related_transaction_id
+          ? `/dss-requests?request=${message.related_transaction_id}`
+          : currentUser?.role === "admin" && message.metadata?.rule_change_request_id
+            ? `/admin?panel=rule-requests&request=${message.metadata.rule_change_request_id}`
+            : null;
+    const url = roleActionUrl || fallbackUrl || message.action_url;
 
     if (!url) {
       return;
@@ -368,6 +376,8 @@ export function MessagesPage() {
   const hasMessageAction = (message) =>
     Boolean(
       message.action_url ||
+        message.related_transaction_id ||
+        message.metadata?.rule_change_request_id ||
         message.metadata?.admin_action_url ||
         message.metadata?.partner_action_url ||
         message.metadata?.user_action_url

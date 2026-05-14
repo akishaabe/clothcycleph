@@ -160,10 +160,19 @@ CREATE TABLE IF NOT EXISTS submission_details (
   cleanliness TEXT,
   knows_fabric_type INTEGER,
   fabric_types TEXT,
+  custom_fabric_text TEXT,
   fabric_identification TEXT,
   brand TEXT,
   no_brand_visible INTEGER DEFAULT 0,
   fabric_description TEXT,
+  restricted_category TEXT DEFAULT 'none',
+  fiber_composition TEXT,
+  wearability TEXT,
+  repairability TEXT,
+  contamination_level TEXT,
+  damage_classification TEXT,
+  repurposing_potential TEXT,
+  trim_removal TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -274,8 +283,10 @@ CREATE TABLE IF NOT EXISTS partner_rule_change_requests (
   rule_area TEXT NOT NULL,
   requested_change TEXT NOT NULL,
   reason TEXT,
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'implemented')),
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'approved', 'declined', 'needs_more_information', 'implemented')),
   admin_notes TEXT,
+  reviewed_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );

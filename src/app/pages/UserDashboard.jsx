@@ -519,6 +519,85 @@ export function UserDashboard() {
           </motion.div>
         </section>
 
+        <motion.section
+          ref={requestsRef}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.65 }}
+          className={`${cardClass} mb-8 rounded-2xl p-6`}
+        >
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-xl text-[#19221d]">Partner Requests</h3>
+              <p className="mt-1 text-sm text-[#5f6f67]">
+                Track DSS briefs you sent to partners.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate("/dss-requests")}
+              className="rounded-xl border border-[#dce4da] px-4 py-2 text-sm font-semibold text-[#336158] hover:bg-[#f3f5f2]"
+            >
+              View all
+            </button>
+          </div>
+
+          {requestError && (
+            <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {requestError}
+            </div>
+          )}
+
+          <div className="grid gap-3">
+            {filteredRequests.length === 0 && (
+              <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] px-4 py-5 text-sm text-[#5f6f67]">
+                No partner requests yet. Submit textile details, review the DSS
+                recommendation, then send the brief to a partner.
+              </div>
+            )}
+
+            {requests.slice(0, 3).map((request) => (
+              <div
+                key={request.id}
+                className="flex flex-col gap-3 rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4 md:flex-row md:items-center md:justify-between"
+              >
+                <div>
+                  <div className="font-semibold text-[#19221d]">
+                    {request.submission_name || request.item_type} · {pathwayLabels[request.type] || request.type}
+                  </div>
+                  <div className="mt-1 text-sm text-[#5f6f67]">
+                    Sent to {request.partner_name || "partner"}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs ${
+                      requestStatusClass[request.status] ||
+                      requestStatusClass.pending
+                    }`}
+                  >
+                    {request.status}
+                  </span>
+                  <button
+                    onClick={() => navigate(`/dss/${request.submission_id}?request=${request.id}`)}
+                    className="rounded-xl border border-[#dce4da] px-3 py-2 text-sm text-[#5f6f67] hover:bg-[#f3f5f2]"
+                  >
+                    View
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {requests.length > 3 && (
+            <button
+              type="button"
+              onClick={() => navigate("/dss-requests")}
+              className="mt-4 w-full rounded-xl border border-[#dce4da] px-4 py-3 text-sm font-semibold text-[#336158] hover:bg-[#f3f5f2]"
+            >
+              View all sent DSS requests
+            </button>
+          )}
+        </motion.section>
+
       </main>
 
       {showLogoutConfirm && (

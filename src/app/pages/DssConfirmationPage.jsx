@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
   ArrowLeft,
+  AlertTriangle,
   Building2,
   CheckCircle,
   ClipboardList,
@@ -68,13 +69,42 @@ function stripSelectedServiceBriefLines(value) {
     .filter((line) => {
       const normalizedLine = line.toLowerCase();
 
-      return (
-        !normalizedLine.startsWith("recommended pathway:") &&
-        !normalizedLine.startsWith("recommendation note:")
-      );
+      return `#${recommendation.rank} ${label}: ${confidence}% confidence, score ${score}/100`;
     })
-    .join("\n")
-    .trim();
+    .join(" | ");
+}
+
+function buildPartnerBrief(submission, pathway, recommendation, recommendations = []) {
+  if (!submission || !pathway) {
+    return "";
+  }
+
+  const confidence = recommendation
+    ? `${Math.round(Number(recommendation.confidence || 0) * 100)}%`
+    : "Not available";
+  const score = recommendation?.score != null
+    ? `${Number(recommendation.score).toFixed(1)} / 100`
+    : "Not available";
+
+  return [
+    `Selected pathway: ${pathwayLabels[pathway] || pathway}`,
+    `DSS confidence: ${confidence}`,
+    recommendation ? `DSS rank: #${recommendation.rank}` : "",
+    `DSS score: ${score}`,
+    `All DSS pathway scores: ${formatRecommendationScores(recommendations)}`,
+    `Submission name: ${submission.submission_name || submission.item_type}`,
+    `Item: ${submission.item_type}`,
+    `Quantity: ${submission.quantity || 1}`,
+    `Condition: ${submission.condition || "Not specified"}`,
+    `Cleanliness: ${submission.cleanliness || "Not specified"}`,
+    `Fabric: ${submission.fabric || submission.details?.fabric_types || "Not specified"}`,
+    submission.upcycle_request
+      ? `User upcycle request: ${submission.upcycle_request}`
+      : "",
+    recommendation ? `Selected pathway reasoning: ${recommendation.explanation}` : "",
+    recommendation ? `Matched DSS checks: ${formatCheckList(recommendation.checks, true)}` : "",
+    recommendation ? `Needs review: ${formatCheckList(recommendation.checks, false)}` : "",
+  ].filter(Boolean).join("\n");
 }
 
 function BriefPreview({ brief }) {
@@ -123,6 +153,7 @@ export function DssConfirmationPage() {
   const [remindingId, setRemindingId] = useState("");
   const [error, setError] = useState("");
   const [sentMessage, setSentMessage] = useState("");
+  const [isSendConfirmationOpen, setIsSendConfirmationOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -151,6 +182,10 @@ export function DssConfirmationPage() {
         const initialPathway = fixedServicePathways.includes(lockedServicePathway)
           ? lockedServicePathway
           : topRecommendation?.recommended_pathway;
+        const initialRecommendation =
+          nextPreview.recommendations.find(
+            (item) => item.recommended_pathway === initialPathway,
+          ) || topRecommendation;
         const partnersResponse =
           initialPathway === "rejected"
             ? { data: [] }
@@ -175,11 +210,7 @@ export function DssConfirmationPage() {
             : "Location access is off. Partners are ranked by verification and rating.",
         );
         setSelectedPathway(initialPathway || "");
-        setBrief(
-          fixedServicePathways.includes(lockedServicePathway)
-            ? stripSelectedServiceBriefLines(nextPreview.brief)
-            : nextPreview.brief || "",
-        );
+        setBrief(buildPartnerBrief(nextPreview.submission, initialPathway, initialRecommendation, nextPreview.recommendations));
       } catch (loadError) {
         if (isMounted) {
           setError(loadError.message || "Unable to load DSS confirmation.");
@@ -205,6 +236,8 @@ export function DssConfirmationPage() {
     );
   }, [preview, selectedPathway]);
 
+  const topRecommendation = preview?.recommendations?.[0];
+
   const selectedServicePathway = useMemo(() => {
     const servicePathway = normalizePathway(
       preview?.submission?.service_type || preview?.submission?.action,
@@ -221,15 +254,8 @@ export function DssConfirmationPage() {
       return [];
     }
 
-    if (!hasSelectedService) {
-      return preview.recommendations;
-    }
-
-    return preview.recommendations.filter(
-      (recommendation) =>
-        recommendation.recommended_pathway !== selectedServicePathway,
-    );
-  }, [hasSelectedService, preview, selectedServicePathway]);
+    return preview.recommendations;
+  }, [preview]);
 
   const matchingPartners = useMemo(() => {
     if (!selectedPathway) {
@@ -251,25 +277,7 @@ export function DssConfirmationPage() {
     );
 
     setSelectedPathway(pathway);
-    setBrief((currentBrief) => {
-      if (!recommendation || !preview?.submission) {
-        return currentBrief;
-      }
-
-      return [
-        `Recommended pathway: ${pathwayLabels[pathway]} (${Math.round(recommendation.confidence * 100)}% confidence)`,
-        `Submission name: ${preview.submission.submission_name || preview.submission.item_type}`,
-        `Item: ${preview.submission.item_type}`,
-        `Quantity: ${preview.submission.quantity || 1}`,
-        `Condition: ${preview.submission.condition}`,
-        `Cleanliness: ${preview.submission.cleanliness || "Not specified"}`,
-        `Fabric: ${preview.submission.fabric || "Not specified"}`,
-        preview.submission.upcycle_request
-          ? `Upcycle request: ${preview.submission.upcycle_request}`
-          : "",
-        `Recommendation note: ${recommendation.explanation}`,
-      ].filter(Boolean).join("\n");
-    });
+    setBrief(buildPartnerBrief(preview?.submission, pathway, recommendation, preview?.recommendations || []));
   };
 
   const refreshNearbyPartners = async () => {
@@ -294,7 +302,7 @@ export function DssConfirmationPage() {
     }
   };
 
-  const handleSend = async () => {
+  const handleSend = async (confirmed = false) => {
     if (isRejected) {
       setError("This submission is ineligible and cannot be sent to a partner.");
       return;
@@ -305,9 +313,15 @@ export function DssConfirmationPage() {
       return;
     }
 
+    if (!confirmed && selectedServicePathway) {
+      setIsSendConfirmationOpen(true);
+      return;
+    }
+
     setIsSending(true);
     setError("");
     setSentMessage("");
+    setIsSendConfirmationOpen(false);
 
     try {
       await dssService.sendRecommendation({
@@ -456,27 +470,21 @@ export function DssConfirmationPage() {
                 <div className="mb-6">
                   <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
                     <ClipboardList className="h-5 w-5 text-[#336158] dark:text-emerald-300" />
-                    Selected service
+                    Your intended service
                   </h2>
-                  <div className="rounded-2xl border border-[#336158] bg-[#f1f7ef] p-5 dark:border-emerald-400/40 dark:bg-emerald-400/10">
+                  <div className="rounded-2xl border border-[#dce4da] bg-[#f7faf5] p-5 dark:border-white/10 dark:bg-white/[0.05]">
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <div className="text-2xl font-semibold text-[#19221d] dark:text-white">
                           {pathwayLabels[selectedServicePathway]}
                         </div>
                         <p className="mt-2 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
-                          {selectedRecommendation?.explanation ||
-                            `You selected ${pathwayLabels[selectedServicePathway]} for this textile submission.`}
+                          This is the pathway you picked in the submission form. You can keep it or switch before sending.
                         </p>
                       </div>
-                      {selectedRecommendation && !hasSelectedService && (
-                        <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-center text-sm text-[#336158] dark:bg-white/10 dark:text-emerald-200">
-                          <div className="font-bold">
-                            {Math.round(selectedRecommendation.confidence * 100)}%
-                          </div>
-                          <div>confidence</div>
-                        </div>
-                      )}
+                      <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#336158] dark:bg-white/10 dark:text-emerald-200">
+                        Original choice
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -486,25 +494,60 @@ export function DssConfirmationPage() {
                 <>
                   <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
                     <ClipboardList className="h-5 w-5 text-[#336158] dark:text-emerald-300" />
-                    Recommendation options
+                    DSS Recommendations
                   </h2>
+                  <div className="mb-5 rounded-2xl border border-[#dce4da] bg-[#fbfcfa] p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                    <div className="mb-3 text-sm font-semibold text-[#19221d] dark:text-white">
+                      Send this request as
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {recommendationOptions
+                        .filter((recommendation) => fixedServicePathways.includes(recommendation.recommended_pathway))
+                        .map((recommendation) => {
+                          const isSelected = selectedPathway === recommendation.recommended_pathway;
+                          const isOriginal = selectedServicePathway === recommendation.recommended_pathway;
+
+                          return (
+                            <button
+                              key={`selector-${recommendation.recommended_pathway}`}
+                              type="button"
+                              onClick={() => handlePathwayChange(recommendation.recommended_pathway)}
+                              className={`rounded-xl border px-4 py-3 text-left transition-all ${
+                                isSelected
+                                  ? "border-[#336158] bg-[#f1f7ef] text-[#19221d] ring-2 ring-[#336158]/15 dark:border-emerald-300 dark:bg-emerald-300/15 dark:text-white"
+                                  : "border-[#e1e7df] bg-white text-[#5f6f67] hover:border-[#9bb39c] dark:border-white/10 dark:bg-white/[0.03] dark:text-zinc-300 dark:hover:border-emerald-300/50"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-semibold">
+                                  {pathwayLabels[recommendation.recommended_pathway]}
+                                </span>
+                                {isSelected && <CheckCircle className="h-4 w-4 text-[#336158] dark:text-emerald-300" />}
+                              </div>
+                              <div className="mt-1 text-xs">
+                                DSS #{recommendation.rank} · {Math.round(recommendation.confidence * 100)}% confidence
+                              </div>
+                              {isOriginal && (
+                                <div className="mt-2 w-fit rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-[#336158] dark:bg-white/10 dark:text-emerald-200">
+                                  Initial choice
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
+                      The cards below explain the DSS scoring only. Use the buttons above to choose what gets sent to the partner.
+                    </p>
+                  </div>
                   <div className="grid gap-3">
                     {recommendationOptions.map((recommendation) => {
                       const isSelected =
                         selectedPathway === recommendation.recommended_pathway;
-                      const CardElement = hasSelectedService ? "div" : "button";
 
                       return (
-                        <CardElement
+                        <div
                           key={recommendation.recommended_pathway}
-                          onClick={
-                            hasSelectedService
-                              ? undefined
-                              : () =>
-                                  handlePathwayChange(
-                                    recommendation.recommended_pathway,
-                                  )
-                          }
                           className={`rounded-2xl border p-4 text-left transition-all ${
                             isSelected
                               ? "border-[#336158] bg-[#f1f7ef] dark:border-emerald-400/40 dark:bg-emerald-400/10"
@@ -513,9 +556,13 @@ export function DssConfirmationPage() {
                         >
                           <div className="flex items-center justify-between gap-4">
                             <div>
-                              <div className="text-lg font-semibold text-[#19221d] dark:text-white">
-                                {!hasSelectedService && `#${recommendation.rank} `}
-                                {pathwayLabels[recommendation.recommended_pathway]}
+                              <div className="flex flex-wrap items-center gap-2 text-lg font-semibold text-[#19221d] dark:text-white">
+                                <span>#{recommendation.rank} {pathwayLabels[recommendation.recommended_pathway]}</span>
+                                {isSelected && (
+                                  <span className="rounded-full bg-[#336158] px-2 py-0.5 text-xs font-semibold text-white dark:bg-emerald-300 dark:text-[#07110d]">
+                                    Selected
+                                  </span>
+                                )}
                               </div>
                               <p className="mt-1 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
                                 {recommendation.explanation}
@@ -549,7 +596,7 @@ export function DssConfirmationPage() {
                               <div>confidence</div>
                             </div>
                           </div>
-                        </CardElement>
+                        </div>
                       );
                     })}
                   </div>
@@ -601,12 +648,19 @@ export function DssConfirmationPage() {
                     onClick={() => setSelectedPartnerId(partner.id)}
                     className={`rounded-2xl border p-4 text-left transition-all ${
                       selectedPartnerId === partner.id
-                        ? "border-[#336158] bg-[#f1f7ef] dark:border-emerald-400/40 dark:bg-emerald-400/10"
+                        ? "border-[#336158] bg-[#f1f7ef] ring-2 ring-[#336158]/20 dark:border-emerald-300 dark:bg-emerald-300/20 dark:ring-emerald-300/30"
                         : "border-[#e1e7df] bg-white hover:border-[#9bb39c] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-emerald-300/50"
                     }`}
                   >
-                    <div className="font-semibold text-[#19221d] dark:text-white">
-                      {partner.name}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="font-semibold text-[#19221d] dark:text-white">
+                        {partner.name}
+                      </div>
+                      {selectedPartnerId === partner.id && (
+                        <span className="rounded-full bg-[#336158] px-2 py-1 text-xs font-semibold text-white dark:bg-emerald-300 dark:text-[#07110d]">
+                          Selected
+                        </span>
+                      )}
                     </div>
                     <p className="mt-1 line-clamp-2 text-sm text-[#5f6f67] dark:text-zinc-300">
                       {partner.description || partner.service_types || partner.email}
@@ -644,9 +698,9 @@ export function DssConfirmationPage() {
             <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_12px_34px_rgba(0,0,0,0.3)]">
               <h2 className="mb-3 text-xl font-semibold">Partner brief</h2>
               <BriefPreview brief={brief} />
-              {selectedRecommendation && !hasSelectedService && (
+              {selectedRecommendation && (
                 <div className="mt-3 rounded-xl bg-[#f7faf5] px-4 py-3 text-sm text-[#5f6f67] dark:bg-white/[0.05] dark:text-zinc-300">
-                  Score: {selectedRecommendation.score.toFixed(1)} / 100
+                  DSS score: {selectedRecommendation.score.toFixed(1)} / 100 · Rank #{selectedRecommendation.rank}
                 </div>
               )}
               {(error || sentMessage) && (
@@ -752,6 +806,66 @@ export function DssConfirmationPage() {
           </aside>
         </section>
       </main>
+
+      {isSendConfirmationOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-6 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl border border-[#dce4da] bg-white p-6 shadow-[0_24px_70px_rgba(25,34,29,0.24)] dark:border-white/10 dark:bg-[#111817]">
+            <div className="mb-4 flex items-start gap-3">
+              <div className="rounded-2xl bg-[#fff8e8] p-3 text-[#7a5427] dark:bg-amber-400/10 dark:text-amber-200">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-[#19221d] dark:text-white">
+                  Send as {pathwayLabels[selectedPathway]}?
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
+                  {selectedPathway === selectedServicePathway
+                    ? `You are keeping your original ${pathwayLabels[selectedPathway]} intent.`
+                    : `You changed this from your original ${pathwayLabels[selectedServicePathway]} intent to ${pathwayLabels[selectedPathway]}.`}
+                  {" "}
+                  {selectedRecommendation?.rank === 1
+                    ? "This also matches the top DSS recommendation."
+                    : `The top DSS recommendation is ${pathwayLabels[topRecommendation?.recommended_pathway] || "another pathway"}, but you can still send your chosen pathway.`}
+                </p>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-[#e1e7df] bg-[#f7faf5] p-4 text-sm text-[#5f6f67] dark:border-white/10 dark:bg-white/[0.05] dark:text-zinc-300">
+              <div className="font-semibold text-[#19221d] dark:text-white">
+                {pathwayLabels[selectedPathway]} confidence: {Math.round(Number(selectedRecommendation?.confidence || 0) * 100)}%
+              </div>
+              <div className="mt-1">
+                Top DSS option: {pathwayLabels[topRecommendation?.recommended_pathway] || "Not available"} ({Math.round(Number(topRecommendation?.confidence || 0) * 100)}% confidence)
+              </div>
+            </div>
+            <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setIsSendConfirmationOpen(false)}
+                className="rounded-xl border border-[#dce4da] px-4 py-3 text-sm font-semibold text-[#5f6f67] hover:bg-[#f3f5f2] dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/10"
+              >
+                Review choices
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handlePathwayChange(selectedServicePathway);
+                  setIsSendConfirmationOpen(false);
+                }}
+                className="rounded-xl border border-[#336158] px-4 py-3 text-sm font-semibold text-[#336158] hover:bg-[#f1f7ef] dark:border-emerald-300/40 dark:text-emerald-300 dark:hover:bg-emerald-400/10"
+              >
+                Keep initial intent
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSend(true)}
+                className="rounded-xl bg-[#336158] px-4 py-3 text-sm font-semibold text-white hover:bg-[#2a4c48] dark:bg-emerald-500/80 dark:text-[#07110d] dark:hover:bg-emerald-400"
+              >
+                Send as {pathwayLabels[selectedPathway]}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -391,6 +391,16 @@ export const dssService = {
       method: 'GET',
     });
   },
+
+  async updateRuleChangeRequestStatus(
+    requestId: string,
+    payload: { status: string; admin_note?: string },
+  ): Promise<{ message: string; data: any }> {
+    return fetchWithAuth(`/dss/rule-change-requests/${requestId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
 };
 
 // ============= MESSAGE ENDPOINTS =============
@@ -443,12 +453,31 @@ export const notificationService = {
     return fetchWithAuth('/notifications/count', { method: 'GET' });
   },
 
+  async getPreferences(): Promise<{ data: any }> {
+    return fetchWithAuth('/notifications/preferences', { method: 'GET' });
+  },
+
+  async updatePreferences(payload: {
+    email_notifications?: boolean;
+    push_notifications?: boolean;
+    sms_notifications?: boolean;
+  }): Promise<{ message: string; data: any }> {
+    return fetchWithAuth('/notifications/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
   async markAsRead(id: string): Promise<{ message: string; data: any }> {
     return fetchWithAuth(`/notifications/${id}/read`, { method: 'PUT' });
   },
 
   async markAllAsRead(): Promise<{ message: string; count: number }> {
     return fetchWithAuth('/notifications/read-all', { method: 'PUT' });
+  },
+
+  async deleteNotification(id: string): Promise<{ message: string; data: any }> {
+    return fetchWithAuth(`/notifications/${id}`, { method: 'DELETE' });
   },
 };
 

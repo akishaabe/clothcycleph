@@ -127,6 +127,11 @@ const fabricOptions = [
     description:
       "Wool feels warm and textured; silk is smooth, glossy, and delicate.",
   },
+  {
+    value: "Other / user-defined",
+    description:
+      "Use this when the fabric label has a specific fiber or blend not listed here.",
+  },
 ];
 
 const identificationMethods = [
@@ -361,6 +366,7 @@ export function SubmissionFormPage() {
     knowsFabricType: "",
     fiberComposition: "",
     fabricTypes: [],
+    customFabricText: "",
     fabricIdentification: [],
     brand: "",
     noBrandVisible: false,
@@ -570,6 +576,7 @@ export function SubmissionFormPage() {
           cleanliness: formData.cleanliness,
           knows_fabric_type: formData.knowsFabricType === "Yes",
           fabric_types: formData.fabricTypes,
+          custom_fabric_text: formData.customFabricText || null,
           fabric_identification: formData.fabricIdentification,
           brand: formData.noBrandVisible ? null : formData.brand || null,
           no_brand_visible: formData.noBrandVisible,
@@ -578,7 +585,10 @@ export function SubmissionFormPage() {
           fiber_composition: toFiberComposition(),
           wearability: toValueKey(formData.wearability) || null,
           repairability: toValueKey(formData.repairability) || null,
-          contamination_level: toValueKey(formData.contaminationLevel) || null,
+          contamination_level:
+            formData.condition === "Good condition (wearable, no major damage)"
+              ? null
+              : toValueKey(formData.contaminationLevel) || null,
           damage_classification: toValueKey(formData.damageClassification) || null,
           repurposing_potential: toValueKey(formData.repurposingPotential) || null,
           trim_removal: toValueKey(formData.trimRemoval) || null,
@@ -644,19 +654,22 @@ export function SubmissionFormPage() {
     formData.quantity;
 
   const isStepThreeComplete =
-    formData.fiberComposition &&
+    formData.knowsFabricType &&
     (formData.knowsFabricType === "Yes"
       ? formData.fabricTypes.length > 0 &&
         formData.fabricIdentification.length > 0 &&
-        (formData.noBrandVisible || formData.brand.trim())
+        (formData.noBrandVisible || formData.brand.trim()) &&
+        (!formData.fabricTypes.includes("Other / user-defined") || formData.customFabricText.trim())
       : formData.knowsFabricType === "No" &&
-        formData.fabricDescription.length > 0);
+        formData.fabricDescription.length > 0) &&
+    formData.fiberComposition;
 
   const isRecoveryCriteriaComplete =
     formData.wearability &&
     formData.damageClassification &&
     formData.repairability &&
-    formData.contaminationLevel &&
+    (formData.condition === "Good condition (wearable, no major damage)" ||
+      formData.contaminationLevel) &&
     formData.repurposingPotential &&
     formData.trimRemoval;
 
@@ -680,11 +693,11 @@ export function SubmissionFormPage() {
     },
     { label: "Submission Name", value: formData.submissionName, step: 2 },
     { label: "Burn Test", value: formData.burnTestChoice, step: 1 },
-    { label: "Moment Flame", value: formData.burnTestMoment.join(", "), step: 1 },
-    { label: "While in Flames", value: formData.burnTestFlames.join(", "), step: 1 },
-    { label: "Without Flame", value: formData.burnTestNoFlame.join(", "), step: 1 },
-    { label: "Smell", value: formData.burnTestSmell, step: 1 },
-    { label: "Ash Characteristics", value: formData.burnTestAshes.join(", "), step: 1 },
+    { label: "Moment Flame", value: formData.burnTestMoment.join(", "), step: 1, burnPage: 2 },
+    { label: "While in Flames", value: formData.burnTestFlames.join(", "), step: 1, burnPage: 3 },
+    { label: "Without Flame", value: formData.burnTestNoFlame.join(", "), step: 1, burnPage: 4 },
+    { label: "Smell", value: formData.burnTestSmell, step: 1, burnPage: 5 },
+    { label: "Ash Characteristics", value: formData.burnTestAshes.join(", "), step: 1, burnPage: 6 },
     { label: "Item Type", value: formData.itemTypes.join(", "), step: 2 },
     { label: "Condition", value: formData.condition, step: 2 },
     { label: "Cleanliness", value: formData.cleanliness, step: 2 },
@@ -700,7 +713,7 @@ export function SubmissionFormPage() {
       step: 3,
       value:
       formData.knowsFabricType === "Yes"
-        ? formData.fabricTypes.join(", ")
+        ? [...formData.fabricTypes, formData.customFabricText].filter(Boolean).join(", ")
         : formData.fabricDescription.join(", "),
     },
     { label: "Fabric Identified By", value: formData.fabricIdentification.join(", "), step: 3 },
@@ -757,7 +770,7 @@ export function SubmissionFormPage() {
         </div>
       </nav>
 
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="mx-auto max-w-5xl px-4 py-5 md:px-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -771,7 +784,7 @@ export function SubmissionFormPage() {
           </p>
         </motion.div>
 
-        <div className="mb-12">
+        <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             {[1, 2, 3, 4, 5, 6].map((num) => (
               <div key={num} className="flex items-center flex-1">
@@ -810,7 +823,7 @@ export function SubmissionFormPage() {
   key={`${step}-${formData.burnTestPage}`}
   initial={{ opacity: 0, x: 20 }}
   animate={{ opacity: 1, x: 0 }}
-  className="bg-white p-8 rounded-2xl shadow-lg"
+  className="submission-panel bg-white p-5 rounded-2xl shadow-lg md:p-6"
 >
           {step === 1 && (
             <div className="space-y-7">
@@ -1203,20 +1216,6 @@ export function SubmissionFormPage() {
             <div className="space-y-7">
               <h7 className="text-2xl text-[#2d4a2d]">Fabric Details</h7>
 
-              <QuestionBlock label="Q5: What is the main material/fiber composition?">
-                <div className="grid gap-3">
-                  {fiberCompositionOptions.map((option) => (
-                    <RadioOption
-                      key={option.value}
-                      name="fiberComposition"
-                      label={option.label}
-                      checked={formData.fiberComposition === option.value}
-                      onChange={() => updateField("fiberComposition", option.value)}
-                    />
-                  ))}
-                </div>
-              </QuestionBlock>
-
               <QuestionBlock label="Do you know the fabric type of the item/s?">
                 <div className="grid sm:grid-cols-2 gap-3">
                   {["Yes", "No"].map((answer) => (
@@ -1253,6 +1252,16 @@ export function SubmissionFormPage() {
                         toggleListValue("fabricTypes", value)
                       }
                     />
+                    {formData.fabricTypes.includes("Other / user-defined") && (
+                      <input
+                        value={formData.customFabricText}
+                        onChange={(event) =>
+                          updateField("customFabricText", event.target.value)
+                        }
+                        className="mt-3 w-full rounded-xl border-2 border-[#d4d8d0] bg-white px-4 py-3 focus:border-[#6b8e6b]"
+                        placeholder="Type the exact fabric or blend from the label"
+                      />
+                    )}
                   </QuestionBlock>
 
                   <QuestionBlock label="How did you identify the fabric?">
@@ -1311,6 +1320,20 @@ export function SubmissionFormPage() {
                   />
                 </QuestionBlock>
               )}
+
+              <QuestionBlock label="What is the main material/fiber composition?">
+                <div className="grid gap-3">
+                  {fiberCompositionOptions.map((option) => (
+                    <RadioOption
+                      key={option.value}
+                      name="fiberComposition"
+                      label={option.label}
+                      checked={formData.fiberComposition === option.value}
+                      onChange={() => updateField("fiberComposition", option.value)}
+                    />
+                  ))}
+                </div>
+              </QuestionBlock>
 
               <div className="flex gap-3">
                 <button
@@ -1377,19 +1400,21 @@ export function SubmissionFormPage() {
                 </div>
               </QuestionBlock>
 
-              <QuestionBlock label="Q9: What is the contamination level?">
-                <div className="grid gap-3 md:grid-cols-2">
-                  {["Clean", "Washable dirt/odor", "Permanent stain", "Oil/paint/biological contamination", "Chemical/mold contamination"].map((option) => (
-                    <RadioOption
-                      key={option}
-                      name="contaminationLevel"
-                      label={option}
-                      checked={formData.contaminationLevel === option}
-                      onChange={() => updateField("contaminationLevel", option)}
-                    />
-                  ))}
-                </div>
-              </QuestionBlock>
+              {formData.condition !== "Good condition (wearable, no major damage)" && (
+                <QuestionBlock label="Q9: What is the contamination level?">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {["Clean", "Washable dirt/odor", "Permanent stain", "Oil/paint/biological contamination", "Chemical/mold contamination"].map((option) => (
+                      <RadioOption
+                        key={option}
+                        name="contaminationLevel"
+                        label={option}
+                        checked={formData.contaminationLevel === option}
+                        onChange={() => updateField("contaminationLevel", option)}
+                      />
+                    ))}
+                  </div>
+                </QuestionBlock>
+              )}
 
               <QuestionBlock label="Q10: What is the repurposing potential?">
                 <div className="grid gap-3">
@@ -1615,7 +1640,7 @@ export function SubmissionFormPage() {
               </h2>
 
               <div className="space-y-4">
-                {reviewRows.map(({ label, value, step: rowStep }) => (
+                {reviewRows.map(({ label, value, step: rowStep, burnPage }) => (
                   <div
                     key={label}
                     className="flex items-start justify-between gap-4 rounded-xl bg-[#f5f5f0] p-4"
@@ -1628,6 +1653,10 @@ export function SubmissionFormPage() {
                       onClick={() => {
                         if (rowStep === 1) {
                           setShowBurnTestResult(false);
+                          if (burnPage) {
+                            updateField("burnTestChoice", "Yes");
+                            updateField("burnTestPage", burnPage);
+                          }
                         }
 
                         setIsReviewEditing(true);
@@ -1807,10 +1836,12 @@ function BurnTestRadioOption({ name, label, description, checked, onChange }) {
 }
 
 function QuestionBlock({ label, children }) {
+  const displayLabel = String(label || "").replace(/^Q\d+:\s*/, "");
+
   return (
-    <div>
+    <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4">
       <label className="block text-sm font-semibold mb-3 text-[#2d4a2d]">
-        {label}
+        {displayLabel}
       </label>
       {children}
     </div>

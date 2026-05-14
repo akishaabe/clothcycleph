@@ -180,9 +180,10 @@ export const sendRecommendationToPartner = async (req: AuthRequest, res: Respons
     }
 
     const partner = partnerResult.rows[0];
-    const recommendation = buildPathwayRecommendations(submission).find(
+    const recommendations = buildPathwayRecommendations(submission);
+    const recommendation = recommendations.find(
       (item) => item.recommended_pathway === recommended_pathway
-    ) || buildPathwayRecommendations(submission)[0];
+    ) || recommendations[0];
 
     await client.query('BEGIN');
     transactionStarted = true;
@@ -226,6 +227,7 @@ export const sendRecommendationToPartner = async (req: AuthRequest, res: Respons
         JSON.stringify({
           engine_version: DSS_ENGINE_VERSION,
           recommendation,
+          recommendations,
           brief,
           burn_test_analysis: analyzeBurnTest(submission.burn_test),
           rule_checks: recommendation.checks || [],
@@ -727,6 +729,90 @@ export const getPartnerRuleChangeRequests = async (req: AuthRequest, res: Respon
     res.json({ data: result.rows, count: result.rows.length });
   } catch (error) {
     res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};
+
+export const updatePartnerRuleChangeRequestStatus = async (req: AuthRequest, res: Response) => {
+  const client = await getClient();
+
+  try {
+    if (req.user?.role !== 'admin') {
+      throw new AppError(403, 'Only admins can update partner rule change requests');
+    }
+
+    const { id } = req.params;
+    const status = String(req.body.status || '').trim();
+    const adminNote = String(req.body.admin_note || '').trim();
+    const allowedStatuses = ['pending', 'accepted', 'declined', 'needs_more_information'];
+
+    if (!allowedStatuses.includes(status)) {
+      throw new AppError(400, 'Invalid rule request status');
+    }
+
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `UPDATE partner_rule_change_requests
+       SET status = $1,
+           admin_notes = $2,
+           reviewed_by_user_id = $3,
+           reviewed_at = NOW()
+       WHERE id = $4
+       RETURNING *`,
+      [status, adminNote || null, req.user.id, id]
+    );
+
+    if (result.rows.length === 0) {
+      throw new AppError(404, 'Partner rule change request not found');
+    }
+
+    const request = result.rows[0];
+    const partnerUserResult = await client.query(
+      `SELECT u.id
+       FROM users u
+       WHERE u.partner_id = $1 OR u.id = $2`,
+      [request.partner_id, request.requested_by_user_id]
+    );
+    const partnerActionUrl = '/partner#rule-requests';
+    const adminActionUrl = `/admin?panel=rule-requests&request=${request.id}`;
+    const statusLabel = status === 'needs_more_information' ? 'needs more information' : status;
+
+    for (const partnerUser of partnerUserResult.rows) {
+      await client.query(
+        `INSERT INTO messages (id, from_user_id, to_user_id, content, action_url, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          uuidv4(),
+          req.user.id,
+          partnerUser.id,
+          `Admin marked your rule request as ${statusLabel}.${adminNote ? `\n${adminNote}` : ''}`,
+          partnerActionUrl,
+          JSON.stringify({
+            kind: 'partner_rule_change_request_status',
+            rule_change_request_id: request.id,
+            admin_action_url: adminActionUrl,
+            partner_action_url: partnerActionUrl,
+          }),
+        ]
+      );
+
+      await enqueueNotification(
+        partnerUser.id,
+        'system',
+        'Rule request updated',
+        `Your partner rule request is now ${statusLabel}.`,
+        { action_url: partnerActionUrl, ruleChangeRequestId: request.id }
+      );
+    }
+
+    await client.query('COMMIT');
+
+    res.json({ message: 'Rule request status updated', data: request });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    res.status(error instanceof AppError ? error.statusCode : 400).json({ error: (error as Error).message });
+  } finally {
+    client.release();
   }
 };
 

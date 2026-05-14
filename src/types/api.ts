@@ -282,6 +282,13 @@ export interface DssRequest {
   output_payload?: {
     brief?: string;
     recommendation?: DssRecommendation;
+    recommendations?: DssRecommendation[];
+    rule_checks?: Array<{
+      question: string;
+      matched: boolean;
+      expected?: string;
+      selected?: string;
+    }>;
   };
   created_at: string;
   updated_at: string;
