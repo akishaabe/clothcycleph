@@ -4,10 +4,9 @@ import {
   Recycle,
   Heart,
   Sparkles,
-  Users,
-  Package,
-  TrendingUp,
   Leaf,
+  Package,
+  Scissors,
 } from "lucide-react";
 
 import "./LandingPage.css";
@@ -203,7 +202,7 @@ export function LandingPage() {
                 </Link>
 
                 <a
-                  href="#how-it-works"
+                  href="#about"
                   className="
                     px-8
                     py-4
@@ -259,10 +258,97 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* About */}
+      <motion.section
+        id="about"
+        className="py-24 px-6 bg-white dark:bg-white/[0.02]"
+        initial="hidden"
+        whileInView="visible"
+        viewport={viewportReveal}
+      >
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            variants={revealUp}
+            className="mx-auto max-w-5xl text-center"
+          >
+            <h3 className="text-5xl font-light mb-10 text-[#19221d] dark:text-white">
+              About ClothCycle PH
+            </h3>
+
+            <div className="space-y-6 text-lg leading-8 text-[#5f6f67] dark:text-zinc-300">
+              <p>
+                ClothCycle PH is a sustainable textile management platform
+                dedicated to giving clothes and fabric materials a second life
+                through recycling, donation, upcycling, and responsible
+                disposal. Our goal is to help reduce textile waste in the
+                Philippines by connecting individuals with trusted
+                organizations, recycling partners, and communities that support
+                sustainable fashion and circular living.
+              </p>
+
+              <p>
+                Through smart recommendations and community-driven solutions,
+                ClothCycle PH makes it easier for users to decide the best next
+                step for their unwanted clothing items based on their condition,
+                material, and usability. Whether it&apos;s donating wearable
+                clothes, recycling damaged fabrics, or transforming old textiles
+                into something new, ClothCycle PH promotes environmentally
+                responsible practices that contribute to a greener future.
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      </motion.section>
+
+      {/* SDG 12 */}
+      <motion.section
+        id="sdg-12"
+        className="py-24 px-6 bg-transparent"
+        initial="hidden"
+        whileInView="visible"
+        viewport={viewportReveal}
+      >
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            variants={revealUp}
+            className="
+              grid
+              gap-8
+              md:grid-cols-[auto_minmax(0,1fr)]
+              md:gap-12
+              items-center
+            "
+          >
+            <div className="flex justify-center md:justify-start">
+              <img
+                src="/sdg12-logo.png"
+                alt="SDG 12 Responsible Consumption and Production"
+                className="w-full max-w-[300px] md:max-w-[340px] bg-white"
+              />
+            </div>
+
+            <div>
+              <h3 className="font-sans text-4xl md:text-5xl font-semibold mb-6 text-[#19221d] dark:text-white">
+                Aligned With SDG 12
+              </h3>
+
+              <p className="text-lg md:text-xl leading-relaxed text-[#5f6f67] dark:text-zinc-300">
+                At ClothCycle PH, we believe fashion should not come at the
+                expense of the planet. Our platform aligns with Sustainable
+                Development Goal 12: Responsible Consumption and Production by
+                promoting sustainable clothing practices such as recycling,
+                upcycling, and donating pre-loved garments instead of sending
+                them to landfills.
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      </motion.section>
+
       {/* How It Works */}
       <motion.section
         id="how-it-works"
-        className="py-24 px-6 bg-transparent"
+        className="py-24 px-6 bg-white dark:bg-white/[0.02]"
         initial="hidden"
         whileInView="visible"
         viewport={viewportReveal}
@@ -277,12 +363,12 @@ export function LandingPage() {
             </h3>
 
             <p className="text-lg text-[#5f6f67] dark:text-zinc-400">
-              Three modern ways to contribute sustainably
+              Four modern ways to contribute sustainably
             </p>
           </motion.div>
 
           <motion.div
-            className="grid md:grid-cols-3 gap-8"
+            className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8"
             variants={staggerGroup}
           >
             {[
@@ -293,13 +379,19 @@ export function LandingPage() {
                   "Answer simple textile questions and get a recommended path when you are not sure what to do.",
               },
               {
-                icon: Heart,
+                icon: Package,
                 title: "Donate",
                 description:
                   "Support communities by giving garments a meaningful second purpose.",
               },
               {
                 icon: Recycle,
+                title: "Recycle",
+                description:
+                  "Divert damaged or unusable textiles into responsible recycling streams.",
+              },
+              {
+                icon: Scissors,
                 title: "Upcycle",
                 description:
                   "Recycle or upcycle pieces into new materials and creative second-life products.",
@@ -352,127 +444,9 @@ export function LandingPage() {
         </div>
       </motion.section>
 
-      {/* SDG 12 */}
-      <motion.section
-        className="py-24 px-6 bg-[#ffffff] dark:bg-white/[0.02]"
-        initial="hidden"
-        whileInView="visible"
-        viewport={viewportReveal}
-      >
-        <div className="max-w-7xl mx-auto">
-          <motion.div
-            variants={revealUp}
-            className="
-              grid
-              gap-8
-              md:grid-cols-[auto_minmax(0,1fr)]
-              md:gap-12
-              items-center
-            "
-          >
-            <div className="flex justify-center md:justify-start">
-              <img
-                src="/sdg12-logo.png"
-                alt="SDG 12 Responsible Consumption and Production"
-                className="w-full max-w-[300px] md:max-w-[340px] bg-white"
-              />
-            </div>
-
-            <div>
-              <h3 className="font-sans text-4xl md:text-5xl font-semibold mb-6 text-[#19221d] dark:text-white">
-                Aligned With SDG 12
-              </h3>
-
-              <p className="text-lg md:text-xl leading-relaxed text-[#5f6f67] dark:text-zinc-300">
-                At ClothCycle PH, we believe fashion should not come at the
-                expense of the planet. Our platform aligns with Sustainable
-                Development Goal 12: Responsible Consumption and Production by
-                promoting sustainable clothing practices such as recycling,
-                upcycling, and donating pre-loved garments instead of sending
-                them to landfills.
-              </p>
-            </div>
-          </motion.div>
-        </div>
-      </motion.section>
-
-      {/* Statistics */}
-      <motion.section
-        className="py-24 px-6"
-        initial="hidden"
-        whileInView="visible"
-        viewport={viewportReveal}
-      >
-        <div className="max-w-7xl mx-auto">
-          <motion.div
-            variants={revealScale}
-            className="
-              rounded-[40px]
-              bg-gradient-to-br
-              from-[#f3f5f2]
-              dark:from-[#161a22]
-              to-white
-              dark:to-[#0f1115]
-              border
-              border-[#e7ebe6]
-              dark:border-white/10
-              p-12
-            "
-          >
-            <motion.div
-              className="grid md:grid-cols-3 gap-10 text-center"
-              variants={staggerGroup}
-            >
-              {[
-                {
-                  icon: Package,
-                  value: "50,000+",
-                  label: "Items Diverted",
-                },
-                {
-                  icon: Users,
-                  value: "10,000+",
-                  label: "Active Users",
-                },
-                {
-                  icon: TrendingUp,
-                  value: "150+",
-                  label: "Partners",
-                },
-              ].map((stat) => (
-                <motion.div
-                  key={stat.label}
-                  variants={revealScale}
-                  className="
-                    bg-[#f3f5f2]
-                    dark:bg-white/5
-                    backdrop-blur-xl
-                    border
-                    border-[#e7ebe6]
-                    dark:border-white/10
-                    p-10
-                    rounded-3xl
-                  "
-                >
-                  <stat.icon className="w-12 h-12 mx-auto mb-6 text-[#336158]" />
-
-                  <div className="text-5xl font-light text-[#19221d] dark:text-white mb-3">
-                    {stat.value}
-                  </div>
-
-                  <div className="text-[#5f6f67] dark:text-zinc-400">
-                    {stat.label}
-                  </div>
-                </motion.div>
-              ))}
-            </motion.div>
-          </motion.div>
-        </div>
-      </motion.section>
-
       {/* Partners */}
       <motion.section
-        id="partner"
+        id="featured-partners"
         className="py-24 px-6"
         initial="hidden"
         whileInView="visible"
@@ -581,6 +555,24 @@ export function LandingPage() {
               <div className="space-y-3 text-[#5f6f67] dark:text-zinc-500">
                 <div>
                   <a
+                    href="#about"
+                    className="hover:text-[#336158] dark:hover:text-white transition-colors"
+                  >
+                    About ClothCycle PH
+                  </a>
+                </div>
+
+                <div>
+                  <a
+                    href="#sdg-12"
+                    className="hover:text-[#336158] dark:hover:text-white transition-colors"
+                  >
+                    Aligned with SDG 12
+                  </a>
+                </div>
+
+                <div>
+                  <a
                     href="#how-it-works"
                     className="hover:text-[#336158] dark:hover:text-white transition-colors"
                   >
@@ -590,10 +582,10 @@ export function LandingPage() {
 
                 <div>
                   <a
-                    href="#partner"
+                    href="#featured-partners"
                     className="hover:text-[#336158] dark:hover:text-white transition-colors"
                   >
-                    Partners
+                    Featured Partners
                   </a>
                 </div>
               </div>
@@ -605,9 +597,15 @@ export function LandingPage() {
               </h4>
 
               <div className="space-y-3 text-[#5f6f67] dark:text-zinc-500">
-                <div>info@clothcycle.ph</div>
+                <a
+                  href="mailto:clothcycleph@gmail.com"
+                  className="block hover:text-[#336158] hover:underline"
+                >
+                  clothcycleph@gmail.com
+                </a>
+
                 <div>+63 912 345 6789</div>
-                <div>Manila, Philippines</div>
+                <div>Makati City, Metro Manila, Philippines</div>
               </div>
             </div>
           </div>
