@@ -113,22 +113,53 @@ html.dark .app-darkable-page {
 
 html.dark .app-darkable-page nav,
 html.dark .app-darkable-page [class*="bg-white"],
+html.dark .app-darkable-page [class*="bg-[#fbfcfa]"],
+html.dark .app-darkable-page [class*="bg-[#f7faf5]"],
+html.dark .app-darkable-page [class*="bg-[#f1f7ef]"],
 html.dark .app-darkable-page [class*="bg-[#f3f5f2]"],
 html.dark .app-darkable-page [class*="bg-[#f5f5f0]"],
 html.dark .app-darkable-page [class*="bg-[#f8faf6]"],
 html.dark .app-darkable-page [class*="bg-[#f8fbf6]"],
 html.dark .app-darkable-page [class*="bg-[#eff6ec]"],
 html.dark .app-darkable-page [class*="bg-[#e7ebe6]"],
-html.dark .app-darkable-page [class*="bg-[#e8ebe4]"] {
+html.dark .app-darkable-page [class*="bg-[#e8ebe4]"],
+html.dark .app-darkable-page [class*="bg-[#eef5ea]"],
+html.dark .app-darkable-page [class*="bg-[#eef5ff]"],
+html.dark .app-darkable-page [class*="bg-[#eff6ff]"],
+html.dark .app-darkable-page [class*="bg-[#dbeafe]"] {
   background: rgba(22, 26, 34, 0.92) !important;
   border-color: rgba(255, 255, 255, 0.12) !important;
   color: #f5f5f5 !important;
 }
 
+html.dark .app-darkable-page [class*="bg-[#edf7ed]"],
+html.dark .app-darkable-page [class*="bg-[#dff1e4]"] {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(110, 231, 183, 0.22) !important;
+  color: #bbf7d0 !important;
+}
+
+html.dark .app-darkable-page [class*="bg-[#fff8e8]"],
+html.dark .app-darkable-page [class*="bg-[#fff8e6]"],
+html.dark .app-darkable-page [class*="bg-[#fff3c4]"] {
+  background: rgba(245, 158, 11, 0.14) !important;
+  border-color: rgba(251, 191, 36, 0.24) !important;
+  color: #fde68a !important;
+}
+
+html.dark .app-darkable-page [class*="bg-red-50"],
+html.dark .app-darkable-page [class*="bg-red-100"] {
+  background: rgba(248, 113, 113, 0.12) !important;
+  border-color: rgba(248, 113, 113, 0.24) !important;
+  color: #fecaca !important;
+}
+
 html.dark .app-darkable-page [class*="from-[#f3f5f2]"],
 html.dark .app-darkable-page [class*="from-[#f5f5f0]"],
 html.dark .app-darkable-page [class*="from-[#f8faf6]"],
-html.dark .app-darkable-page [class*="from-[#f8fbf6]"] {
+html.dark .app-darkable-page [class*="from-[#f8fbf6]"],
+html.dark .app-darkable-page [class*="from-[#f1f7ef]"],
+html.dark .app-darkable-page [class*="from-[#eff6ff]"] {
   --tw-gradient-from: #12161f var(--tw-gradient-from-position) !important;
   --tw-gradient-to: rgb(18 22 31 / 0) var(--tw-gradient-to-position) !important;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
@@ -136,6 +167,7 @@ html.dark .app-darkable-page [class*="from-[#f8fbf6]"] {
 
 html.dark .app-darkable-page [class*="to-[#e7ebe6]"],
 html.dark .app-darkable-page [class*="to-[#e8ebe4]"],
+html.dark .app-darkable-page [class*="to-[#e4edf6]"],
 html.dark .app-darkable-page [class*="to-[#cfd9d1]"],
 html.dark .app-darkable-page [class*="to-white"] {
   --tw-gradient-to: #0d1016 var(--tw-gradient-to-position) !important;
@@ -151,14 +183,43 @@ html.dark .app-darkable-page [class*="via-[#eff6ec]"] {
 }
 
 html.dark .app-darkable-page [class*="text-[#19221d]"],
-html.dark .app-darkable-page [class*="text-[#2d4a2d]"] {
+html.dark .app-darkable-page [class*="text-[#2d4a2d]"],
+html.dark .app-darkable-page [class*="text-[#10233f]"],
+html.dark .app-darkable-page [class*="text-gray-950"],
+html.dark .app-darkable-page [class*="text-gray-900"] {
   color: #f5f5f5 !important;
 }
 
 html.dark .app-darkable-page [class*="text-[#5f6f67]"],
 html.dark .app-darkable-page [class*="text-[#5a6f5a]"],
-html.dark .app-darkable-page [class*="text-[#8a9a8a]"] {
+html.dark .app-darkable-page [class*="text-[#6d7c73]"],
+html.dark .app-darkable-page [class*="text-[#6f7f77]"],
+html.dark .app-darkable-page [class*="text-[#7d8a82]"],
+html.dark .app-darkable-page [class*="text-[#8a9a8a]"],
+html.dark .app-darkable-page [class*="text-gray-700"],
+html.dark .app-darkable-page [class*="text-gray-600"],
+html.dark .app-darkable-page [class*="text-gray-500"] {
   color: #b8c3bd !important;
+}
+
+html.dark .app-darkable-page [class*="text-[#336158]"],
+html.dark .app-darkable-page [class*="text-[#6b8e6b]"] {
+  color: #86efac !important;
+}
+
+html.dark .app-darkable-page [class*="text-[#7a5427]"],
+html.dark .app-darkable-page [class*="text-[#7a5a13]"] {
+  color: #fde68a !important;
+}
+
+html.dark .app-darkable-page [class*="text-[#3f5f8f]"],
+html.dark .app-darkable-page [class*="text-[#41668f]"] {
+  color: #bfdbfe !important;
+}
+
+html.dark .app-darkable-page [class*="text-red-700"],
+html.dark .app-darkable-page [class*="text-red-600"] {
+  color: #fecaca !important;
 }
 
 html.dark .app-darkable-page input,
@@ -178,8 +239,25 @@ html.dark .app-darkable-page table tr,
 html.dark .app-darkable-page [class*="border-[#e7ebe6]"],
 html.dark .app-darkable-page [class*="border-[#e1e7df]"],
 html.dark .app-darkable-page [class*="border-[#dce4da]"],
-html.dark .app-darkable-page [class*="border-[#d4d8d0]"] {
+html.dark .app-darkable-page [class*="border-[#d4d8d0]"],
+html.dark .app-darkable-page [class*="border-[#ead6ae]"],
+html.dark .app-darkable-page [class*="border-[#cfe2cf]"],
+html.dark .app-darkable-page [class*="border-[#cfe0f4]"],
+html.dark .app-darkable-page [class*="border-[#d4a574]"],
+html.dark .app-darkable-page [class*="border-[#d6e6f8]"],
+html.dark .app-darkable-page [class*="border-gray-200"] {
   border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+html.dark .app-darkable-page [class*="hover:bg-[#f3f5f2]"]:hover,
+html.dark .app-darkable-page [class*="hover:bg-[#f5f5f0]"]:hover,
+html.dark .app-darkable-page [class*="hover:bg-[#e7ebe6]"]:hover,
+html.dark .app-darkable-page [class*="hover:bg-[#e8ebe4]"]:hover,
+html.dark .app-darkable-page [class*="hover:bg-[#dbeafe]"]:hover,
+html.dark .app-darkable-page [class*="hover:bg-[#eff6ff]"]:hover,
+html.dark .app-darkable-page [class*="hover:bg-gray-100"]:hover,
+html.dark .app-darkable-page [class*="hover:bg-gray-200"]:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
 }
 
 html.dark .app-darkable-page [class*="shadow-lg"],
