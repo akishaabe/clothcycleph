@@ -164,15 +164,6 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    const challenge = await createEmailVerificationChallenge(user);
-
-    return res.json({
-      message: 'Two-factor verification required. Check your email for your verification code.',
-      requiresTwoFactor: true,
-      two_factor_token: challenge.twoFactorToken,
-      two_factor_method: 'email',
-    });
-
     await query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
     await recordAuthEvent({
       userId: user.id,
@@ -401,6 +392,58 @@ export const resendTwoFactorCode = async (req: Request, res: Response) => {
       requiresTwoFactor: true,
       two_factor_token: challenge.twoFactorToken,
       two_factor_method: 'email',
+    });
+  } catch (error) {
+    sendAuthError(res, error);
+  }
+};
+
+export const sendAuthenticatedSmsTwoFactorCode = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    const result = await query(
+      `SELECT id, email, role, phone, two_factor_enabled, two_factor_method
+       FROM users
+       WHERE id = $1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new AppError(404, 'User not found');
+    }
+
+    const user = result.rows[0];
+    if (!user.two_factor_enabled || user.two_factor_method !== 'sms') {
+      throw new AppError(400, 'SMS two-factor authentication is not enabled');
+    }
+
+    if (!user.phone) {
+      throw new AppError(400, 'A phone number is required for SMS two-factor authentication');
+    }
+
+    const code = generateNumericCode();
+    const codeHash = await hashPassword(code);
+
+    await query(
+      `UPDATE users
+       SET two_factor_code_hash = $1,
+           two_factor_code_expires_at = NOW() + INTERVAL '10 minutes'
+       WHERE id = $2`,
+      [codeHash, user.id]
+    );
+
+    if (shouldExposeDevSecrets()) {
+      console.log(`Dev SMS 2FA code for ${user.email}: ${code}`);
+    }
+
+    res.json({
+      message: 'A verification code has been prepared for SMS two-factor authentication.',
+      ...(shouldExposeDevSecrets() ? { dev_code: code } : {}),
     });
   } catch (error) {
     sendAuthError(res, error);
@@ -711,6 +754,8 @@ function toAuthUser(user: any) {
     address: user.address,
     two_factor_enabled: Boolean(user.two_factor_enabled && user.two_factor_confirmed_at),
     email_verified_at: user.email_verified_at,
+    created_at: user.created_at,
+    updated_at: user.updated_at,
   };
 }
 
@@ -836,7 +881,7 @@ export const getProfile = async (req: Request, res: Response) => {
     }
 
     const result = await query(
-      'SELECT id, email, name, role, avatar_url, bio, phone, address, two_factor_enabled, email_verified_at, created_at FROM users WHERE id = $1',
+      'SELECT id, email, name, role, avatar_url, profile_photo, bio, phone, address, two_factor_enabled, email_verified_at, created_at, updated_at FROM users WHERE id = $1',
       [userId]
     );
 
@@ -886,13 +931,23 @@ export const updateProfile = async (req: Request, res: Response) => {
        SET name = COALESCE($2, name), 
            email = COALESCE($3, email),
            avatar_url = COALESCE($4, avatar_url),
-           bio = COALESCE($5, bio),
-           phone = COALESCE($6, phone),
-           address = COALESCE($7, address),
+           profile_photo = COALESCE($5::jsonb, profile_photo),
+           bio = COALESCE($6, bio),
+           phone = COALESCE($7, phone),
+           address = COALESCE($8, address),
            updated_at = NOW()
        WHERE id = $1
-       RETURNING id, email, name, role, avatar_url, bio, phone, address, two_factor_enabled`,
-      [userId, name, email, avatar_url, bio, phone, address]
+       RETURNING id, email, name, role, avatar_url, profile_photo, bio, phone, address, two_factor_enabled, created_at, updated_at`,
+      [
+        userId,
+        name,
+        email,
+        avatar_url,
+        avatar_url ? JSON.stringify({ url: avatar_url, updated_at: new Date().toISOString() }) : null,
+        bio,
+        phone,
+        address,
+      ]
     );
 
     res.json({
@@ -930,6 +985,36 @@ export const changePassword = async (req: Request, res: Response) => {
     ]);
 
     res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    sendAuthError(res, error);
+  }
+};
+
+export const deleteOwnAccount = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { password } = req.body || {};
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    if (!password) {
+      throw new AppError(400, 'Password is required to delete your account');
+    }
+
+    const result = await query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+    if (result.rows.length === 0) {
+      throw new AppError(404, 'User not found');
+    }
+
+    const isValidPassword = await comparePassword(password, result.rows[0].password_hash);
+    if (!isValidPassword) {
+      throw new AppError(401, 'Invalid password');
+    }
+
+    await query('DELETE FROM users WHERE id = $1', [userId]);
+    res.json({ message: 'Account deleted successfully' });
   } catch (error) {
     sendAuthError(res, error);
   }

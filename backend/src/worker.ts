@@ -15,6 +15,7 @@ import {
   verifyResetCodeD1,
   getProfileD1,
   updateProfileD1,
+  changePasswordD1,
   getTwoFactorStatusD1,
   setupTwoFactorD1,
   enableTwoFactorD1,
@@ -23,6 +24,7 @@ import {
   createUserD1,
   updateUserD1,
   deleteUserD1,
+  deleteOwnAccountD1,
 } from './services/authD1Service.js';
 import {
   createSubmissionD1,
@@ -54,11 +56,21 @@ import {
   updateTransactionStatusD1,
 } from './services/d1TransactionService.js';
 import { uploadFileToR2 } from './services/d1UploadService.js';
-import type { D1Database } from './config/d1.js';
+import { generateD1UUID, type D1Database } from './config/d1.js';
 import type { EmailProvider } from './services/workerEmailService.js';
 import { createSubmissionSchema, updateSubmissionStatusSchema } from './schemas/submissions.js';
 import { sendMessageSchema } from './schemas/messages.js';
 import { createTransactionSchema, updateTransactionStatusSchema } from './schemas/transactions.js';
+import {
+  changePasswordSchema,
+  forgotPasswordSchema,
+  googleAuthSchema,
+  loginSchema,
+  resetPasswordSchema,
+  signupSchema,
+  updateProfileSchema,
+  verifyResetCodeSchema,
+} from './schemas/auth.js';
 import {
   partnerRuleChangeRequestSchema,
   remindDssRequestSchema,
@@ -93,6 +105,8 @@ interface CloudflareEnv {
   R2_BUCKET: any;
   JWT_SECRET: string;
   TWO_FACTOR_ENCRYPTION_KEY: string;
+  CORS_ORIGIN?: string;
+  R2_PUBLIC_BASE_URL?: string;
   EMAIL_PROVIDER?: EmailProvider;
   SMS_PROVIDER?: 'twilio';
   BREVO_API_KEY?: string;
@@ -131,7 +145,18 @@ app.use('*', secureHeaders());
 app.use(
   '*',
   cors({
-    origin: '*',
+    origin: (origin, c) => {
+      const allowedOrigins = (c.env.CORS_ORIGIN || c.env.APP_URL || 'http://localhost:5173')
+        .split(',')
+        .map((item: string) => item.trim())
+        .filter(Boolean);
+
+      if (!origin || allowedOrigins.includes(origin) || /^http:\/\/localhost:517\d$/.test(origin)) {
+        return origin || allowedOrigins[0];
+      }
+
+      return allowedOrigins[0];
+    },
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   })
@@ -250,11 +275,8 @@ app.get('/api/health', (c) =>
 );
 
 app.post('/api/auth/signup', async (c) => {
-  const body = await c.req.json();
+  const body = await parseJsonBody(c, signupSchema);
   const { email, name, password } = body;
-  if (!email || !name || !password) {
-    return c.json({ error: 'Missing signup fields' }, 400);
-  }
 
   const result = await signupD1(c.env.DB, email, name, password, getAuthOptions(c));
   return c.json({
@@ -267,11 +289,8 @@ app.post('/api/auth/signup', async (c) => {
 });
 
 app.post('/api/auth/login', async (c) => {
-  const body = await c.req.json();
+  const body = await parseJsonBody(c, loginSchema);
   const { email, password } = body;
-  if (!email || !password) {
-    return c.json({ error: 'Missing login fields' }, 400);
-  }
 
   const result = await loginD1(
     c.env.DB,
@@ -295,11 +314,8 @@ app.post('/api/auth/login', async (c) => {
 });
 
 app.post('/api/auth/google', async (c) => {
-  const body = await c.req.json();
+  const body = await parseJsonBody(c, googleAuthSchema);
   const { credential, role } = body;
-  if (!credential || !role) {
-    return c.json({ error: 'Missing Google login fields' }, 400);
-  }
 
   const result = await continueWithGoogleD1(
     c.env.DB,
@@ -358,38 +374,27 @@ app.post('/api/auth/2fa/resend', async (c) => {
 });
 
 app.post('/api/auth/forgot-password', async (c) => {
-  const body = await c.req.json();
+  const body = await parseJsonBody(c, forgotPasswordSchema);
   const { email } = body;
-  if (!email) {
-    return c.json({ error: 'Missing email' }, 400);
-  }
 
   const result = await forgotPasswordD1(c.env.DB, email, getAuthOptions(c));
   return c.json(result);
 });
 
 app.post('/api/auth/reset-password', async (c) => {
-  const body = await c.req.json();
+  const body = await parseJsonBody(c, resetPasswordSchema);
   const token = body.code || body.token;
   const password = body.password;
 
-  if (!token || !password) {
-    return c.json({ error: 'Missing reset fields' }, 400);
-  }
-
-  const result = await resetPasswordD1(c.env.DB, token, password);
+  const result = await resetPasswordD1(c.env.DB, token!, password);
   return c.json(result);
 });
 
 app.post('/api/auth/verify-reset-code', async (c) => {
-  const body = await c.req.json();
+  const body = await parseJsonBody(c, verifyResetCodeSchema);
   const token = body.code || body.token;
 
-  if (!token) {
-    return c.json({ error: 'Missing reset code' }, 400);
-  }
-
-  const result = await verifyResetCodeD1(c.env.DB, token);
+  const result = await verifyResetCodeD1(c.env.DB, token!);
   return c.json(result);
 });
 
@@ -401,9 +406,28 @@ app.get('/api/auth/profile', requireAuth, async (c) => {
 
 app.put('/api/auth/profile', requireAuth, async (c) => {
   const user = c.get('user');
-  const body = await c.req.json();
+  const body = await parseJsonBody(c, updateProfileSchema);
   const profile = await updateProfileD1(c.env.DB, user.id!, body);
   return c.json({ message: 'Profile updated', data: profile });
+});
+
+app.put('/api/auth/password', requireAuth, async (c) => {
+  const user = c.get('user');
+  const body = await parseJsonBody(c, changePasswordSchema);
+
+  const result = await changePasswordD1(c.env.DB, user.id!, body.current_password, body.new_password);
+  return c.json(result);
+});
+
+app.delete('/api/auth/account', requireAuth, async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json().catch(() => ({}));
+  if (!body.password) {
+    return c.json({ error: 'Password is required to delete your account' }, 400);
+  }
+
+  const result = await deleteOwnAccountD1(c.env.DB, user.id!, String(body.password));
+  return c.json(result);
 });
 
 app.get('/api/auth/2fa/status', requireAuth, async (c) => {
@@ -689,8 +713,29 @@ app.post('/api/upload', requireAuth, async (c) => {
     return c.json({ error: 'File size must be less than 5MB' }, 400);
   }
 
-  const upload = await uploadFileToR2(c.env.R2_BUCKET, fileData, file.name, file.type);
+  const apiBaseUrl = c.env.R2_PUBLIC_BASE_URL || new URL(c.req.url).origin;
+  const upload = await uploadFileToR2(c.env.R2_BUCKET, fileData, file.name, file.type, apiBaseUrl);
   return c.json({ message: 'File uploaded successfully', ...upload }, 201);
+});
+
+app.get('/api/uploads/:key', async (c) => {
+  if (!c.env.R2_BUCKET || typeof c.env.R2_BUCKET.get !== 'function') {
+    return c.json({ error: 'R2 bucket is not configured' }, 503);
+  }
+
+  const key = c.req.param('key');
+  const object = await c.env.R2_BUCKET.get(key);
+  if (!object) {
+    return c.json({ error: 'File not found' }, 404);
+  }
+
+  return new Response(object.body, {
+    headers: {
+      'content-type': object.httpMetadata?.contentType || 'application/octet-stream',
+      etag: object.httpEtag || object.etag || '',
+      'cache-control': 'public, max-age=31536000, immutable',
+    },
+  });
 });
 
 app.get('/api/notifications', requireAuth, async (c) => {
@@ -718,6 +763,7 @@ app.put('/api/notifications/preferences', requireAuth, async (c) => {
     email_notifications: body.email_notifications,
     push_notifications: body.push_notifications,
     sms_notifications: body.sms_notifications,
+    newsletter: body.newsletter,
   });
   return c.json({ message: 'Notification preferences saved', data: preferences });
 });
@@ -762,6 +808,132 @@ app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (c) => {
   const userId = c.req.param('id');
   await deleteUserD1(c.env.DB, userId!);
   return c.json({ message: 'User deleted successfully' });
+});
+
+app.get('/api/admin/submissions', requireAuth, requireAdmin, async (c) => {
+  const result = await c.env.DB
+    .prepare(
+      `SELECT
+         s.*,
+         u.name AS user_name,
+         u.email AS user_email,
+         p.name AS assigned_partner_name
+       FROM submissions s
+       LEFT JOIN users u ON u.id = s.user_id
+       LEFT JOIN partners p ON p.id = s.assigned_partner_id
+       ORDER BY s.created_at DESC
+       LIMIT 200`
+    )
+    .all();
+  return jsonList(c, result.results || []);
+});
+
+app.put('/api/admin/submissions/:id/status', requireAuth, requireAdmin, async (c) => {
+  const body = await c.req.json();
+  const status = String(body.status || '').toLowerCase();
+  if (!['pending', 'verified', 'processed', 'rejected'].includes(status)) {
+    return c.json({ error: 'Invalid submission status' }, 400);
+  }
+
+  const result = await c.env.DB
+    .prepare('UPDATE submissions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? RETURNING *')
+    .bind(status, c.req.param('id'))
+    .first();
+  if (!result) {
+    return c.json({ error: 'Submission not found' }, 404);
+  }
+
+  return c.json({ message: 'Submission status updated', data: result });
+});
+
+app.get('/api/admin/dss-rules', requireAuth, requireAdmin, async (c) => {
+  const result = await c.env.DB
+    .prepare('SELECT * FROM dss_rules ORDER BY pathway, category, rule_key')
+    .all();
+  return jsonList(c, result.results || []);
+});
+
+app.post('/api/admin/dss-rules', requireAuth, requireAdmin, async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json();
+  if (!body.rule_key) {
+    return c.json({ error: 'Rule key is required' }, 400);
+  }
+
+  const id = generateD1UUID();
+  const result = await c.env.DB
+    .prepare(
+      `INSERT INTO dss_rules (
+         id, rule_key, pathway, category, question_key, expected_values,
+         weight, active, description, created_by_user_id, updated_by_user_id
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       RETURNING *`
+    )
+    .bind(
+      id,
+      body.rule_key,
+      body.pathway || null,
+      body.category || null,
+      body.question_key || null,
+      JSON.stringify(body.expected_values || []),
+      Number(body.weight || 0),
+      body.active === false ? 0 : 1,
+      body.description || null,
+      user.id,
+      user.id
+    )
+    .first();
+  return c.json({ message: 'DSS rule created', data: result }, 201);
+});
+
+app.put('/api/admin/dss-rules/:id', requireAuth, requireAdmin, async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json();
+  const result = await c.env.DB
+    .prepare(
+      `UPDATE dss_rules
+       SET rule_key = COALESCE(?, rule_key),
+           pathway = ?,
+           category = ?,
+           question_key = ?,
+           expected_values = COALESCE(?, expected_values),
+           weight = COALESCE(?, weight),
+           active = COALESCE(?, active),
+           description = ?,
+           updated_by_user_id = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+       RETURNING *`
+    )
+    .bind(
+      body.rule_key || null,
+      body.pathway || null,
+      body.category || null,
+      body.question_key || null,
+      body.expected_values == null ? null : JSON.stringify(body.expected_values),
+      body.weight == null ? null : Number(body.weight),
+      body.active == null ? null : Number(Boolean(body.active)),
+      body.description || null,
+      user.id,
+      c.req.param('id')
+    )
+    .first();
+  if (!result) {
+    return c.json({ error: 'DSS rule not found' }, 404);
+  }
+  return c.json({ message: 'DSS rule updated', data: result });
+});
+
+app.delete('/api/admin/dss-rules/:id', requireAuth, requireAdmin, async (c) => {
+  const result = await c.env.DB
+    .prepare('DELETE FROM dss_rules WHERE id = ? RETURNING *')
+    .bind(c.req.param('id'))
+    .first();
+  if (!result) {
+    return c.json({ error: 'DSS rule not found' }, 404);
+  }
+  return c.json({ message: 'DSS rule deleted', data: result });
 });
 
 app.put('/api/notifications/:id/read', requireAuth, async (c) => {

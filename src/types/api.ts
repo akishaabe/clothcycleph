@@ -14,6 +14,7 @@ export interface User {
   phone?: string;
   address?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface AuthResponse {
@@ -135,6 +136,7 @@ export interface SubmissionDetails {
   cleanliness?: string;
   knows_fabric_type?: boolean;
   fabric_types?: string[] | string;
+  custom_fabric_text?: string | null;
   fabric_identification?: string[] | string;
   brand?: string;
   no_brand_visible?: boolean;
@@ -294,6 +296,14 @@ export interface DssRequest {
   created_at: string;
   updated_at: string;
 }
+
+export type DssRequestStatus =
+  | 'pending'
+  | 'accepted'
+  | 'declined'
+  | 'completed'
+  | 'in_progress'
+  | 'rejected';
 
 export interface SendDssRecommendationPayload {
   submission_id: string;

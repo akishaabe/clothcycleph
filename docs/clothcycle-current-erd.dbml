@@ -12,9 +12,14 @@ Table users {
   status varchar
   partner_id uuid [ref: > partners.id]
   avatar_url text
+  profile_photo json
   bio text
   phone varchar
   address text
+  failed_login_count int
+  locked_until timestamp
+  two_factor_code_hash text
+  two_factor_code_expires_at timestamp
   two_factor_enabled boolean
   two_factor_method varchar
   two_factor_secret_encrypted text
@@ -50,6 +55,7 @@ Table partners {
   accepts_clean_only boolean
   capacity_notes text
   pickup_areas text
+  rule_change_requires_admin boolean
   contact_person varchar
   rating decimal
   verified boolean
@@ -126,6 +132,15 @@ Table burn_tests {
   updated_at timestamp
 }
 
+Table submission_images {
+  id uuid [pk]
+  submission_id uuid [not null, ref: > submissions.id]
+  url text [not null]
+  storage_key text
+  metadata json
+  uploaded_at timestamp
+}
+
 Table recommendation_runs {
   id uuid [pk]
   submission_id uuid [ref: > submissions.id]
@@ -149,9 +164,10 @@ Table recommendation_results {
   score decimal
   confidence decimal
   explanation text
+  details text
   output_payload json
   selected boolean
-  created_at timestamp
+  generated_at timestamp
 }
 
 Table recommendation_feedback {
@@ -163,6 +179,22 @@ Table recommendation_feedback {
   created_at timestamp
 }
 
+Table dss_rules {
+  id uuid [pk]
+  rule_key varchar [unique, not null]
+  pathway varchar [note: "recycle, donate, upcycle, buyback, rejected"]
+  category varchar
+  question_key varchar
+  expected_values json
+  weight decimal
+  active boolean
+  description text
+  created_by_user_id uuid [ref: > users.id]
+  updated_by_user_id uuid [ref: > users.id]
+  created_at timestamp
+  updated_at timestamp
+}
+
 Table transactions {
   id uuid [pk]
   submission_id uuid [not null, ref: > submissions.id]
@@ -170,9 +202,8 @@ Table transactions {
   to_partner_id uuid [ref: > partners.id]
   type varchar [note: "recycle, donate, upcycle, buyback"]
   status varchar [note: "pending, accepted, declined, in_progress, completed, rejected"]
+  amount decimal
   notes text
-  scheduled_at timestamp
-  completed_at timestamp
   created_at timestamp
   updated_at timestamp
 }
@@ -195,8 +226,11 @@ Table messages {
 
 Table conversations {
   id uuid [pk]
-  participant_a_id uuid [not null, ref: > users.id]
-  participant_b_id uuid [not null, ref: > users.id]
+  user_id uuid [not null, ref: > users.id]
+  partner_id uuid [ref: > partners.id]
+  conversation_type varchar
+  subject text
+  status varchar
   related_submission_id uuid [ref: > submissions.id]
   created_at timestamp
   updated_at timestamp
@@ -205,12 +239,10 @@ Table conversations {
 Table message_attachments {
   id uuid [pk]
   message_id uuid [not null, ref: > messages.id]
-  file_url text
-  file_name varchar
-  file_type varchar
-  file_size int
+  filename text
+  url text
   metadata json
-  created_at timestamp
+  uploaded_at timestamp
 }
 
 Table notifications {
@@ -219,11 +251,11 @@ Table notifications {
   type varchar [not null]
   title varchar [not null]
   body text
-  message text
   data json
   read boolean
   read_at timestamp
   created_at timestamp
+  updated_at timestamp
 }
 
 Table partner_rule_change_requests {
@@ -241,13 +273,13 @@ Table partner_rule_change_requests {
   updated_at timestamp
 }
 
-Table audit_logs {
+Table activity_logs {
   id uuid [pk]
   user_id uuid [ref: > users.id]
-  event_type varchar
+  action varchar
   entity_type varchar
   entity_id uuid
-  metadata json
+  details json
   created_at timestamp
 }
 
@@ -255,19 +287,24 @@ Table password_reset_tokens {
   id uuid [pk]
   user_id uuid [ref: > users.id]
   token_hash varchar
-  code_hash varchar
   expires_at timestamp
   used_at timestamp
   created_at timestamp
 }
 
-Table two_factor_challenges {
+Table auth_events {
   id uuid [pk]
   user_id uuid [ref: > users.id]
-  code_hash varchar
-  method varchar
-  purpose varchar
-  expires_at timestamp
-  used_at timestamp
+  event_type varchar
+  ip_address varchar
+  user_agent text
+  metadata json
   created_at timestamp
+}
+
+Table rate_limits {
+  key varchar [pk]
+  count int
+  expires_at timestamp
+  updated_at timestamp
 }

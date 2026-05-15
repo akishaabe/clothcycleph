@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
-const photoSchema = z.union([z.string().url(), z.record(z.unknown())]);
+const photoSchema = z.union([
+  z.string().url(),
+  z.object({
+    url: z.string().url(),
+    label: z.string().trim().max(120).nullable().optional(),
+    key: z.string().trim().max(500).nullable().optional(),
+  }),
+]);
 const optionalStringArraySchema = z.array(z.string().trim().min(1)).default([]);
 const nullableTrimmedStringSchema = z.string().trim().nullable().optional();
 

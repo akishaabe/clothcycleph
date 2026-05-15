@@ -30,6 +30,8 @@ export interface AuthUser {
   two_factor_enabled: boolean;
   two_factor_method?: 'totp' | 'sms';
   email_verified_at?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AuthD1Options {
@@ -702,6 +704,21 @@ export async function deleteUserD1(db: D1Database, userId: string) {
   return { message: 'User deleted' };
 }
 
+export async function deleteOwnAccountD1(db: D1Database, userId: string, password: string) {
+  const user = await queryD1First(db, 'SELECT password_hash FROM users WHERE id = ?', [userId]);
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  const isValidPassword = await comparePassword(password, user.password_hash);
+  if (!isValidPassword) {
+    throw new Error('Invalid password');
+  }
+
+  await executeD1(db, 'DELETE FROM users WHERE id = ?', [userId]);
+  return { message: 'Account deleted successfully' };
+}
+
 function normalizeUser(row: any) {
   if (!row) {
     return null;
@@ -717,7 +734,7 @@ function normalizeUser(row: any) {
 export async function getProfileD1(db: D1Database, userId: string): Promise<AuthUser> {
   const user = await queryD1First(
     db,
-    'SELECT id, email, name, role, avatar_url, bio, phone, address, two_factor_enabled, two_factor_method, email_verified_at FROM users WHERE id = ?',
+    'SELECT id, email, name, role, avatar_url, profile_photo, bio, phone, address, two_factor_enabled, two_factor_method, email_verified_at, created_at, updated_at FROM users WHERE id = ?',
     [userId]
   );
 
@@ -731,21 +748,60 @@ export async function getProfileD1(db: D1Database, userId: string): Promise<Auth
 export async function updateProfileD1(
   db: D1Database,
   userId: string,
-  updates: { name?: string; avatar_url?: string; bio?: string; phone?: string; address?: string }
+  updates: {
+    name?: string;
+    email?: string;
+    avatar_url?: string | null;
+    bio?: string | null;
+    phone?: string | null;
+    address?: string | null;
+    password?: string;
+  }
 ): Promise<AuthUser> {
-  const { name, avatar_url, bio, phone, address } = updates;
+  const { name, email, avatar_url, bio, phone, address, password } = updates;
+  const currentUser = await queryD1First(db, 'SELECT email, phone, password_hash FROM users WHERE id = ?', [userId]);
+  if (!currentUser) {
+    throw new Error('User not found');
+  }
+
+  const isSensitiveChange =
+    (email && email !== currentUser.email) ||
+    (phone !== undefined && phone !== currentUser.phone);
+
+  if (isSensitiveChange) {
+    if (!password) {
+      throw new Error('Password is required to change email or phone number');
+    }
+
+    const isValidPassword = await comparePassword(password, currentUser.password_hash);
+    if (!isValidPassword) {
+      throw new Error('Invalid password');
+    }
+  }
+
   const result = await queryD1First(
     db,
     `UPDATE users
      SET name = COALESCE(?, name),
+         email = COALESCE(?, email),
          avatar_url = COALESCE(?, avatar_url),
+         profile_photo = COALESCE(?, profile_photo),
          bio = COALESCE(?, bio),
          phone = COALESCE(?, phone),
          address = COALESCE(?, address),
          updated_at = CURRENT_TIMESTAMP
      WHERE id = ?
-     RETURNING id, email, name, role, avatar_url, bio, phone, address, two_factor_enabled, two_factor_method, email_verified_at`,
-    [name, avatar_url, bio, phone, address, userId]
+     RETURNING id, email, name, role, avatar_url, profile_photo, bio, phone, address, two_factor_enabled, two_factor_method, email_verified_at, created_at, updated_at`,
+    [
+      name,
+      email,
+      avatar_url,
+      avatar_url ? JSON.stringify({ url: avatar_url, updated_at: new Date().toISOString() }) : null,
+      bio,
+      phone,
+      address,
+      userId,
+    ]
   );
 
   if (!result) {
@@ -753,6 +809,31 @@ export async function updateProfileD1(
   }
 
   return toAuthUser(result);
+}
+
+export async function changePasswordD1(
+  db: D1Database,
+  userId: string,
+  currentPassword: string,
+  newPassword: string
+) {
+  const user = await queryD1First(db, 'SELECT password_hash FROM users WHERE id = ?', [userId]);
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  const isValidPassword = await comparePassword(currentPassword, user.password_hash);
+  if (!isValidPassword) {
+    throw new Error('Invalid current password');
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await executeD1(db, 'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
+    passwordHash,
+    userId,
+  ]);
+
+  return { message: 'Password changed successfully' };
 }
 
 async function createEmailVerificationChallenge(
@@ -911,6 +992,8 @@ function toAuthUser(user: any): AuthUser {
     two_factor_enabled: Boolean(user.two_factor_enabled && user.two_factor_confirmed_at),
     two_factor_method: user.two_factor_method || 'totp',
     email_verified_at: user.email_verified_at,
+    created_at: user.created_at,
+    updated_at: user.updated_at,
   };
 }
 

@@ -10,7 +10,7 @@ export class FileUploadService {
     file: File,
     onProgress?: (progress: UploadProgress) => void
   ): Promise<{ url: string; key: string }> {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token');
 
     if (!token) {
       throw new Error('No authentication token found');
@@ -89,9 +89,9 @@ export class FileUploadService {
 
   static validateFile(file: File): void {
     // Check file type
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
     if (!allowedTypes.includes(file.type)) {
-      throw new Error('Only image files (JPEG, PNG, WebP, GIF) are allowed');
+      throw new Error('Only image files (JPEG, PNG, WebP, GIF, HEIC, HEIF) are allowed');
     }
 
     // Check file size (5MB max)

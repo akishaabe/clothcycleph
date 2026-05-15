@@ -108,7 +108,7 @@ export async function getNotificationPreferences(userId: string) {
   void result;
 
   const preferences = await query(
-    `SELECT email_notifications, push_notifications, sms_notifications
+    `SELECT email_notifications, push_notifications, sms_notifications, newsletter
      FROM user_preferences
      WHERE user_id = $1`,
     [userId]
@@ -118,6 +118,7 @@ export async function getNotificationPreferences(userId: string) {
     email_notifications: true,
     push_notifications: true,
     sms_notifications: false,
+    newsletter: false,
   };
 }
 
@@ -127,26 +128,29 @@ export async function updateNotificationPreferences(
     email_notifications?: boolean;
     push_notifications?: boolean;
     sms_notifications?: boolean;
+    newsletter?: boolean;
   }
 ) {
   const result = await query(
     `INSERT INTO user_preferences (
-       id, user_id, email_notifications, push_notifications, sms_notifications, updated_at
+       id, user_id, email_notifications, push_notifications, sms_notifications, newsletter, updated_at
      )
-     VALUES ($1, $2, COALESCE($3, true), COALESCE($4, true), COALESCE($5, false), NOW())
+     VALUES ($1, $2, COALESCE($3, true), COALESCE($4, true), COALESCE($5, false), COALESCE($6, false), NOW())
      ON CONFLICT (user_id)
      DO UPDATE SET
        email_notifications = COALESCE(EXCLUDED.email_notifications, user_preferences.email_notifications),
        push_notifications = COALESCE(EXCLUDED.push_notifications, user_preferences.push_notifications),
        sms_notifications = COALESCE(EXCLUDED.sms_notifications, user_preferences.sms_notifications),
+       newsletter = COALESCE(EXCLUDED.newsletter, user_preferences.newsletter),
        updated_at = NOW()
-     RETURNING email_notifications, push_notifications, sms_notifications`,
+     RETURNING email_notifications, push_notifications, sms_notifications, newsletter`,
     [
       uuidv4(),
       userId,
       preferences.email_notifications,
       preferences.push_notifications,
       preferences.sms_notifications,
+      preferences.newsletter,
     ]
   );
 

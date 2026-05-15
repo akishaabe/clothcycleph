@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
 import {
   Recycle,
@@ -35,8 +35,9 @@ const actionButtonClass =
   "inline-flex min-w-[190px] items-center justify-center gap-2 px-6 py-3 bg-[#336158] text-white rounded-xl hover:bg-[#2a4c48] transition-all hover:shadow-lg";
 
 export function SettingsPage() {
-  const { user, updateProfile, changePassword, getTwoFactorStatus, setupTwoFactor, enableTwoFactor, disableTwoFactor, sendSmsTwoFactorCode } =
+  const { user, updateProfile, changePassword, getTwoFactorStatus, setupTwoFactor, enableTwoFactor, disableTwoFactor, sendSmsTwoFactorCode, deleteAccount } =
     useAuth();
+  const navigate = useNavigate();
   const { uploadFile, isLoading: isPhotoUploading } = useFileUpload();
   const [searchParams] = useSearchParams();
   const inferredTheme = user?.role === "partner" || user?.role === "admin" ? user.role : "default";
@@ -61,6 +62,8 @@ export function SettingsPage() {
   const [profile, setProfile] = useState(savedProfile);
   const [profilePhoto, setProfilePhoto] = useState(user?.avatar_url || "");
   const [profilePassword, setProfilePassword] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const messageRef = useRef(null);
   const [saveMessage, setSaveMessage] = useState(null);
   const [security, setSecurity] = useState({
@@ -98,6 +101,7 @@ export function SettingsPage() {
           emailNotifications: Boolean(response.data.email_notifications),
           pushNotifications: Boolean(response.data.push_notifications),
           smsNotifications: Boolean(response.data.sms_notifications),
+          newsletter: Boolean(response.data.newsletter),
         }));
       })
       .catch(() => {
@@ -113,19 +117,29 @@ export function SettingsPage() {
   }, []);
 
   const updateNotificationPreference = (key) => {
-    setNotifications((current) => {
-      const next = { ...current, [key]: !current[key] };
-      window.localStorage.setItem("clothcycle_notification_preferences", JSON.stringify(next));
-      notificationService
-        .updatePreferences({
-          email_notifications: next.emailNotifications,
-          push_notifications: next.pushNotifications,
-          sms_notifications: next.smsNotifications,
-        })
-        .then(() => showSaveMessage("success", "Notification preferences were saved."))
-        .catch(() => showSaveMessage("error", "Saved locally, but database sync failed."));
-      return next;
-    });
+    setNotifications((current) => ({ ...current, [key]: !current[key] }));
+  };
+
+  const handleNotificationSave = async () => {
+    try {
+      window.localStorage.setItem("clothcycle_notification_preferences", JSON.stringify(notifications));
+      const response = await notificationService.updatePreferences({
+        email_notifications: notifications.emailNotifications,
+        push_notifications: notifications.pushNotifications,
+        sms_notifications: notifications.smsNotifications,
+        newsletter: notifications.newsletter,
+      });
+      setNotifications((current) => ({
+        ...current,
+        emailNotifications: Boolean(response.data.email_notifications),
+        pushNotifications: Boolean(response.data.push_notifications),
+        smsNotifications: Boolean(response.data.sms_notifications),
+        newsletter: Boolean(response.data.newsletter),
+      }));
+      showSaveMessage("success", "Notification preferences were saved.");
+    } catch (error) {
+      showSaveMessage("error", error.message || "Notification preferences were not saved.");
+    }
   };
 
   const tabs = [
@@ -445,6 +459,29 @@ export function SettingsPage() {
       showSaveMessage("error", error.message || "Photo upload failed.");
     }
   };
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) {
+      showSaveMessage("error", "Enter your password to delete your account.");
+      return;
+    }
+
+    try {
+      await deleteAccount(deletePassword);
+      navigate("/login", { replace: true });
+    } catch (error) {
+      showSaveMessage("error", error.message || "Account deletion failed.");
+    }
+  };
+
+  const activeSince = user?.created_at
+    ? new Intl.DateTimeFormat("en-PH", {
+        timeZone: "Asia/Manila",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }).format(new Date(user.created_at))
+    : "Not available";
 
   const profileNameSize =
     savedProfile.name.length > 28
@@ -1195,9 +1232,7 @@ export function SettingsPage() {
                   ))}
 
                   <button
-                    onClick={() =>
-                      showSaveMessage("success", "Changes were successfully saved.")
-                    }
+                    onClick={handleNotificationSave}
                     className={`${actionButtonClass} mt-6`}
                   >
                     <Save className="h-5 w-5" />
@@ -1224,7 +1259,7 @@ export function SettingsPage() {
                     <div className="flex items-center gap-3">
                       <div className="h-3 w-3 rounded-full bg-[#336158]" />
                       <span className="text-sm text-[#5f6f67]">
-                        Active since January 2026
+                        Active since {activeSince}
                       </span>
                     </div>
                   </div>
@@ -1235,10 +1270,49 @@ export function SettingsPage() {
                       Once you delete your account, there is no going back. Please
                       be certain.
                     </p>
-                    <button className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-white transition-all hover:bg-red-700">
-                      <Trash2 className="h-5 w-5" />
-                      Delete Account
-                    </button>
+                    {!showDeleteConfirm ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-white transition-all hover:bg-red-700"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                        Delete Account
+                      </button>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="relative">
+                          <Lock className={iconClass} />
+                          <input
+                            type="password"
+                            value={deletePassword}
+                            onChange={(event) => setDeletePassword(event.target.value)}
+                            className={inputClass}
+                            placeholder="Enter password to confirm"
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={handleDeleteAccount}
+                            className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-white transition-all hover:bg-red-700"
+                          >
+                            <Trash2 className="h-5 w-5" />
+                            Confirm Delete
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowDeleteConfirm(false);
+                              setDeletePassword("");
+                            }}
+                            className="rounded-xl border border-red-200 bg-white px-5 py-2.5 text-red-700 transition-colors hover:bg-red-100"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

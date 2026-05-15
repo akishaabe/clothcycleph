@@ -28,14 +28,6 @@ import {
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { dssService, messageService, notificationService, adminService } from "../../services/api";
 
-const systemData = [
-  { date: "01 May", users: 1200, admins: 15, partners: 45 },
-  { date: "08 May", users: 1280, admins: 16, partners: 48 },
-  { date: "15 May", users: 1350, admins: 17, partners: 52 },
-  { date: "22 May", users: 1420, admins: 18, partners: 55 },
-  { date: "29 May", users: 1500, admins: 19, partners: 58 }
-];
-
 const initialAccounts = [];
 
 const getTrendClass = (value) => {
@@ -150,6 +142,16 @@ export function AdminDashboard() {
   const [dssAuditRuns, setDssAuditRuns] = useState([]);
   const [dssAuditError, setDssAuditError] = useState("");
   const [ruleChangeRequests, setRuleChangeRequests] = useState([]);
+  const [adminSubmissions, setAdminSubmissions] = useState([]);
+  const [dssRules, setDssRules] = useState([]);
+  const [dssRuleForm, setDssRuleForm] = useState({
+    rule_key: "",
+    pathway: "",
+    category: "",
+    question_key: "",
+    weight: 0,
+    description: "",
+  });
   const [ruleRequestSort, setRuleRequestSort] = useState("newest");
   const [showAllRuleRequests, setShowAllRuleRequests] = useState(false);
   const [ruleRequestNotes, setRuleRequestNotes] = useState({});
@@ -167,15 +169,26 @@ export function AdminDashboard() {
 
     async function loadDssAudit() {
       try {
-        const [response, ruleRequestsResponse, messagesResponse, notificationsResponse] = await Promise.all([
+        const [
+          response,
+          ruleRequestsResponse,
+          messagesResponse,
+          notificationsResponse,
+          submissionsResponse,
+          rulesResponse,
+        ] = await Promise.all([
           dssService.getAuditRuns(),
           dssService.getRuleChangeRequests(),
           messageService.getUnreadCount(),
           notificationService.getUnreadCount(),
+          adminService.getSubmissions(),
+          adminService.getDssRules(),
         ]);
         if (isMounted) {
           setDssAuditRuns(response.data);
           setRuleChangeRequests(ruleRequestsResponse.data);
+          setAdminSubmissions(submissionsResponse.data);
+          setDssRules(rulesResponse.data);
           setBadgeCounts({
             messages: Number(messagesResponse.unread_count || 0),
             notifications: Number(notificationsResponse.unread_count || 0),
@@ -199,7 +212,7 @@ export function AdminDashboard() {
         if (isMounted) {
           const services = [data.database, data.redis, data.queues].filter(Boolean);
           const healthyCount = services.filter((service) =>
-            ["connected", "initialized", "disabled"].includes(service)
+            ["connected", "initialized", "disabled", "bound"].includes(service)
           ).length;
           const percentage = services.length
             ? Math.round((healthyCount / services.length) * 100)
@@ -272,6 +285,20 @@ export function AdminDashboard() {
       }, {}),
     [accounts]
   );
+
+  const systemGrowthData = useMemo(() => {
+    const today = new Date();
+    const label = today.toLocaleDateString("en-PH", { day: "2-digit", month: "short" });
+
+    return [
+      {
+        date: label,
+        users: roleCounts.User || 0,
+        admins: roleCounts.Admin || 0,
+        partners: roleCounts.Partner || 0,
+      },
+    ];
+  }, [roleCounts]);
 
   const sortedDssAuditRuns = useMemo(() => {
     return [...dssAuditRuns].sort((a, b) => {
@@ -490,6 +517,8 @@ export function AdminDashboard() {
       ["dss_audit_runs", dssAuditRuns.length],
       ["partner_rule_requests", ruleChangeRequests.length],
       ["pending_rule_requests", ruleChangeRequests.filter((request) => request.status === "pending").length],
+      ["submissions", adminSubmissions.length],
+      ["dss_rules", dssRules.length],
       ["system_health", systemHealth.value],
     ];
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -537,6 +566,44 @@ export function AdminDashboard() {
     } catch (error) {
       setDssAuditError(error.message || "Unable to update partner rule request.");
     }
+  };
+
+  const createDssRule = async (event) => {
+    event.preventDefault();
+    setDssAuditError("");
+    try {
+      const response = await adminService.createDssRule({
+        ...dssRuleForm,
+        pathway: dssRuleForm.pathway || null,
+        expected_values: [],
+        active: true,
+      });
+      setDssRules((current) => [response.data, ...current]);
+      setDssRuleForm({
+        rule_key: "",
+        pathway: "",
+        category: "",
+        question_key: "",
+        weight: 0,
+        description: "",
+      });
+    } catch (error) {
+      setDssAuditError(error.message || "Unable to create DSS rule.");
+    }
+  };
+
+  const toggleDssRule = async (rule) => {
+    const response = await adminService.updateDssRule(rule.id, {
+      ...rule,
+      active: !rule.active,
+      expected_values: rule.expected_values || [],
+    });
+    setDssRules((current) => current.map((item) => (item.id === rule.id ? response.data : item)));
+  };
+
+  const deleteDssRule = async (rule) => {
+    await adminService.deleteDssRule(rule.id);
+    setDssRules((current) => current.filter((item) => item.id !== rule.id));
   };
 
   return (
@@ -669,7 +736,7 @@ export function AdminDashboard() {
             </button>
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={systemData}>
+            <AreaChart data={systemGrowthData}>
               <defs>
                 <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} />
@@ -845,6 +912,170 @@ export function AdminDashboard() {
               </details>
             ))}
           </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.36 }}
+          className="mb-8 grid gap-6 lg:grid-cols-2"
+        >
+          <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xl text-gray-950 dark:text-white">Submission Oversight</h3>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                  Latest submitted textile items and current review status.
+                </p>
+              </div>
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 dark:bg-white/10 dark:text-gray-200">
+                {adminSubmissions.length}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {adminSubmissions.slice(0, 5).map((submission) => (
+                <div
+                  key={submission.id}
+                  className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-black/20"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-gray-950 dark:text-white">
+                        {submission.submission_name || submission.item_type}
+                      </div>
+                      <div className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                        {submission.user_name || submission.user_email || "Unknown user"} · {submission.service_type || "not sure"}
+                      </div>
+                    </div>
+                    <select
+                      value={submission.status || "pending"}
+                      onChange={async (event) => {
+                        const status = event.target.value;
+                        await adminService.updateSubmissionStatus(submission.id, { status });
+                        setAdminSubmissions((current) =>
+                          current.map((item) => (item.id === submission.id ? { ...item, status } : item)),
+                        );
+                      }}
+                      className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 dark:border-white/10 dark:bg-black/20 dark:text-white"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="verified">Verified</option>
+                      <option value="processed">Processed</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </div>
+                </div>
+              ))}
+              {adminSubmissions.length === 0 && (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-white/10 dark:bg-black/20 dark:text-gray-300">
+                  No submissions yet.
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xl text-gray-950 dark:text-white">Editable DSS Rules</h3>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                  Admin-maintained rule records for documentation and future engine tuning.
+                </p>
+              </div>
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 dark:bg-white/10 dark:text-gray-200">
+                {dssRules.length}
+              </span>
+            </div>
+            <div className="space-y-3">
+              <form onSubmit={createDssRule} className="grid gap-2 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-3 dark:border-white/10 dark:bg-black/20">
+                <div className="grid gap-2 md:grid-cols-2">
+                  <input
+                    value={dssRuleForm.rule_key}
+                    onChange={(event) => setDssRuleForm((current) => ({ ...current, rule_key: event.target.value }))}
+                    required
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-black/20 dark:text-white"
+                    placeholder="rule key"
+                  />
+                  <select
+                    value={dssRuleForm.pathway}
+                    onChange={(event) => setDssRuleForm((current) => ({ ...current, pathway: event.target.value }))}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-black/20 dark:text-white"
+                  >
+                    <option value="">General</option>
+                    <option value="recycle">Recycle</option>
+                    <option value="donate">Donate</option>
+                    <option value="upcycle">Upcycle</option>
+                    <option value="buyback">Buyback</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+                <div className="grid gap-2 md:grid-cols-[1fr_100px]">
+                  <input
+                    value={dssRuleForm.question_key}
+                    onChange={(event) => setDssRuleForm((current) => ({ ...current, question_key: event.target.value }))}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-black/20 dark:text-white"
+                    placeholder="question key"
+                  />
+                  <input
+                    type="number"
+                    value={dssRuleForm.weight}
+                    onChange={(event) => setDssRuleForm((current) => ({ ...current, weight: Number(event.target.value) }))}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-black/20 dark:text-white"
+                    placeholder="weight"
+                  />
+                </div>
+                <textarea
+                  value={dssRuleForm.description}
+                  onChange={(event) => setDssRuleForm((current) => ({ ...current, description: event.target.value }))}
+                  rows={2}
+                  className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-black/20 dark:text-white"
+                  placeholder="rule description"
+                />
+                <button type="submit" className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">
+                  Add DSS rule record
+                </button>
+              </form>
+
+              {dssRules.slice(0, 5).map((rule) => (
+                <details
+                  key={rule.id}
+                  className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-black/20"
+                >
+                  <summary className="cursor-pointer list-none font-semibold text-gray-950 dark:text-white">
+                    {rule.rule_key} · {rule.pathway || "general"}
+                  </summary>
+                  <div className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                    <div>Category: {rule.category || "Not set"}</div>
+                    <div>Question: {rule.question_key || "Not set"}</div>
+                    <div>Weight: {rule.weight || 0}</div>
+                    <div>Status: {rule.active ? "Active" : "Inactive"}</div>
+                    {rule.description && <p className="mt-2">{rule.description}</p>}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleDssRule(rule)}
+                        className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 dark:border-white/10 dark:bg-white/10 dark:text-white"
+                      >
+                        {rule.active ? "Deactivate" : "Activate"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteDssRule(rule)}
+                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </details>
+              ))}
+              {dssRules.length === 0 && (
+                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600 dark:border-white/10 dark:bg-black/20 dark:text-gray-300">
+                  No editable DSS rule records yet. Use the admin API to seed rule records from the current matrix.
+                </div>
+              )}
+            </div>
+          </section>
         </motion.div>
 
         <motion.div

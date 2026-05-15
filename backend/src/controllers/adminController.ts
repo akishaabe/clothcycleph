@@ -153,3 +153,161 @@ export const deleteAdminUser = async (req: Request, res: Response) => {
     res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
   }
 };
+
+export const getAdminSubmissions = async (req: Request, res: Response) => {
+  try {
+    requireAdmin(req);
+    const result = await query(
+      `SELECT
+         s.*,
+         u.name AS user_name,
+         u.email AS user_email,
+         p.name AS assigned_partner_name
+       FROM submissions s
+       LEFT JOIN users u ON u.id = s.user_id
+       LEFT JOIN partners p ON p.id = s.assigned_partner_id
+       ORDER BY s.created_at DESC
+       LIMIT 200`
+    );
+
+    res.json({ data: result.rows, count: result.rows.length });
+  } catch (error) {
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};
+
+export const updateAdminSubmissionStatus = async (req: Request, res: Response) => {
+  try {
+    requireAdmin(req);
+    const status = String(req.body.status || '').toLowerCase();
+    if (!['pending', 'verified', 'processed', 'rejected'].includes(status)) {
+      throw new AppError(400, 'Invalid submission status');
+    }
+
+    const result = await query(
+      `UPDATE submissions
+       SET status = $1,
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      [status, req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      throw new AppError(404, 'Submission not found');
+    }
+
+    await query(
+      `INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details)
+       VALUES ($1, $2, 'submission', $3, $4)`,
+      [
+        req.user?.id,
+        'admin_submission_status_update',
+        req.params.id,
+        JSON.stringify({ status }),
+      ]
+    );
+
+    res.json({ message: 'Submission status updated', data: result.rows[0] });
+  } catch (error) {
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};
+
+export const getDssRules = async (req: Request, res: Response) => {
+  try {
+    requireAdmin(req);
+    const result = await query('SELECT * FROM dss_rules ORDER BY pathway NULLS LAST, category, rule_key');
+    res.json({ data: result.rows, count: result.rows.length });
+  } catch (error) {
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};
+
+export const createDssRule = async (req: Request, res: Response) => {
+  try {
+    requireAdmin(req);
+    if (!req.body.rule_key) {
+      throw new AppError(400, 'Rule key is required');
+    }
+
+    const result = await query(
+      `INSERT INTO dss_rules (
+         rule_key, pathway, category, question_key, expected_values, weight,
+         active, description, created_by_user_id, updated_by_user_id
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, true), $8, $9, $9)
+       RETURNING *`,
+      [
+        req.body.rule_key,
+        req.body.pathway || null,
+        req.body.category || null,
+        req.body.question_key || null,
+        JSON.stringify(req.body.expected_values || []),
+        Number(req.body.weight || 0),
+        req.body.active,
+        req.body.description || null,
+        req.user?.id,
+      ]
+    );
+
+    res.status(201).json({ message: 'DSS rule created', data: result.rows[0] });
+  } catch (error) {
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};
+
+export const updateDssRule = async (req: Request, res: Response) => {
+  try {
+    requireAdmin(req);
+    const result = await query(
+      `UPDATE dss_rules
+       SET rule_key = COALESCE($1, rule_key),
+           pathway = $2,
+           category = $3,
+           question_key = $4,
+           expected_values = COALESCE($5, expected_values),
+           weight = COALESCE($6, weight),
+           active = COALESCE($7, active),
+           description = $8,
+           updated_by_user_id = $9,
+           updated_at = NOW()
+       WHERE id = $10
+       RETURNING *`,
+      [
+        req.body.rule_key || null,
+        req.body.pathway || null,
+        req.body.category || null,
+        req.body.question_key || null,
+        req.body.expected_values == null ? null : JSON.stringify(req.body.expected_values),
+        req.body.weight == null ? null : Number(req.body.weight),
+        req.body.active,
+        req.body.description || null,
+        req.user?.id,
+        req.params.id,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      throw new AppError(404, 'DSS rule not found');
+    }
+
+    res.json({ message: 'DSS rule updated', data: result.rows[0] });
+  } catch (error) {
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};
+
+export const deleteDssRule = async (req: Request, res: Response) => {
+  try {
+    requireAdmin(req);
+    const result = await query('DELETE FROM dss_rules WHERE id = $1 RETURNING *', [req.params.id]);
+    if (result.rows.length === 0) {
+      throw new AppError(404, 'DSS rule not found');
+    }
+
+    res.json({ message: 'DSS rule deleted', data: result.rows[0] });
+  } catch (error) {
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};

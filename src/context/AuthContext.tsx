@@ -28,6 +28,7 @@ interface AuthContextType {
   enableTwoFactor: (password: string, code: string, method?: 'totp' | 'sms') => Promise<{ message: string; recovery_codes: string[] }>;
   sendSmsTwoFactorCode: () => Promise<{ message: string; dev_code?: string }>;
   disableTwoFactor: (password: string, code?: string) => Promise<{ message: string }>;
+  deleteAccount: (password: string) => Promise<{ message: string }>;
   signup: (email: string, name: string, password: string, role?: string) => Promise<SignupResponse>;
   logout: () => void;
   updateUser: (user: User) => void;
@@ -175,6 +176,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return response;
   };
 
+  const deleteAccount = async (password: string) => {
+    const response = await authService.deleteAccount({ password });
+    logout();
+    return response;
+  };
+
   const signup = async (email: string, name: string, password: string, role = 'user') => {
     try {
       const response = await authService.signup({ email, name, password, role: role as any });
@@ -221,6 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     enableTwoFactor,
     sendSmsTwoFactorCode,
     disableTwoFactor,
+    deleteAccount,
     signup,
     logout,
     updateUser,

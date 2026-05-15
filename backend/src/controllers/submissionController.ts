@@ -187,14 +187,23 @@ export const createSubmission = async (req: Request, res: Response) => {
 
     if (photoValues.length > 0) {
       for (const photo of photoValues) {
-        if (typeof photo !== 'string') {
+        const normalizedPhoto = normalizePhoto(photo);
+        if (!normalizedPhoto?.url) {
           continue;
         }
 
         await client.query(
-          `INSERT INTO submission_images (submission_id, url)
-           VALUES ($1, $2)`,
-          [id, photo]
+          `INSERT INTO submission_images (submission_id, url, storage_key, metadata)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            id,
+            normalizedPhoto.url,
+            normalizedPhoto.key,
+            JSON.stringify({
+              label: normalizedPhoto.label,
+              original: photo,
+            }),
+          ]
         );
       }
     }
@@ -219,6 +228,27 @@ export const createSubmission = async (req: Request, res: Response) => {
     client.release();
   }
 };
+
+function normalizePhoto(photo: unknown): { url: string; label?: string | null; key?: string | null } | null {
+  if (typeof photo === 'string') {
+    return { url: photo };
+  }
+
+  if (!photo || typeof photo !== 'object') {
+    return null;
+  }
+
+  const value = photo as { url?: unknown; label?: unknown; key?: unknown };
+  if (typeof value.url !== 'string') {
+    return null;
+  }
+
+  return {
+    url: value.url,
+    label: typeof value.label === 'string' ? value.label : null,
+    key: typeof value.key === 'string' ? value.key : null,
+  };
+}
 
 export const getUserSubmissions = async (req: Request, res: Response) => {
   try {

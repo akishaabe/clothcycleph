@@ -33,7 +33,7 @@ export const uploadFile = async (req: FileRequest, res: Response) => {
     }
 
     // Validate file size (max 5MB)
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    const maxSize = 5 * 1024 * 1024;
     if (req.file.size > maxSize) {
       throw new AppError(400, 'File size must be less than 5MB');
     }

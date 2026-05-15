@@ -7,15 +7,6 @@ import { dssService, messageService, notificationService } from "../../services/
 import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
 import { ImageCarousel } from "../components/ImageCarousel";
 
-const platformData = [
-  { month: "Jan", users: 850, submissions: 420 },
-  { month: "Feb", users: 920, submissions: 480 },
-  { month: "Mar", users: 1050, submissions: 550 },
-  { month: "Apr", users: 1180, submissions: 620 },
-  { month: "May", users: 1320, submissions: 680 },
-  { month: "Jun", users: 1450, submissions: 750 }
-];
-
 const getTrendClass = (value) => {
   if (value.startsWith("-")) {
     return "text-red-600 dark:text-red-300";
@@ -199,6 +190,34 @@ export function PartnerDashboard() {
     });
   }, [requests, activeFilter, searchQuery]);
 
+  const platformTrendData = useMemo(() => {
+    const grouped = requests.reduce((acc, request) => {
+      const date = request.created_at ? new Date(request.created_at) : new Date();
+      const month = date.toLocaleDateString("en-PH", { month: "short" });
+
+      if (!acc[month]) {
+        acc[month] = { month, users: new Set(), submissions: 0 };
+      }
+
+      if (request.from_user_id || request.user_email) {
+        acc[month].users.add(request.from_user_id || request.user_email);
+      }
+
+      acc[month].submissions += 1;
+      return acc;
+    }, {});
+
+    const rows = Object.values(grouped).map((item) => ({
+      month: item.month,
+      users: item.users.size,
+      submissions: item.submissions,
+    }));
+
+    return rows.length > 0
+      ? rows
+      : [{ month: new Date().toLocaleDateString("en-PH", { month: "short" }), users: 0, submissions: 0 }];
+  }, [requests]);
+
   const updateRequestStatus = async (request, status, noteOverride) => {
     setIsUpdatingStatus(true);
     setRequestError("");
@@ -360,7 +379,7 @@ export function PartnerDashboard() {
         >
           <h3 className="text-xl mb-6 text-[#10233f]">Platform Analytics</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={platformData}>
+            <LineChart data={platformTrendData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#d6e6f8" />
               <XAxis dataKey="month" stroke="#41668f" />
               <YAxis stroke="#41668f" />

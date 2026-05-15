@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS users (
   terms_accepted_at TEXT,
   email_verified_at TEXT,
   last_login_at TEXT,
-  two_factor_enabled INTEGER DEFAULT 1,
+  two_factor_enabled INTEGER DEFAULT 0,
   two_factor_method TEXT DEFAULT 'totp' CHECK (two_factor_method IN ('totp', 'sms')),
   two_factor_secret_encrypted TEXT,
   two_factor_confirmed_at TEXT,
@@ -129,6 +129,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   item_type TEXT NOT NULL,
+  submission_name TEXT,
   condition TEXT NOT NULL,
   fabric TEXT,
   cleanliness TEXT,
@@ -141,6 +142,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   quantity INTEGER DEFAULT 1,
   buyback_interest INTEGER DEFAULT 0,
   action TEXT,
+  upcycle_request TEXT,
   scheduled_at TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -276,6 +278,25 @@ CREATE TABLE IF NOT EXISTS recommendation_feedback (
 );
 
 CREATE INDEX IF NOT EXISTS idx_recommendation_feedback_result_id ON recommendation_feedback(recommendation_result_id);
+
+CREATE TABLE IF NOT EXISTS dss_rules (
+  id TEXT PRIMARY KEY,
+  rule_key TEXT UNIQUE NOT NULL,
+  pathway TEXT CHECK (pathway IS NULL OR pathway IN ('recycle', 'donate', 'upcycle', 'buyback', 'rejected')),
+  category TEXT,
+  question_key TEXT,
+  expected_values TEXT,
+  weight REAL DEFAULT 0,
+  active INTEGER DEFAULT 1,
+  description TEXT,
+  created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  updated_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_dss_rules_pathway ON dss_rules(pathway);
+CREATE INDEX IF NOT EXISTS idx_dss_rules_active ON dss_rules(active);
 
 CREATE TABLE IF NOT EXISTS partner_rule_change_requests (
   id TEXT PRIMARY KEY,

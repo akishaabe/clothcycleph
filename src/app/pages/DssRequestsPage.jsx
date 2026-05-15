@@ -8,7 +8,9 @@ const statusClass = {
   pending: "bg-[#fff8e8] text-[#7a5427] border-[#ead6ae]",
   accepted: "bg-[#edf7ed] text-[#336158] border-[#cfe2cf]",
   declined: "bg-red-50 text-red-700 border-red-100",
+  in_progress: "bg-[#eef5ff] text-[#3f5f8f] border-[#cfe0f4]",
   completed: "bg-[#eef5ff] text-[#3f5f8f] border-[#cfe0f4]",
+  rejected: "bg-red-50 text-red-700 border-red-100",
 };
 
 const formatStatusLabel = (status) =>
@@ -137,7 +139,7 @@ export function DssRequestsPage() {
               />
             </label>
             <div className="flex flex-wrap gap-2">
-              {["all", "pending", "accepted", "declined", "completed"].map((status) => (
+              {["all", "pending", "accepted", "declined", "in_progress", "completed", "rejected"].map((status) => (
                 <button
                   key={status}
                   onClick={() => setFilter(status)}

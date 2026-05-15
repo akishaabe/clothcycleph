@@ -47,6 +47,7 @@ const featuredPartners = [
     location: "Dona Rosa Subdivision, Subic, Baliuag, Bulacan, Philippines",
     phone: "+63 928 1500 711",
     email: "info@telacycle.com",
+    website: "https://www.telacycle.com/",
   },
   {
     id: "green-loom-partners",
@@ -504,6 +505,16 @@ export function LandingPage() {
                     <p>{partner.location}</p>
                     <p>{partner.phone}</p>
                     <p>{partner.email}</p>
+                    {partner.website && (
+                      <a
+                        href={partner.website}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block text-[#336158] hover:underline dark:text-emerald-300"
+                      >
+                        Visit website
+                      </a>
+                    )}
                     <a
                       href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
                         partner.location

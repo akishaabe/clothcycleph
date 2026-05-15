@@ -28,10 +28,13 @@ TWILIO_FROM_NUMBER = "+15551234567"
 # Security
 JWT_SECRET = "replace-with-secure-jwt-secret"
 TWO_FACTOR_ENCRYPTION_KEY = "replace-with-encryption-key"
+CORS_ORIGIN = "http://localhost:5173,https://clothcycleph.com"
+APP_URL = "https://clothcycleph.com"
 
 # R2 (Object Storage)
 R2_BUCKET_NAME = "clothcycle-uploads"
 R2_ACCOUNT_ID = "replace-with-account-id"
+R2_PUBLIC_BASE_URL = "https://api.clothcycleph.com"
 
 # D1 Database - Update database_id after creating database
 [[d1_databases]]

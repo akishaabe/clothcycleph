@@ -330,7 +330,7 @@ export const dssService = {
 
   async updateRequestStatus(
     requestId: string,
-    payload: { status: 'pending' | 'accepted' | 'declined' | 'completed'; notes?: string }
+    payload: { status: 'pending' | 'accepted' | 'declined' | 'completed' | 'in_progress' | 'rejected'; notes?: string }
   ): Promise<{ message: string; data: DssRequest }> {
     return fetchWithAuth(`/dss/requests/${requestId}/status`, {
       method: 'PUT',
@@ -389,6 +389,13 @@ export const dssService = {
   async getRuleChangeRequests(): Promise<{ data: any[]; count: number }> {
     return fetchWithAuth('/dss/rule-change-requests', {
       method: 'GET',
+    });
+  },
+
+  async deleteAccount(payload: { password: string }): Promise<{ message: string }> {
+    return fetchWithAuth('/auth/account', {
+      method: 'DELETE',
+      body: JSON.stringify(payload),
     });
   },
 
@@ -461,6 +468,7 @@ export const notificationService = {
     email_notifications?: boolean;
     push_notifications?: boolean;
     sms_notifications?: boolean;
+    newsletter?: boolean;
   }): Promise<{ message: string; data: any }> {
     return fetchWithAuth('/notifications/preferences', {
       method: 'PUT',
@@ -530,6 +538,42 @@ export const adminService = {
     return fetchWithAuth(`/admin/users/${id}`, {
       method: 'DELETE',
     });
+  },
+
+  async getSubmissions(): Promise<{ data: Submission[]; count: number }> {
+    return fetchWithAuth('/admin/submissions', { method: 'GET' });
+  },
+
+  async updateSubmissionStatus(
+    id: string,
+    payload: { status: 'pending' | 'verified' | 'processed' | 'rejected' }
+  ): Promise<{ message: string; data: Submission }> {
+    return fetchWithAuth(`/admin/submissions/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getDssRules(): Promise<{ data: any[]; count: number }> {
+    return fetchWithAuth('/admin/dss-rules', { method: 'GET' });
+  },
+
+  async createDssRule(payload: any): Promise<{ message: string; data: any }> {
+    return fetchWithAuth('/admin/dss-rules', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateDssRule(id: string, payload: any): Promise<{ message: string; data: any }> {
+    return fetchWithAuth(`/admin/dss-rules/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteDssRule(id: string): Promise<{ message: string; data: any }> {
+    return fetchWithAuth(`/admin/dss-rules/${id}`, { method: 'DELETE' });
   },
 };
 

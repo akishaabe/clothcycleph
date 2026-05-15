@@ -10,8 +10,10 @@
     "verify:crud": "tsx src/scripts/verifyCrud.ts",
     "build": "tsc",
     "worker:build": "tsc --noEmit",
-    "worker:dev": "npx wrangler dev",
-    "deploy": "npm run worker:build && npx wrangler deploy",
+    "worker:dev": "npx --yes wrangler@4.91.0 dev",
+    "d1:apply:local": "npx --yes wrangler@4.91.0 d1 execute clothcycle --local --file=src/db/d1-schema.sql",
+    "d1:apply:remote": "npx --yes wrangler@4.91.0 d1 execute clothcycle --remote --file=src/db/d1-schema.sql",
+    "deploy": "npm run worker:build && npx --yes wrangler@4.91.0 deploy",
     "start": "node dist/index.js",
     "seed": "tsx src/seeds/index.ts",
     "test": "vitest"

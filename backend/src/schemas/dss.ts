@@ -8,7 +8,7 @@ export const sendDssRecommendationSchema = z.object({
 });
 
 export const updateDssRequestStatusSchema = z.object({
-  status: z.enum(['pending', 'accepted', 'declined', 'completed']),
+  status: z.enum(['pending', 'accepted', 'declined', 'completed', 'in_progress', 'rejected']),
   notes: z.string().trim().max(1000).optional(),
 });
 

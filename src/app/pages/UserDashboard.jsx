@@ -15,7 +15,7 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
-import { dssService, messageService, notificationService } from "../../services/api";
+import { dssService, messageService, notificationService, submissionService } from "../../services/api";
 import {
   BarChart,
   Bar,
@@ -28,21 +28,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-
-const monthlyData = [
-  { month: "Jan", items: 12 },
-  { month: "Feb", items: 18 },
-  { month: "Mar", items: 25 },
-  { month: "Apr", items: 22 },
-  { month: "May", items: 30 },
-  { month: "Jun", items: 28 },
-];
-
-const distributionData = [
-  { name: "Recycle", value: 45, color: "#336158" },
-  { name: "Donate", value: 35, color: "#7d9283" },
-  { name: "Upcycle", value: 20, color: "#d0b684" },
-];
 
 const serviceCards = [
   {
@@ -83,6 +68,8 @@ const requestStatusClass = {
   accepted: "bg-[#edf7ed] text-[#336158]",
   declined: "bg-red-50 text-red-700",
   completed: "bg-[#eef5ff] text-[#3f5f8f]",
+  in_progress: "bg-[#eef5ff] text-[#3f5f8f]",
+  rejected: "bg-red-50 text-red-700",
 };
 
 const pathwayLabels = {
@@ -103,6 +90,7 @@ export function UserDashboard() {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [requests, setRequests] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
   const [requestError, setRequestError] = useState("");
   const [requestFilter, setRequestFilter] = useState("all");
   const [requestSearch, setRequestSearch] = useState("");
@@ -116,14 +104,16 @@ export function UserDashboard() {
 
     async function loadRequests() {
       try {
-        const [response, messagesResponse, notificationsResponse] = await Promise.all([
+        const [response, submissionsResponse, messagesResponse, notificationsResponse] = await Promise.all([
           dssService.getUserRequests(),
+          submissionService.getUserSubmissions(),
           messageService.getUnreadCount(),
           notificationService.getUnreadCount(),
         ]);
 
         if (isMounted) {
           setRequests(response.data);
+          setSubmissions(submissionsResponse.data);
           setBadgeCounts({
             messages: Number(messagesResponse.unread_count || 0),
             notifications: Number(notificationsResponse.unread_count || 0),
@@ -168,6 +158,42 @@ export function UserDashboard() {
       },
     ];
   }, [requests]);
+
+  const monthlyData = useMemo(() => {
+    const grouped = submissions.reduce((acc, submission) => {
+      const date = submission.created_at ? new Date(submission.created_at) : new Date();
+      const month = date.toLocaleDateString("en-PH", { month: "short" });
+      acc[month] = (acc[month] || 0) + 1;
+      return acc;
+    }, {});
+
+    const rows = Object.entries(grouped).map(([month, items]) => ({ month, items }));
+    return rows.length > 0
+      ? rows
+      : [{ month: new Date().toLocaleDateString("en-PH", { month: "short" }), items: 0 }];
+  }, [submissions]);
+
+  const distributionData = useMemo(() => {
+    const colors = {
+      Recycle: "#336158",
+      Donate: "#7d9283",
+      Upcycle: "#d0b684",
+      Buyback: "#9a7738",
+    };
+    const grouped = submissions.reduce((acc, submission) => {
+      const label = pathwayLabels[submission.service_type] || formatStatusLabel(submission.service_type || "Not Sure");
+      acc[label] = (acc[label] || 0) + 1;
+      return acc;
+    }, {});
+
+    const rows = Object.entries(grouped).map(([name, value]) => ({
+      name,
+      value,
+      color: colors[name] || "#46564d",
+    }));
+
+    return rows.length > 0 ? rows : [{ name: "No requests", value: 1, color: "#dce7d9" }];
+  }, [submissions]);
 
   const filteredRequests = useMemo(() => {
     const query = requestSearch.trim().toLowerCase();

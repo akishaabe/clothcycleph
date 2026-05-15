@@ -71,6 +71,7 @@ export async function updateNotificationPreferencesD1(
     email_notifications?: boolean;
     push_notifications?: boolean;
     sms_notifications?: boolean;
+    newsletter?: boolean;
   }
 ) {
   await getNotificationPreferencesD1(db, userId);
@@ -80,6 +81,7 @@ export async function updateNotificationPreferencesD1(
      SET email_notifications = COALESCE(?, email_notifications),
          push_notifications = COALESCE(?, push_notifications),
          sms_notifications = COALESCE(?, sms_notifications),
+         newsletter = COALESCE(?, newsletter),
          updated_at = CURRENT_TIMESTAMP
      WHERE user_id = ?
      RETURNING *`,
@@ -87,6 +89,7 @@ export async function updateNotificationPreferencesD1(
       preferences.email_notifications == null ? null : Number(preferences.email_notifications),
       preferences.push_notifications == null ? null : Number(preferences.push_notifications),
       preferences.sms_notifications == null ? null : Number(preferences.sms_notifications),
+      preferences.newsletter == null ? null : Number(preferences.newsletter),
       userId,
     ]
   );
@@ -145,7 +148,8 @@ function normalizePreferences(row: any) {
     return {
       email_notifications: true,
       push_notifications: true,
-      sms_notifications: false,
+    sms_notifications: false,
+    newsletter: false,
     };
   }
 
@@ -153,6 +157,7 @@ function normalizePreferences(row: any) {
     email_notifications: Boolean(row.email_notifications),
     push_notifications: Boolean(row.push_notifications),
     sms_notifications: Boolean(row.sms_notifications),
+    newsletter: Boolean(row.newsletter),
   };
 }
 

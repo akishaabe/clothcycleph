@@ -4,6 +4,7 @@ export async function createSubmissionD1(
   db: D1Database,
   userId: string,
   payload: {
+    submission_name?: string | null;
     item_type: string;
     condition: string;
     fabric?: string | null;
@@ -14,6 +15,7 @@ export async function createSubmissionD1(
     quantity?: number | null;
     buyback_interest?: boolean;
     action?: string | null;
+    upcycle_request?: string | null;
     scheduled_at?: string | Date | null;
     details?: {
       item_types?: unknown[];
@@ -53,9 +55,10 @@ export async function createSubmissionD1(
     db,
     `INSERT INTO submissions (
        id, user_id, item_type, condition, fabric, cleanliness, description,
-       photos, status, service_type, quantity, buyback_interest, action, scheduled_at
+       photos, status, service_type, quantity, buyback_interest, action,
+       submission_name, upcycle_request, scheduled_at
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
      RETURNING *`,
     [
       id,
@@ -70,6 +73,8 @@ export async function createSubmissionD1(
       payload.quantity || 1,
       payload.buyback_interest ? 1 : 0,
       payload.action || null,
+      payload.submission_name || null,
+      payload.upcycle_request || null,
       payload.scheduled_at ? new Date(payload.scheduled_at).toISOString() : null,
     ]
   );
@@ -133,19 +138,23 @@ export async function createSubmissionD1(
     );
   }
 
+  await saveSubmissionImages(db, id, payload.photos || []);
+
   return normalizeSubmission(result?.results?.[0]);
 }
 
 export async function getUserSubmissionsD1(db: D1Database, userId: string) {
   const result = await queryD1(db, 'SELECT * FROM submissions WHERE user_id = ? ORDER BY created_at DESC', [userId]);
+  const submissions = await Promise.all((result.results || []).map((row) => hydrateSubmission(db, row)));
   return {
     ...result,
-    results: result.results?.map(normalizeSubmission),
+    results: submissions,
   };
 }
 
 export async function getSubmissionByIdD1(db: D1Database, id: string) {
-  return normalizeSubmission(await queryD1First(db, 'SELECT * FROM submissions WHERE id = ?', [id]));
+  const submission = await queryD1First(db, 'SELECT * FROM submissions WHERE id = ?', [id]);
+  return hydrateSubmission(db, submission);
 }
 
 export async function updateSubmissionStatusD1(db: D1Database, id: string, status: string) {
@@ -192,4 +201,122 @@ function parseJsonArray(value: unknown) {
   } catch {
     return [];
   }
+}
+
+async function hydrateSubmission(db: D1Database, row: any) {
+  const submission = normalizeSubmission(row);
+  if (!submission) {
+    return null;
+  }
+
+  const [details, burnTest] = await Promise.all([
+    queryD1First(db, 'SELECT * FROM submission_details WHERE submission_id = ?', [submission.id]),
+    queryD1First(db, 'SELECT * FROM burn_tests WHERE submission_id = ? ORDER BY created_at DESC LIMIT 1', [
+      submission.id,
+    ]),
+  ]);
+
+  return {
+    ...submission,
+    details: normalizeDetails(details),
+    burn_test: normalizeBurnTest(burnTest),
+  };
+}
+
+function normalizeDetails(row: any) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    knows_fabric_type: row.knows_fabric_type == null ? null : Boolean(row.knows_fabric_type),
+    no_brand_visible: Boolean(row.no_brand_visible),
+    item_types: parseTextOrJsonArray(row.item_types),
+    fabric_types: parseTextOrJsonArray(row.fabric_types),
+    fabric_identification: parseTextOrJsonArray(row.fabric_identification),
+    fabric_description: parseTextOrJsonArray(row.fabric_description),
+  };
+}
+
+function normalizeBurnTest(row: any) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    performed: Boolean(row.performed),
+    moment: parseTextOrJsonArray(row.moment),
+    flames: parseTextOrJsonArray(row.flames),
+    no_flame: parseTextOrJsonArray(row.no_flame),
+    ashes: parseTextOrJsonArray(row.ashes),
+  };
+}
+
+function splitTextValues(value: unknown) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value !== 'string' || !value.trim()) {
+    return [];
+  }
+
+  return value.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function parseTextOrJsonArray(value: unknown) {
+  const parsed = parseJsonArray(value);
+  if (parsed.length > 0) {
+    return parsed;
+  }
+
+  return splitTextValues(value);
+}
+
+async function saveSubmissionImages(db: D1Database, submissionId: string, photos: unknown[]) {
+  for (const photo of photos) {
+    const normalized = normalizePhoto(photo);
+    if (!normalized?.url) {
+      continue;
+    }
+
+    await executeD1(
+      db,
+      `INSERT INTO submission_images (id, submission_id, url, storage_key, metadata)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        generateD1UUID(),
+        submissionId,
+        normalized.url,
+        normalized.key || null,
+        JSON.stringify({
+          label: normalized.label || null,
+          original: photo,
+        }),
+      ]
+    );
+  }
+}
+
+function normalizePhoto(photo: unknown): { url: string; label?: string | null; key?: string | null } | null {
+  if (typeof photo === 'string') {
+    return { url: photo };
+  }
+
+  if (!photo || typeof photo !== 'object') {
+    return null;
+  }
+
+  const value = photo as { url?: unknown; label?: unknown; key?: unknown };
+  if (typeof value.url !== 'string') {
+    return null;
+  }
+
+  return {
+    url: value.url,
+    label: typeof value.label === 'string' ? value.label : null,
+    key: typeof value.key === 'string' ? value.key : null,
+  };
 }
