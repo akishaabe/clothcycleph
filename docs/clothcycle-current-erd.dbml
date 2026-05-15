@@ -20,8 +20,8 @@ Table users {
   locked_until timestamp
   two_factor_code_hash text
   two_factor_code_expires_at timestamp
-  two_factor_enabled boolean
-  two_factor_method varchar
+  two_factor_enabled boolean [default: true, note: "Always-on for email/password login"]
+  two_factor_method varchar [default: "email", note: "Preferred method: email, totp"]
   two_factor_secret_encrypted text
   two_factor_confirmed_at timestamp
   email_verified_at timestamp

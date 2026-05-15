@@ -7,7 +7,7 @@ export interface User {
   status?: 'active' | 'inactive' | 'suspended';
   partner_id?: string;
   two_factor_enabled?: boolean;
-  two_factor_method?: 'email' | 'totp' | 'sms';
+  two_factor_method?: 'email' | 'totp';
   email_verified_at?: string;
   avatar_url?: string;
   bio?: string;
@@ -27,7 +27,7 @@ export interface TwoFactorChallengeResponse {
   message: string;
   requiresTwoFactor: true;
   two_factor_token: string;
-  two_factor_method?: 'email' | 'totp' | 'sms';
+  two_factor_method?: 'email' | 'totp';
   dev_code?: string;
 }
 
@@ -58,7 +58,7 @@ export interface ResendTwoFactorPayload {
 
 export interface TwoFactorSetupResponse {
   message: string;
-  method: 'totp' | 'sms';
+  method: 'email' | 'totp';
   secret?: string;
   otpauth_url?: string;
   masked_phone?: string;
@@ -70,7 +70,7 @@ export interface TwoFactorSetupResponse {
 export interface TwoFactorStatusResponse {
   enabled: boolean;
   setup_started: boolean;
-  method?: 'email' | 'totp' | 'sms';
+  method?: 'email' | 'totp';
   phone?: string;
   confirmed_at?: string;
 }

@@ -152,11 +152,9 @@ export function LoginPage() {
                 setSuccessMessage(
                   authResponse.two_factor_method === "totp"
                     ? "Enter your authenticator code to continue."
-                    : authResponse.two_factor_method === "sms"
-                      ? `Check your phone for the 6-digit verification code.${authResponse.dev_code ? ` Dev code: ${authResponse.dev_code}` : ""}`
-                      : "Check your email for the 6-digit verification code."
+                    : "Check your email for the 6-digit verification code."
                 );
-                setResendCountdown(["email", "sms"].includes(authResponse.two_factor_method || "") ? 15 : 0);
+                setResendCountdown(authResponse.two_factor_method === "email" ? 15 : 0);
                 return;
               }
 
@@ -258,11 +256,9 @@ export function LoginPage() {
         setSuccessMessage(
           response.two_factor_method === "totp"
             ? "Enter your authenticator code to continue."
-            : response.two_factor_method === "sms"
-              ? `Check your phone for the 6-digit verification code.${response.dev_code ? ` Dev code: ${response.dev_code}` : ""}`
-              : "Check your email for the 6-digit verification code."
+            : "Check your email for the 6-digit verification code."
         );
-        setResendCountdown(["email", "sms"].includes(response.two_factor_method || "") ? 15 : 0);
+        setResendCountdown(response.two_factor_method === "email" ? 15 : 0);
         return;
       }
 
@@ -296,7 +292,7 @@ export function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      if (twoFactorToken && ["email", "sms"].includes(twoFactorMethod)) {
+      if (twoFactorToken && twoFactorMethod === "email") {
         const response = await resendTwoFactorCode(twoFactorToken);
         storeTwoFactorChallenge(response, twoFactorEmail || email);
         setSuccessMessage(
@@ -456,9 +452,7 @@ export function LoginPage() {
               {twoFactorToken
                 ? twoFactorMethod === "totp"
                   ? "Enter your authenticator code"
-                  : twoFactorMethod === "sms"
-                    ? "Enter the code sent to your phone"
-                    : "Enter the code sent to your email"
+                  : "Enter the code sent to your email"
                 : authMode === "forgot"
                   ? "Request a password reset code"
                   : authMode === "reset"
@@ -636,16 +630,12 @@ export function LoginPage() {
                       <div className="text-lg font-semibold text-[#19221d] dark:text-white">
                         {twoFactorMethod === "email"
                           ? "Email verification required"
-                          : twoFactorMethod === "sms"
-                            ? "SMS verification required"
-                            : "Authenticator verification required"}
+                          : "Authenticator verification required"}
                       </div>
                       <p className="mt-1 text-sm leading-relaxed text-[#5f6f67] dark:text-zinc-400">
                         {twoFactorMethod === "email"
                           ? `We sent a 6-digit verification code to ${maskEmail(twoFactorEmail || email)}. Enter it below to finish signing in.`
-                          : twoFactorMethod === "sms"
-                            ? "Enter the 6-digit code sent to the phone number on your profile."
-                            : "Enter the 6-digit code from your authenticator app."}
+                          : "Enter the 6-digit code from your authenticator app."}
                       </p>
                     </div>
                   </div>
@@ -669,7 +659,7 @@ export function LoginPage() {
                     />
                   </div>
 
-                  {["email", "sms"].includes(twoFactorMethod) ? (
+                  {twoFactorMethod === "email" ? (
                     <div className="mt-4 flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-[#5f6f67] dark:text-zinc-400">
                         {resendCountdown > 0

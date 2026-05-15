@@ -2,6 +2,8 @@
 
 ClothCycle uses Google Identity Services. The browser receives a Google ID token from the Google button and sends it to `POST /api/auth/google`; the backend verifies the token audience against `GOOGLE_CLIENT_ID`.
 
+Google Sign-In is treated as a trusted provider flow and bypasses the app's email/password 2FA challenge.
+
 ## Local Environment
 
 Frontend `.env`:

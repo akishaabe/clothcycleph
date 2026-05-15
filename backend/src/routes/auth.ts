@@ -6,7 +6,6 @@ import {
   updateProfile,
   verifyTwoFactor,
   resendTwoFactorCode,
-  sendAuthenticatedSmsTwoFactorCode,
   setupTwoFactor,
   getTwoFactorStatus,
   enableTwoFactor,
@@ -57,7 +56,6 @@ router.get('/2fa/status', authMiddleware, getTwoFactorStatus);
 router.get('/2fa/setup', authMiddleware, setupTwoFactor);
 router.post('/2fa/setup', authMiddleware, validate(twoFactorSetupSchema), setupTwoFactor);
 router.post('/2fa/enable', authMiddleware, validate(twoFactorEnableSchema), enableTwoFactor);
-router.post('/2fa/sms/send', authMiddleware, sendAuthenticatedSmsTwoFactorCode);
 router.post('/2fa/disable', authMiddleware, validate(twoFactorDisableSchema), disableTwoFactor);
 
 export default router;

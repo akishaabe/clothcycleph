@@ -9,7 +9,6 @@ import {
   continueWithGoogleD1,
   verifyTwoFactorD1,
   resendTwoFactorCodeD1,
-  sendAuthenticatedSmsTwoFactorCodeD1,
   forgotPasswordD1,
   resetPasswordD1,
   verifyResetCodeD1,
@@ -108,13 +107,9 @@ interface CloudflareEnv {
   CORS_ORIGIN?: string;
   R2_PUBLIC_BASE_URL?: string;
   EMAIL_PROVIDER?: EmailProvider;
-  SMS_PROVIDER?: 'twilio';
   BREVO_API_KEY?: string;
   SENDGRID_API_KEY?: string;
   EMAIL_FROM?: string;
-  TWILIO_ACCOUNT_SID?: string;
-  TWILIO_AUTH_TOKEN?: string;
-  TWILIO_FROM_NUMBER?: string;
   GOOGLE_CLIENT_ID?: string;
   APP_URL?: string;
   NODE_ENV?: string;
@@ -177,10 +172,6 @@ const getAuthOptions = (c: any) => ({
   emailProvider: c.env.EMAIL_PROVIDER,
   emailApiKey: c.env.BREVO_API_KEY || c.env.SENDGRID_API_KEY,
   emailFrom: c.env.EMAIL_FROM,
-  smsProvider: c.env.SMS_PROVIDER,
-  twilioAccountSid: c.env.TWILIO_ACCOUNT_SID,
-  twilioAuthToken: c.env.TWILIO_AUTH_TOKEN,
-  twilioFromNumber: c.env.TWILIO_FROM_NUMBER,
   appUrl: c.env.APP_URL,
   googleClientId: c.env.GOOGLE_CLIENT_ID,
   exposeDevSecrets: Boolean(!c.env.EMAIL_PROVIDER),
@@ -448,7 +439,7 @@ app.post('/api/auth/2fa/setup', requireAuth, async (c) => {
     return c.json({ error: 'Missing password' }, 400);
   }
 
-  const result = await setupTwoFactorD1(c.env.DB, user.id!, password, getAuthOptions(c), body.method, body.phone);
+  const result = await setupTwoFactorD1(c.env.DB, user.id!, password, getAuthOptions(c), body.method);
   return c.json(result);
 });
 
@@ -462,12 +453,6 @@ app.post('/api/auth/2fa/enable', requireAuth, async (c) => {
 
   const result = await enableTwoFactorD1(c.env.DB, user.id!, password, code, getAuthOptions(c));
   return c.json(result);
-});
-
-app.post('/api/auth/2fa/sms/send', requireAuth, async (c) => {
-  const user = (c as any).get('user') as { id?: string };
-  const result = await sendAuthenticatedSmsTwoFactorCodeD1(c.env.DB, user.id!, getAuthOptions(c));
-  return c.json({ message: result.message, dev_code: result.devCode });
 });
 
 app.post('/api/auth/2fa/disable', requireAuth, async (c) => {
@@ -762,7 +747,6 @@ app.put('/api/notifications/preferences', requireAuth, async (c) => {
   const preferences = await updateNotificationPreferencesD1(c.env.DB, user.id!, {
     email_notifications: body.email_notifications,
     push_notifications: body.push_notifications,
-    sms_notifications: body.sms_notifications,
     newsletter: body.newsletter,
   });
   return c.json({ message: 'Notification preferences saved', data: preferences });

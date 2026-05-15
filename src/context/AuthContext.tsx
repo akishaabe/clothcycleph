@@ -17,16 +17,15 @@ interface AuthContextType {
   login: (email: string, password: string, remember?: boolean) => Promise<LoginResponse>;
   continueWithGoogle: (credential: string, role?: 'user') => Promise<GoogleAuthResponse>;
   verifyTwoFactor: (twoFactorToken: string, code: string, remember?: boolean) => Promise<User>;
-  resendTwoFactorCode: (twoFactorToken: string) => Promise<{ message: string; requiresTwoFactor: true; two_factor_token: string; two_factor_method?: 'email' | 'totp' | 'sms'; dev_code?: string }>;
+  resendTwoFactorCode: (twoFactorToken: string) => Promise<{ message: string; requiresTwoFactor: true; two_factor_token: string; two_factor_method?: 'email' | 'totp'; dev_code?: string }>;
   forgotPassword: (email: string) => Promise<{ message: string; reset_token?: string }>;
   verifyResetCode: (resetToken: string) => Promise<{ message: string }>;
   resetPassword: (resetToken: string, password: string) => Promise<{ message: string }>;
   updateProfile: (payload: any) => Promise<User>;
   changePassword: (currentPassword: string, newPassword: string, confirmPassword: string) => Promise<{ message: string }>;
   getTwoFactorStatus: () => Promise<TwoFactorStatusResponse>;
-  setupTwoFactor: (password: string, method?: 'totp' | 'sms', phone?: string) => Promise<TwoFactorSetupResponse>;
-  enableTwoFactor: (password: string, code: string, method?: 'totp' | 'sms') => Promise<{ message: string; recovery_codes: string[] }>;
-  sendSmsTwoFactorCode: () => Promise<{ message: string; dev_code?: string }>;
+  setupTwoFactor: (password: string, method?: 'email' | 'totp') => Promise<TwoFactorSetupResponse>;
+  enableTwoFactor: (password: string, code: string, method?: 'email' | 'totp') => Promise<{ message: string; recovery_codes: string[] }>;
   disableTwoFactor: (password: string, code?: string) => Promise<{ message: string }>;
   deleteAccount: (password: string) => Promise<{ message: string }>;
   signup: (email: string, name: string, password: string, role?: string) => Promise<SignupResponse>;
@@ -156,20 +155,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return authService.getTwoFactorStatus();
   };
 
-  const setupTwoFactor = (password: string, method: 'totp' | 'sms' = 'totp', phone?: string) => {
-    return authService.setupTwoFactor(password, method, phone);
+  const setupTwoFactor = (password: string, method: 'email' | 'totp' = 'email') => {
+    return authService.setupTwoFactor(password, method);
   };
 
-  const enableTwoFactor = async (password: string, code: string, method?: 'totp' | 'sms') => {
+  const enableTwoFactor = async (password: string, code: string, method?: 'email' | 'totp') => {
     const response = await authService.enableTwoFactor(password, code, method);
     if (user) {
       updateUser({ ...user, two_factor_enabled: true });
     }
     return response;
-  };
-
-  const sendSmsTwoFactorCode = () => {
-    return authService.sendSmsTwoFactorCode();
   };
 
   const disableTwoFactor = async (password: string, code?: string) => {
@@ -232,7 +227,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getTwoFactorStatus,
     setupTwoFactor,
     enableTwoFactor,
-    sendSmsTwoFactorCode,
     disableTwoFactor,
     deleteAccount,
     signup,

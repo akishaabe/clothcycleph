@@ -33,7 +33,7 @@ export const twoFactorResendSchema = z.object({
 export const twoFactorEnableSchema = z.object({
   password: z.string().min(1).max(128),
   code: z.string().trim().regex(/^\d{6}$/, 'Code must be 6 digits'),
-  method: z.enum(['totp', 'sms']).optional(),
+  method: z.enum(['totp']).optional(),
 });
 
 export const twoFactorDisableSchema = z.object({
@@ -43,8 +43,7 @@ export const twoFactorDisableSchema = z.object({
 
 export const twoFactorSetupSchema = z.object({
   password: z.string().min(1).max(128),
-  method: z.enum(['totp', 'sms']).default('totp'),
-  phone: z.string().trim().max(20).optional(),
+  method: z.enum(['email', 'totp']).default('email'),
 });
 
 export const forgotPasswordSchema = z.object({

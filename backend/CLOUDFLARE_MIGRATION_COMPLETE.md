@@ -3,7 +3,7 @@
 ## Completed
 
 - `backend/src/worker.ts` now implements the active API surface with Hono.
-- Auth, profile, authenticator/SMS 2FA, password reset, Google login, submissions, DSS, GIS partner ranking, messages, notifications, transactions, and uploads are handled directly in the Worker.
+- Auth, profile, email/authenticator 2FA, password reset, Google login, submissions, DSS, GIS partner ranking, messages, notifications, transactions, and uploads are handled directly in the Worker.
 - D1 services back the migrated data flows:
   - `authD1Service.ts`
   - `d1SubmissionService.ts`

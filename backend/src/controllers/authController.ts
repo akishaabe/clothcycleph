@@ -59,7 +59,7 @@ export const signup = async (req: Request, res: Response) => {
          two_factor_enabled,
          terms_accepted_at
        )
-       VALUES ($1, $2, $3, $4, 'user', false, NOW())
+       VALUES ($1, $2, $3, $4, 'user', true, NOW())
        RETURNING id, email, name, role, two_factor_enabled, two_factor_confirmed_at, email_verified_at`,
       [userId, email, name, passwordHash]
     );
@@ -158,17 +158,13 @@ export const login = async (req: Request, res: Response) => {
       const challenge =
         method === 'email'
           ? await createEmailVerificationChallenge(user, 'two_factor')
-          : method === 'sms'
-            ? await createSmsChallenge(user)
-            : createTotpChallenge(user);
+          : createTotpChallenge(user);
 
       return res.json({
         message:
           method === 'email'
             ? 'Two-factor verification required. Check your email for your verification code.'
-            : method === 'sms'
-              ? 'Two-factor verification required. Check your phone for your verification code.'
-              : 'Two-factor verification required. Enter your authenticator code.',
+            : 'Two-factor verification required. Enter your authenticator code.',
         requiresTwoFactor: true,
         two_factor_token: challenge.twoFactorToken,
         two_factor_method: method,
@@ -201,7 +197,7 @@ export const continueWithGoogle = async (req: Request, res: Response) => {
 
       userResult = await query(
         `INSERT INTO users (id, email, name, password_hash, role, avatar_url, two_factor_enabled, email_verified_at)
-         VALUES ($1, $2, $3, $4, $5, $6, false, NOW())
+         VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
          RETURNING *`,
         [userId, googleUser.email, googleUser.name, passwordHash, role, googleUser.picture]
       );
@@ -298,31 +294,6 @@ export const verifyTwoFactor = async (req: Request, res: Response) => {
          WHERE id = $1`,
         [user.id]
       );
-    } else if (decoded.method === 'sms') {
-      if (!user.two_factor_code_hash || !user.two_factor_code_is_valid) {
-        throw new AppError(400, 'Verification code has expired');
-      }
-
-      const isValidSmsCode = await comparePassword(code, user.two_factor_code_hash);
-
-      if (!isValidSmsCode) {
-        await recordAuthEvent({
-          userId: user.id,
-          eventType: 'two_factor_failed',
-          ipAddress: req.ip,
-          userAgent: req.headers['user-agent'],
-        });
-        throw new AppError(401, 'Invalid two-factor code');
-      }
-
-      await query(
-        `UPDATE users
-         SET two_factor_code_hash = NULL,
-             two_factor_code_expires_at = NULL,
-             last_login_at = NOW()
-         WHERE id = $1`,
-        [user.id]
-      );
     } else {
       if (!user.two_factor_enabled || !user.two_factor_secret_encrypted || !user.two_factor_confirmed_at) {
         throw new AppError(400, 'Two-factor authentication is not enabled');
@@ -376,12 +347,12 @@ export const resendTwoFactorCode = async (req: Request, res: Response) => {
     const { two_factor_token } = req.body;
     const decoded = verifyToken(two_factor_token);
 
-    if (decoded.purpose !== 'email_verification' && decoded.method !== 'email' && decoded.method !== 'sms') {
+    if (decoded.purpose !== 'email_verification' && decoded.method !== 'email') {
       throw new AppError(400, 'This verification flow cannot resend codes');
     }
 
     const result = await query(
-      `SELECT id, email, role, phone
+      `SELECT id, email, role
        FROM users
        WHERE id = $1`,
       [decoded.id]
@@ -392,80 +363,23 @@ export const resendTwoFactorCode = async (req: Request, res: Response) => {
     }
 
     const user = result.rows[0];
-    const isSms = decoded.method === 'sms';
-    const challenge = isSms
-      ? await createSmsChallenge(user)
-      : await createEmailVerificationChallenge(
-          user,
-          decoded.purpose === 'email_verification' ? 'email_verification' : 'two_factor'
-        );
+    const challenge = await createEmailVerificationChallenge(
+      user,
+      decoded.purpose === 'email_verification' ? 'email_verification' : 'two_factor'
+    );
 
     await recordAuthEvent({
       userId: user.id,
-      eventType: isSms ? 'two_factor_sms_resent' : 'email_verification_resent',
+      eventType: 'email_verification_resent',
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
 
     res.json({
-      message: isSms
-        ? 'A new verification code has been prepared for SMS two-factor authentication.'
-        : 'A new verification code has been sent to your email.',
+      message: 'A new verification code has been sent to your email.',
       requiresTwoFactor: true,
       two_factor_token: challenge.twoFactorToken,
-      two_factor_method: isSms ? 'sms' : 'email',
-    });
-  } catch (error) {
-    sendAuthError(res, error);
-  }
-};
-
-export const sendAuthenticatedSmsTwoFactorCode = async (req: Request, res: Response) => {
-  try {
-    const userId = req.user?.id;
-
-    if (!userId) {
-      throw new AppError(401, 'User not authenticated');
-    }
-
-    const result = await query(
-      `SELECT id, email, role, phone, two_factor_enabled, two_factor_method
-       FROM users
-       WHERE id = $1`,
-      [userId]
-    );
-
-    if (result.rows.length === 0) {
-      throw new AppError(404, 'User not found');
-    }
-
-    const user = result.rows[0];
-    if (!user.two_factor_enabled || user.two_factor_method !== 'sms') {
-      throw new AppError(400, 'SMS two-factor authentication is not enabled');
-    }
-
-    if (!user.phone) {
-      throw new AppError(400, 'A phone number is required for SMS two-factor authentication');
-    }
-
-    const code = generateNumericCode();
-    const codeHash = await hashPassword(code);
-
-    await query(
-      `UPDATE users
-       SET two_factor_code_hash = $1,
-           two_factor_code_expires_at = NOW() + INTERVAL '10 minutes'
-       WHERE id = $2`,
-      [codeHash, user.id]
-    );
-
-    if (shouldExposeDevSecrets()) {
-      console.log(`Dev SMS 2FA code for ${user.email}: ${code}`);
-    }
-
-    res.json({
-      message: 'A verification code has been prepared for SMS two-factor authentication.',
-      ...(shouldExposeDevSecrets() ? { dev_code: code } : {}),
+      two_factor_method: 'email',
     });
   } catch (error) {
     sendAuthError(res, error);
@@ -495,8 +409,8 @@ export const getTwoFactorStatus = async (req: Request, res: Response) => {
 
     res.json({
       enabled: isTwoFactorLoginRequired(user),
-      method: user.two_factor_method || 'totp',
-      setup_started: Boolean(user.two_factor_secret_encrypted || user.two_factor_method === 'sms'),
+      method: user.two_factor_method || 'email',
+      setup_started: Boolean(user.two_factor_secret_encrypted),
       confirmed_at: user.two_factor_confirmed_at,
       phone: user.phone,
     });
@@ -508,7 +422,7 @@ export const getTwoFactorStatus = async (req: Request, res: Response) => {
 export const setupTwoFactor = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { password, method = 'totp' } = req.body;
+    const { password, method = 'email' } = req.body;
 
     if (!userId) {
       throw new AppError(401, 'User not authenticated');
@@ -520,7 +434,7 @@ export const setupTwoFactor = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await query('SELECT id, email, phone, password_hash FROM users WHERE id = $1', [userId]);
+    const result = await query('SELECT id, email, password_hash FROM users WHERE id = $1', [userId]);
 
     if (result.rows.length === 0) {
       throw new AppError(404, 'User not found');
@@ -533,17 +447,11 @@ export const setupTwoFactor = async (req: Request, res: Response) => {
       throw new AppError(401, 'Invalid password');
     }
 
-    if (!user.phone) {
-      throw new AppError(400, 'Add a phone number in your profile settings before setting up two-factor authentication');
-    }
-
-    if (method === 'sms') {
-      const recoveryCodes = await replaceRecoveryCodes(userId);
-
+    if (method === 'email') {
       await query(
         `UPDATE users
          SET two_factor_enabled = true,
-             two_factor_method = 'sms',
+             two_factor_method = 'email',
              two_factor_secret_encrypted = NULL,
              two_factor_confirmed_at = NOW(),
              two_factor_code_hash = NULL,
@@ -554,15 +462,15 @@ export const setupTwoFactor = async (req: Request, res: Response) => {
 
       await recordAuthEvent({
         userId,
-        eventType: 'two_factor_enabled',
+        eventType: 'two_factor_method_changed',
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
       });
 
       return res.json({
-        message: 'SMS two-factor authentication enabled',
-        method: 'sms',
-        recovery_codes: recoveryCodes,
+        message: 'Email verification selected as your sign-in method',
+        method: 'email',
+        recovery_codes: [],
       });
     }
 
@@ -571,7 +479,7 @@ export const setupTwoFactor = async (req: Request, res: Response) => {
 
     await query(
       `UPDATE users
-       SET two_factor_enabled = false,
+       SET two_factor_enabled = true,
            two_factor_method = 'totp',
            two_factor_secret_encrypted = $1,
            two_factor_confirmed_at = NULL
@@ -606,13 +514,13 @@ export const enableTwoFactor = async (req: Request, res: Response) => {
     }
 
     const result = await query(
-      `SELECT password_hash, phone, two_factor_secret_encrypted
+      `SELECT password_hash, two_factor_secret_encrypted
        FROM users
        WHERE id = $1`,
       [userId]
     );
 
-    if (result.rows.length === 0 || (method !== 'sms' && !result.rows[0].two_factor_secret_encrypted)) {
+    if (result.rows.length === 0 || !result.rows[0].two_factor_secret_encrypted) {
       throw new AppError(400, 'Start two-factor setup before enabling it');
     }
 
@@ -620,38 +528,6 @@ export const enableTwoFactor = async (req: Request, res: Response) => {
 
     if (!isValidPassword) {
       throw new AppError(401, 'Invalid password');
-    }
-
-    if (!result.rows[0].phone) {
-      throw new AppError(400, 'Add a phone number in your profile settings before setting up two-factor authentication');
-    }
-
-    if (method === 'sms') {
-      const recoveryCodes = await replaceRecoveryCodes(userId);
-
-      await query(
-        `UPDATE users
-         SET two_factor_enabled = true,
-             two_factor_method = 'sms',
-             two_factor_secret_encrypted = NULL,
-             two_factor_confirmed_at = NOW(),
-             two_factor_code_hash = NULL,
-             two_factor_code_expires_at = NULL
-         WHERE id = $1`,
-        [userId]
-      );
-
-      await recordAuthEvent({
-        userId,
-        eventType: 'two_factor_enabled',
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
-      });
-
-      return res.json({
-        message: 'SMS two-factor authentication enabled',
-        recovery_codes: recoveryCodes,
-      });
     }
 
     const secret = decryptSecret(result.rows[0].two_factor_secret_encrypted);
@@ -735,9 +611,10 @@ export const disableTwoFactor = async (req: Request, res: Response) => {
 
     await query(
       `UPDATE users
-       SET two_factor_enabled = false,
+       SET two_factor_enabled = true,
+           two_factor_method = 'email',
            two_factor_secret_encrypted = NULL,
-           two_factor_confirmed_at = NULL,
+           two_factor_confirmed_at = NOW(),
            two_factor_code_hash = NULL,
            two_factor_code_expires_at = NULL
        WHERE id = $1`,
@@ -751,7 +628,7 @@ export const disableTwoFactor = async (req: Request, res: Response) => {
       userAgent: req.headers['user-agent'],
     });
 
-    res.json({ message: 'Two-factor authentication disabled' });
+    res.json({ message: 'Email verification selected as your sign-in method' });
   } catch (error) {
     sendAuthError(res, error);
   }
@@ -836,59 +713,20 @@ function createTotpChallenge(user: { id: string; email: string; role: string }) 
   return { twoFactorToken };
 }
 
-function getLoginTwoFactorMethod(user: any): 'email' | 'sms' | 'totp' {
-  if (user.two_factor_method === 'email' || user.two_factor_method === 'sms') {
-    return user.two_factor_method;
-  }
-
-  return 'totp';
-}
-
-function isTwoFactorLoginRequired(user: any): boolean {
-  if (!user.two_factor_enabled) {
-    return false;
+function getLoginTwoFactorMethod(user: any): 'email' | 'totp' {
+  if (user.two_factor_method === 'totp' && user.two_factor_secret_encrypted && user.two_factor_confirmed_at) {
+    return 'totp';
   }
 
   if (user.two_factor_method === 'email') {
-    return true;
+    return user.two_factor_method;
   }
 
-  if (user.two_factor_method === 'sms') {
-    return Boolean(user.two_factor_confirmed_at);
-  }
-
-  return Boolean(user.two_factor_secret_encrypted && user.two_factor_confirmed_at);
+  return 'email';
 }
 
-async function createSmsChallenge(user: { id: string; email: string; role: string; phone?: string | null }) {
-  if (!user.phone) {
-    throw new AppError(400, 'A phone number is required for SMS two-factor authentication');
-  }
-
-  const code = generateNumericCode();
-  const codeHash = await hashPassword(code);
-
-  await query(
-    `UPDATE users
-     SET two_factor_code_hash = $1,
-         two_factor_code_expires_at = NOW() + INTERVAL '10 minutes'
-     WHERE id = $2`,
-    [codeHash, user.id]
-  );
-
-  if (shouldExposeDevSecrets()) {
-    console.log(`Dev SMS 2FA code for ${user.email}: ${code}`);
-  }
-
-  const twoFactorToken = generateToken({
-    id: user.id,
-    email: user.email,
-    role: user.role,
-    purpose: 'two_factor',
-    method: 'sms',
-  });
-
-  return { twoFactorToken };
+function isTwoFactorLoginRequired(user: any): boolean {
+  return true;
 }
 
 function toAuthUser(user: any) {

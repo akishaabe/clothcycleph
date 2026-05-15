@@ -12,7 +12,6 @@ import {
   Phone,
   Copy,
   Download,
-  CheckCircle2,
   AlertTriangle,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -35,7 +34,7 @@ const actionButtonClass =
   "inline-flex min-w-[190px] items-center justify-center gap-2 px-6 py-3 bg-[#336158] text-white rounded-xl hover:bg-[#2a4c48] transition-all hover:shadow-lg";
 
 export function SettingsPage() {
-  const { user, updateProfile, changePassword, getTwoFactorStatus, setupTwoFactor, enableTwoFactor, disableTwoFactor, sendSmsTwoFactorCode, deleteAccount } =
+  const { user, updateProfile, changePassword, getTwoFactorStatus, setupTwoFactor, enableTwoFactor, deleteAccount } =
     useAuth();
   const navigate = useNavigate();
   const { uploadFile, isLoading: isPhotoUploading } = useFileUpload();
@@ -78,8 +77,7 @@ export function SettingsPage() {
   });
   const [twoFactorPassword, setTwoFactorPassword] = useState("");
   const [twoFactorCode, setTwoFactorCode] = useState("");
-  const [twoFactorMethod, setTwoFactorMethod] = useState("totp");
-  const [twoFactorSmsPhone, setTwoFactorSmsPhone] = useState("");
+  const [twoFactorMethod, setTwoFactorMethod] = useState("email");
   const [twoFactorSetup, setTwoFactorSetup] = useState(null);
   const [twoFactorRecoveryCodes, setTwoFactorRecoveryCodes] = useState([]);
   const [twoFactorPanel, setTwoFactorPanel] = useState("idle");
@@ -88,7 +86,6 @@ export function SettingsPage() {
   const [notifications, setNotifications] = useState({
     emailNotifications: true,
     pushNotifications: true,
-    smsNotifications: false,
     newsletter: true,
   });
 
@@ -100,7 +97,6 @@ export function SettingsPage() {
           ...current,
           emailNotifications: Boolean(response.data.email_notifications),
           pushNotifications: Boolean(response.data.push_notifications),
-          smsNotifications: Boolean(response.data.sms_notifications),
           newsletter: Boolean(response.data.newsletter),
         }));
       })
@@ -126,14 +122,12 @@ export function SettingsPage() {
       const response = await notificationService.updatePreferences({
         email_notifications: notifications.emailNotifications,
         push_notifications: notifications.pushNotifications,
-        sms_notifications: notifications.smsNotifications,
         newsletter: notifications.newsletter,
       });
       setNotifications((current) => ({
         ...current,
         emailNotifications: Boolean(response.data.email_notifications),
         pushNotifications: Boolean(response.data.push_notifications),
-        smsNotifications: Boolean(response.data.sms_notifications),
         newsletter: Boolean(response.data.newsletter),
       }));
       showSaveMessage("success", "Notification preferences were saved.");
@@ -261,32 +255,12 @@ export function SettingsPage() {
   const resetTwoFactorInputs = () => {
     setTwoFactorPassword("");
     setTwoFactorCode("");
-    setTwoFactorMethod("totp");
-    setTwoFactorSmsPhone("");
+    setTwoFactorMethod(twoFactorStatus.method || "email");
     setTwoFactorSetup(null);
     setTwoFactorPanel("idle");
   };
 
-  const savedPhoneNumber = (savedProfile.phone || user?.phone || "").trim();
-  const hasSavedPhoneNumber = Boolean(savedPhoneNumber);
-
-  const requireSavedPhoneForTwoFactor = () => {
-    if (hasSavedPhoneNumber) {
-      return true;
-    }
-
-    showSaveMessage(
-      "error",
-      "Add a phone number in your profile settings before setting up two-factor authentication.",
-    );
-    return false;
-  };
-
   const handleStartTwoFactorSetup = async () => {
-    if (!requireSavedPhoneForTwoFactor()) {
-      return;
-    }
-
     if (!twoFactorPassword) {
       showSaveMessage("error", "Enter your current password first.");
       return;
@@ -298,14 +272,14 @@ export function SettingsPage() {
     try {
       const setup = await setupTwoFactor(twoFactorPassword, twoFactorMethod);
 
-      if (setup.method === "sms" && setup.recovery_codes) {
+      if (setup.method !== "totp" && setup.recovery_codes) {
         setTwoFactorRecoveryCodes(setup.recovery_codes || []);
         setTwoFactorSetup(null);
         setTwoFactorCode("");
         setTwoFactorPassword("");
-        setTwoFactorPanel("recovery");
+        setTwoFactorPanel("idle");
         await refreshTwoFactorStatus();
-        showSaveMessage("success", "SMS two-factor authentication was turned on.");
+        showSaveMessage("success", "Email verification is now your sign-in method.");
         return;
       }
 
@@ -314,9 +288,7 @@ export function SettingsPage() {
       setTwoFactorCode("");
       showSaveMessage(
         "success",
-        setup.dev_code
-          ? `Two-factor setup started. Dev SMS code: ${setup.dev_code}`
-          : "Two-factor setup started.",
+        "Two-factor setup started.",
       );
     } catch (setupError) {
       showSaveMessage("error", setupError.message || "Two-factor setup failed.");
@@ -345,53 +317,11 @@ export function SettingsPage() {
       setTwoFactorPassword("");
       setTwoFactorPanel("recovery");
       await refreshTwoFactorStatus();
-      showSaveMessage("success", "Two-factor authentication was turned on.");
+      showSaveMessage("success", "Two-factor method was updated.");
     } catch (enableError) {
       showSaveMessage(
         "error",
-        enableError.message || "Could not enable two-factor authentication."
-      );
-    } finally {
-      setIsTwoFactorBusy(false);
-    }
-  };
-
-  const handleSendDisableSmsCode = async () => {
-    setIsTwoFactorBusy(true);
-
-    try {
-      const response = await sendSmsTwoFactorCode();
-      showSaveMessage(
-        "success",
-        response.dev_code
-          ? `SMS code sent. Dev code: ${response.dev_code}`
-          : "SMS code sent.",
-      );
-    } catch (smsError) {
-      showSaveMessage("error", smsError.message || "Could not send SMS code.");
-    } finally {
-      setIsTwoFactorBusy(false);
-    }
-  };
-
-  const handleDisableTwoFactor = async () => {
-    if (!twoFactorPassword) {
-      showSaveMessage("error", "Enter your current password first.");
-      return;
-    }
-
-    setIsTwoFactorBusy(true);
-
-    try {
-      await disableTwoFactor(twoFactorPassword, twoFactorCode || undefined);
-      setTwoFactorRecoveryCodes([]);
-      await refreshTwoFactorStatus();
-      resetTwoFactorInputs();
-      showSaveMessage("success", "Two-factor authentication was turned off.");
-    } catch (disableError) {
-      showSaveMessage(
-        "error",
-        disableError.message || "Could not disable two-factor authentication."
+        enableError.message || "Could not update two-factor method."
       );
     } finally {
       setIsTwoFactorBusy(false);
@@ -531,10 +461,7 @@ export function SettingsPage() {
 
   const hasFreshRecoveryCodes = twoFactorRecoveryCodes.length > 0;
   const isSetupPanelOpen =
-    !twoFactorStatus.enabled &&
-    (twoFactorPanel === "setup" || Boolean(twoFactorSetup));
-  const isDisablePanelOpen =
-    twoFactorStatus.enabled && twoFactorPanel === "disable";
+    twoFactorPanel === "setup" || Boolean(twoFactorSetup);
   const isRecoveryPanelOpen =
     hasFreshRecoveryCodes && twoFactorPanel === "recovery";
 
@@ -806,73 +733,29 @@ export function SettingsPage() {
                       <div>
                         <div className="text-[#19221d]">Two-Factor Authentication</div>
                         <div className="text-sm text-[#5f6f67]">
-                          Protect sign-ins with an authenticator app or SMS code.
+                          Choose the verification method required after email/password sign-in.
                         </div>
                       </div>
-                      <div
-                        className={`settings-2fa-status inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm ${
-                          twoFactorStatus.enabled
-                            ? "settings-2fa-status-on bg-[#e8f2ec] text-[#2f5f3a]"
-                            : "settings-2fa-status-off bg-[#d7ddd5] text-[#5f6f67]"
-                        }`}
-                      >
-                        {twoFactorStatus.enabled ? (
-                          <CheckCircle2 className="h-4 w-4" />
-                        ) : (
-                          <Shield className="h-4 w-4" />
-                        )}
-                        {twoFactorStatus.enabled ? "2FA Active" : "2FA Off"}
-                      </div>
+                    </div>
+
+                    <div className="text-sm text-[#19221d] dark:text-white">
+                      <span className="font-semibold">Current 2FA Method:</span>{" "}
+                      <span>{twoFactorStatus.method === "totp" ? "Authenticator App" : "Email"}</span>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3">
-                      {!twoFactorStatus.enabled ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!requireSavedPhoneForTwoFactor()) {
-                                return;
-                              }
-                              setTwoFactorPanel("setup");
-                            }}
-                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#336158] px-5 py-3 text-white transition-all hover:bg-[#2a4c48] hover:shadow-lg"
-                        >
-                          <Shield className="h-5 w-5" />
-                          Set Up 2FA
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setTwoFactorPanel((current) =>
-                                current === "disable" ? "idle" : "disable"
-                              )
-                            }
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-white transition-all hover:bg-red-700 hover:shadow-lg"
-                          >
-                            <Shield className="h-5 w-5" />
-                            Turn Off 2FA
-                          </button>
-                        </>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTwoFactorMethod(twoFactorStatus.method || "email");
+                          setTwoFactorPanel("setup");
+                        }}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#336158] px-5 py-3 text-white transition-all hover:bg-[#2a4c48] hover:shadow-lg"
+                      >
+                        <Shield className="h-5 w-5" />
+                        Change 2FA Method
+                      </button>
                     </div>
-
-                    {!twoFactorStatus.enabled && !isSetupPanelOpen ? (
-                      <div className="rounded-xl border border-dashed border-[#dce4da] bg-white/70 px-4 py-3 text-sm text-[#5f6f67]">
-                        We will only show the recovery codes once, right after setup.
-                      </div>
-                    ) : null}
-
-                    {twoFactorStatus.enabled &&
-                    !isDisablePanelOpen &&
-                    !isRecoveryPanelOpen ? (
-                      <div className="rounded-xl border border-dashed border-[#dce4da] bg-white/70 px-4 py-3 text-sm text-[#5f6f67]">
-                        {twoFactorStatus.method === "sms"
-                          ? "SMS protection is active for future sign-ins."
-                          : "Authenticator protection is active for future sign-ins."}
-                      </div>
-                    ) : null}
 
                     {isSetupPanelOpen ? (
                       <div className="space-y-4 rounded-xl border border-[#dce4da] bg-white/85 p-4">
@@ -882,7 +765,7 @@ export function SettingsPage() {
                               Two-Factor Setup
                             </div>
                             <div className="text-sm text-[#5f6f67]">
-                              Choose an authenticator app or SMS. A saved phone number is required before setup.
+                              Choose the verification method used after email/password sign-in.
                             </div>
                           </div>
                           <button
@@ -902,8 +785,8 @@ export function SettingsPage() {
                               </label>
                               <div className="grid gap-2 sm:grid-cols-2">
                                 {[
+                                  ["email", "Email"],
                                   ["totp", "Authenticator App"],
-                                  ["sms", "SMS Code"],
                                 ].map(([method, label]) => (
                                   <button
                                     key={method}
@@ -940,10 +823,6 @@ export function SettingsPage() {
                                 placeholder="Enter your password"
                               />
                             </div>
-
-                            <div className="rounded-xl border border-[#dce4da] bg-white/70 px-4 py-3 text-sm text-[#5f6f67]">
-                              Saved phone number: {savedPhoneNumber || "Not added yet"}
-                            </div>
                           </div>
                           {!twoFactorSetup ? (
                             <button
@@ -953,7 +832,7 @@ export function SettingsPage() {
                               className={`${actionButtonClass} disabled:cursor-not-allowed disabled:opacity-70`}
                             >
                               <Shield className="h-5 w-5" />
-                              {isTwoFactorBusy ? "Please wait..." : "Start Setup"}
+                              {isTwoFactorBusy ? "Please wait..." : twoFactorMethod === "totp" ? "Start Setup" : "Save Method"}
                             </button>
                           ) : null}
                         </div>
@@ -1068,94 +947,6 @@ export function SettingsPage() {
                       </div>
                     ) : null}
 
-                    {isDisablePanelOpen ? (
-                      <div className="space-y-4 rounded-xl border border-[#f0d0d0] bg-red-50/70 p-4">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <div className="text-base text-red-700">
-                              Turn Off Two-Factor Authentication
-                            </div>
-                            <div className="text-sm text-red-600">
-                              Confirm with your password and a current
-                              {twoFactorStatus.method === "sms"
-                                ? " SMS code."
-                                : " authenticator or recovery code."}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={resetTwoFactorInputs}
-                            className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-100"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div>
-                            <label className="mb-2 block text-sm text-[#19221d]">
-                              Current Password
-                            </label>
-                            <div className="relative">
-                              <Lock className={iconClass} />
-                              <input
-                                type="password"
-                                value={twoFactorPassword}
-                                onChange={(event) =>
-                                  setTwoFactorPassword(event.target.value)
-                                }
-                                className={inputClass}
-                                placeholder="Enter your password"
-                              />
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="mb-2 block text-sm text-[#19221d]">
-                              {twoFactorStatus.method === "sms"
-                                ? "SMS Code"
-                                : "Authenticator or Recovery Code"}
-                            </label>
-                            <div className="relative">
-                              <Shield className={iconClass} />
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                maxLength={32}
-                                value={twoFactorCode}
-                                onChange={(event) =>
-                                  setTwoFactorCode(event.target.value)
-                                }
-                                className={inputClass}
-                                placeholder="Enter code"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {twoFactorStatus.method === "sms" ? (
-                          <button
-                            type="button"
-                            onClick={handleSendDisableSmsCode}
-                            disabled={isTwoFactorBusy}
-                            className="inline-flex min-w-[190px] items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-6 py-3 text-red-600 transition-all hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-70"
-                          >
-                            <Phone className="h-5 w-5" />
-                            Send SMS Code
-                          </button>
-                        ) : null}
-
-                        <button
-                          type="button"
-                          onClick={handleDisableTwoFactor}
-                          disabled={isTwoFactorBusy}
-                          className="inline-flex min-w-[190px] items-center justify-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-white transition-all hover:bg-red-700 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70"
-                        >
-                          <Shield className="h-5 w-5" />
-                          {isTwoFactorBusy ? "Please wait..." : "Confirm Turn Off"}
-                        </button>
-                      </div>
-                    ) : null}
                   </div>
 
                   {[
@@ -1248,11 +1039,6 @@ export function SettingsPage() {
                       key: "pushNotifications",
                       label: "Push Notifications",
                       description: "Get instant notifications",
-                    },
-                    {
-                      key: "smsNotifications",
-                      label: "SMS Notifications",
-                      description: "Text message alerts",
                     },
                     {
                       key: "newsletter",

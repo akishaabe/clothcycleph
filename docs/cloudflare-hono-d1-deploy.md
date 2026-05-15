@@ -30,7 +30,6 @@ npm run d1:apply:remote
 - `JWT_SECRET`: Wrangler secret
 - `TWO_FACTOR_ENCRYPTION_KEY`: Wrangler secret
 - `SENDGRID_API_KEY` or `BREVO_API_KEY`: Wrangler secret when email sending is enabled
-- `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`: Wrangler secrets when SMS 2FA is enabled
 - `CORS_ORIGIN`: comma-separated frontend origins
 - `APP_URL`: deployed frontend URL
 - `R2_PUBLIC_BASE_URL`: Worker public URL, used for `/api/uploads/:key`
