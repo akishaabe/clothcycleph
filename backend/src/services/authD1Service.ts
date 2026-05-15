@@ -28,7 +28,7 @@ export interface AuthUser {
   phone?: string;
   address?: string;
   two_factor_enabled: boolean;
-  two_factor_method?: 'totp' | 'sms';
+  two_factor_method?: 'email' | 'totp' | 'sms';
   email_verified_at?: string;
   created_at?: string;
   updated_at?: string;
@@ -132,10 +132,14 @@ export async function loginD1(
     };
   }
 
-  if (user.two_factor_enabled && user.two_factor_confirmed_at) {
-    const method = user.two_factor_method === 'sms' ? 'sms' : 'totp';
+  if (isTwoFactorLoginRequired(user)) {
+    const method = getLoginTwoFactorMethod(user);
     const challenge =
-      method === 'sms' ? await createSmsChallenge(db, user, options) : await createTotpChallenge(user, options.jwtSecret);
+      method === 'email'
+        ? await createEmailVerificationChallenge(db, user, options, 'two_factor')
+        : method === 'sms'
+          ? await createSmsChallenge(db, user, options)
+          : await createTotpChallenge(user, options.jwtSecret);
     return {
       requiresTwoFactor: true,
       twoFactorToken: challenge.twoFactorToken,
@@ -144,8 +148,13 @@ export async function loginD1(
     };
   }
 
-  const token = await generateAuthToken({ id: user.id, email: user.email, role: user.role }, options);
-  return { user: toAuthUser(user), token };
+  const emailChallenge = await createEmailVerificationChallenge(db, user, options, 'two_factor');
+  return {
+    requiresTwoFactor: true,
+    twoFactorToken: emailChallenge.twoFactorToken,
+    twoFactorMethod: 'email',
+    devCode: emailChallenge.devCode,
+  };
 }
 
 export async function continueWithGoogleD1(
@@ -184,18 +193,6 @@ export async function continueWithGoogleD1(
 
   if (!user.email_verified_at) {
     await executeD1(db, `UPDATE users SET email_verified_at = CURRENT_TIMESTAMP WHERE id = ?`, [user.id]);
-  }
-
-  if (user.two_factor_enabled && user.two_factor_confirmed_at) {
-    const method = user.two_factor_method === 'sms' ? 'sms' : 'totp';
-    const challenge =
-      method === 'sms' ? await createSmsChallenge(db, user, options) : await createTotpChallenge(user, options.jwtSecret);
-    return {
-      requiresTwoFactor: true,
-      twoFactorToken: challenge.twoFactorToken,
-      twoFactorMethod: method,
-      devCode: (challenge as { devCode?: string }).devCode,
-    };
   }
 
   const token = await generateAuthToken({ id: user.id, email: user.email, role: user.role }, options);
@@ -306,7 +303,12 @@ export async function resendTwoFactorCodeD1(
     return { ...challenge, twoFactorMethod: 'sms' };
   }
 
-  const challenge = await createEmailVerificationChallenge(db, user, options);
+  const challenge = await createEmailVerificationChallenge(
+    db,
+    user,
+    options,
+    decoded.purpose === 'email_verification' ? 'email_verification' : 'two_factor'
+  );
   return { ...challenge, twoFactorMethod: 'email' };
 }
 
@@ -343,7 +345,7 @@ export async function getTwoFactorStatusD1(db: D1Database, userId: string) {
     throw new Error('User not found');
   }
   return {
-    enabled: Boolean(user.two_factor_enabled && user.two_factor_confirmed_at),
+    enabled: isTwoFactorLoginRequired(user),
     method: user.two_factor_method || 'totp',
     setup_started: Boolean(user.two_factor_secret_encrypted || user.two_factor_method === 'sms'),
     confirmed_at: user.two_factor_confirmed_at,
@@ -369,37 +371,30 @@ export async function setupTwoFactorD1(
     throw new Error('Invalid password');
   }
 
-  if (method === 'sms') {
-    const normalizedPhone = normalizePhone(phone || user.phone);
-    if (!normalizedPhone) {
-      throw new Error('A phone number is required to set up SMS 2FA');
-    }
+  const savedPhone = normalizePhone(user.phone);
+  if (!savedPhone) {
+    throw new Error('Add a phone number in your profile settings before setting up two-factor authentication');
+  }
 
+  if (method === 'sms') {
     await executeD1(
       db,
       `UPDATE users
-       SET two_factor_enabled = 0,
+       SET two_factor_enabled = 1,
            two_factor_method = 'sms',
-           phone = ?,
            two_factor_secret_encrypted = NULL,
-           two_factor_confirmed_at = NULL,
+           two_factor_confirmed_at = CURRENT_TIMESTAMP,
+           two_factor_code_hash = NULL,
+           two_factor_code_expires_at = NULL,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [normalizedPhone, userId]
-    );
-
-    const challenge = await createSmsChallenge(
-      db,
-      { id: user.id, email: user.email, role: 'user', phone: normalizedPhone },
-      options
+      [userId]
     );
 
     return {
-      message: 'Enter the 6-digit code sent by SMS to confirm setup.',
+      message: 'SMS two-factor authentication enabled.',
       method: 'sms' as const,
-      masked_phone: maskPhone(normalizedPhone),
-      two_factor_token: challenge.twoFactorToken,
-      dev_code: challenge.devCode,
+      recovery_codes: [],
     };
   }
 
@@ -779,13 +774,19 @@ export async function updateProfileD1(
     }
   }
 
+  const hasAvatarUrl = Object.prototype.hasOwnProperty.call(updates, 'avatar_url');
+  const profilePhoto =
+    hasAvatarUrl && avatar_url
+      ? JSON.stringify({ url: avatar_url, updated_at: new Date().toISOString() })
+      : null;
+
   const result = await queryD1First(
     db,
     `UPDATE users
      SET name = COALESCE(?, name),
          email = COALESCE(?, email),
-         avatar_url = COALESCE(?, avatar_url),
-         profile_photo = COALESCE(?, profile_photo),
+         avatar_url = CASE WHEN ? THEN ? ELSE avatar_url END,
+         profile_photo = CASE WHEN ? THEN ? ELSE profile_photo END,
          bio = COALESCE(?, bio),
          phone = COALESCE(?, phone),
          address = COALESCE(?, address),
@@ -795,8 +796,10 @@ export async function updateProfileD1(
     [
       name,
       email,
+      hasAvatarUrl,
       avatar_url,
-      avatar_url ? JSON.stringify({ url: avatar_url, updated_at: new Date().toISOString() }) : null,
+      hasAvatarUrl,
+      profilePhoto,
       bio,
       phone,
       address,
@@ -839,7 +842,8 @@ export async function changePasswordD1(
 async function createEmailVerificationChallenge(
   db: D1Database,
   user: { id: string; email: string; role: string },
-  options: AuthD1Options
+  options: AuthD1Options,
+  purpose: 'email_verification' | 'two_factor' = 'email_verification'
 ): Promise<{ twoFactorToken: string; devCode?: string }> {
   const code = generateNumericCode();
   const codeHash = await hashPassword(code);
@@ -866,7 +870,7 @@ async function createEmailVerificationChallenge(
       id: user.id,
       email: user.email,
       role: user.role,
-      purpose: 'email_verification',
+      purpose,
       method: 'email',
     },
     options.jwtSecret
@@ -888,6 +892,30 @@ async function createTotpChallenge(user: { id: string; email: string; role: stri
   );
 
   return { twoFactorToken };
+}
+
+function getLoginTwoFactorMethod(user: any): 'email' | 'sms' | 'totp' {
+  if (user.two_factor_method === 'email' || user.two_factor_method === 'sms') {
+    return user.two_factor_method;
+  }
+
+  return 'totp';
+}
+
+function isTwoFactorLoginRequired(user: any): boolean {
+  if (!user.two_factor_enabled) {
+    return false;
+  }
+
+  if (user.two_factor_method === 'email') {
+    return true;
+  }
+
+  if (user.two_factor_method === 'sms') {
+    return Boolean(user.two_factor_confirmed_at);
+  }
+
+  return Boolean(user.two_factor_secret_encrypted && user.two_factor_confirmed_at);
 }
 
 async function createSmsChallenge(
@@ -948,11 +976,27 @@ async function generateAuthToken(payload: Record<string, unknown>, options: Auth
 }
 
 async function verifyGoogleCredential(credential: string, clientId: string) {
-  const response = await fetch(
-    `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
-  );
+  let response: Response;
+  try {
+    response = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
+  } catch (error) {
+    console.error('Google credential verification network error', {
+      message: (error as Error).message,
+      name: (error as Error).name,
+    });
+    throw new Error('Could not contact Google to verify the sign-in credential');
+  }
 
   if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    console.error('Google credential verification rejected', {
+      status: response.status,
+      statusText: response.statusText,
+      body: errorText.slice(0, 300),
+    });
     throw new Error('Invalid Google credential');
   }
 
@@ -965,10 +1009,18 @@ async function verifyGoogleCredential(credential: string, clientId: string) {
   };
 
   if (payload.aud !== clientId) {
+    console.error('Google credential audience mismatch', {
+      expectedClientIdPrefix: clientId.slice(0, 12),
+      receivedAudiencePrefix: payload.aud?.slice(0, 12),
+    });
     throw new Error('Google credential audience mismatch');
   }
 
   if (!payload.email || payload.email_verified === false || payload.email_verified === 'false') {
+    console.error('Google credential email not verified or missing', {
+      hasEmail: Boolean(payload.email),
+      emailVerified: payload.email_verified,
+    });
     throw new Error('Google email is not verified');
   }
 
@@ -989,7 +1041,7 @@ function toAuthUser(user: any): AuthUser {
     bio: user.bio,
     phone: user.phone,
     address: user.address,
-    two_factor_enabled: Boolean(user.two_factor_enabled && user.two_factor_confirmed_at),
+    two_factor_enabled: isTwoFactorLoginRequired(user),
     two_factor_method: user.two_factor_method || 'totp',
     email_verified_at: user.email_verified_at,
     created_at: user.created_at,

@@ -267,14 +267,28 @@ export function SettingsPage() {
     setTwoFactorPanel("idle");
   };
 
+  const savedPhoneNumber = (savedProfile.phone || user?.phone || "").trim();
+  const hasSavedPhoneNumber = Boolean(savedPhoneNumber);
+
+  const requireSavedPhoneForTwoFactor = () => {
+    if (hasSavedPhoneNumber) {
+      return true;
+    }
+
+    showSaveMessage(
+      "error",
+      "Add a phone number in your profile settings before setting up two-factor authentication.",
+    );
+    return false;
+  };
+
   const handleStartTwoFactorSetup = async () => {
-    if (!twoFactorPassword) {
-      showSaveMessage("error", "Enter your current password first.");
+    if (!requireSavedPhoneForTwoFactor()) {
       return;
     }
 
-    if (twoFactorMethod === "sms" && !twoFactorSmsPhone.trim()) {
-      showSaveMessage("error", "Enter a phone number for SMS 2FA.");
+    if (!twoFactorPassword) {
+      showSaveMessage("error", "Enter your current password first.");
       return;
     }
 
@@ -282,11 +296,19 @@ export function SettingsPage() {
     setTwoFactorRecoveryCodes([]);
 
     try {
-      const setup = await setupTwoFactor(
-        twoFactorPassword,
-        twoFactorMethod,
-        twoFactorMethod === "sms" ? twoFactorSmsPhone.trim() : undefined,
-      );
+      const setup = await setupTwoFactor(twoFactorPassword, twoFactorMethod);
+
+      if (setup.method === "sms" && setup.recovery_codes) {
+        setTwoFactorRecoveryCodes(setup.recovery_codes || []);
+        setTwoFactorSetup(null);
+        setTwoFactorCode("");
+        setTwoFactorPassword("");
+        setTwoFactorPanel("recovery");
+        await refreshTwoFactorStatus();
+        showSaveMessage("success", "SMS two-factor authentication was turned on.");
+        return;
+      }
+
       setTwoFactorSetup(setup);
       setTwoFactorPanel("setup");
       setTwoFactorCode("");
@@ -460,6 +482,23 @@ export function SettingsPage() {
     }
   };
 
+  const handleRemovePhoto = async () => {
+    if (!profilePhoto) {
+      return;
+    }
+
+    const previousPhoto = profilePhoto;
+    setProfilePhoto("");
+
+    try {
+      await updateProfile({ avatar_url: null });
+      showSaveMessage("success", "Profile photo removed.");
+    } catch (error) {
+      setProfilePhoto(previousPhoto);
+      showSaveMessage("error", error.message || "Could not remove profile photo.");
+    }
+  };
+
   const handleDeleteAccount = async () => {
     if (!deletePassword) {
       showSaveMessage("error", "Enter your password to delete your account.");
@@ -577,12 +616,23 @@ export function SettingsPage() {
               </h2>
               <p className="mt-2 break-all text-[#6f7f77]">{savedProfile.email}</p>
 
-              <label
-                htmlFor="profile-photo"
-                className="profile-photo-button mt-4 inline-flex cursor-pointer rounded-full border border-[#6b7280] bg-[#9ca3af] px-5 py-2 text-white transition-colors hover:bg-[#6b7280]"
-              >
-                {isPhotoUploading ? "Uploading..." : "Change Photo"}
-              </label>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <label
+                  htmlFor="profile-photo"
+                  className="profile-photo-button inline-flex cursor-pointer rounded-full border border-[#6b7280] bg-[#9ca3af] px-5 py-2 text-white transition-colors hover:bg-[#6b7280]"
+                >
+                  {isPhotoUploading ? "Uploading..." : "Change Photo"}
+                </label>
+                {profilePhoto ? (
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    className="inline-flex rounded-full border border-[#d9b7b7] bg-white px-5 py-2 text-[#8a3333] transition-colors hover:bg-[#fff1f1] dark:border-red-400/30 dark:bg-white/5 dark:text-red-200 dark:hover:bg-red-400/10"
+                  >
+                    Remove Photo
+                  </button>
+                ) : null}
+              </div>
               <input
                 id="profile-photo"
                 type="file"
@@ -673,27 +723,6 @@ export function SettingsPage() {
                     />
                   </div>
 
-                  {(profile.email !== savedProfile.email ||
-                    profile.phone !== savedProfile.phone) && (
-                    <div>
-                      <label className="mb-2 block text-sm text-[#19221d]">
-                        Confirm Password
-                      </label>
-                      <div className="relative">
-                        <Lock className={iconClass} />
-                        <input
-                          type="password"
-                          value={profilePassword}
-                          onChange={(event) =>
-                            setProfilePassword(event.target.value)
-                          }
-                          className={inputClass}
-                          placeholder="Required for email or phone changes"
-                        />
-                      </div>
-                    </div>
-                  )}
-
                   <div>
                     <label className="mb-2 block text-sm text-[#19221d]">
                       Email Address
@@ -728,6 +757,32 @@ export function SettingsPage() {
                     </div>
                   </div>
 
+                  {(profile.email !== savedProfile.email ||
+                    profile.phone !== savedProfile.phone) && (
+                    <div className="rounded-2xl border-2 border-[#d6c8a5] bg-[#fffaf0] p-4 shadow-sm dark:border-amber-300/25 dark:bg-amber-300/10">
+                      <div className="mb-3">
+                        <label className="block text-sm font-semibold text-[#19221d] dark:text-amber-100">
+                          Current password required
+                        </label>
+                        <p className="mt-1 text-sm text-[#6f6242] dark:text-amber-100/80">
+                          Enter your current password before saving email or phone number changes.
+                        </p>
+                      </div>
+                      <div className="relative">
+                        <Lock className={iconClass} />
+                        <input
+                          type="password"
+                          value={profilePassword}
+                          onChange={(event) =>
+                            setProfilePassword(event.target.value)
+                          }
+                          className={inputClass}
+                          placeholder="Current password"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <button
                     onClick={handleProfileSave}
                     className={`${actionButtonClass} mt-6`}
@@ -755,10 +810,10 @@ export function SettingsPage() {
                         </div>
                       </div>
                       <div
-                        className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm ${
+                        className={`settings-2fa-status inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm ${
                           twoFactorStatus.enabled
-                            ? "bg-[#e8f2ec] text-[#2f5f3a]"
-                            : "bg-[#d7ddd5] text-[#5f6f67]"
+                            ? "settings-2fa-status-on bg-[#e8f2ec] text-[#2f5f3a]"
+                            : "settings-2fa-status-off bg-[#d7ddd5] text-[#5f6f67]"
                         }`}
                       >
                         {twoFactorStatus.enabled ? (
@@ -772,11 +827,14 @@ export function SettingsPage() {
 
                     <div className="flex flex-wrap items-center gap-3">
                       {!twoFactorStatus.enabled ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTwoFactorPanel("setup");
-                          }}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!requireSavedPhoneForTwoFactor()) {
+                                return;
+                              }
+                              setTwoFactorPanel("setup");
+                            }}
                           className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#336158] px-5 py-3 text-white transition-all hover:bg-[#2a4c48] hover:shadow-lg"
                         >
                           <Shield className="h-5 w-5" />
@@ -824,8 +882,7 @@ export function SettingsPage() {
                               Two-Factor Setup
                             </div>
                             <div className="text-sm text-[#5f6f67]">
-                              Choose an authenticator app or SMS, then confirm
-                              with the 6-digit verification code.
+                              Choose an authenticator app or SMS. A saved phone number is required before setup.
                             </div>
                           </div>
                           <button
@@ -884,28 +941,9 @@ export function SettingsPage() {
                               />
                             </div>
 
-                            {twoFactorMethod === "sms" ? (
-                              <div>
-                                <label className="mb-2 block text-sm text-[#19221d]">
-                                  SMS Phone Number
-                                </label>
-                                <div className="relative">
-                                  <Phone className={iconClass} />
-                                  <input
-                                    type="tel"
-                                    value={twoFactorSmsPhone}
-                                    onChange={(event) =>
-                                      setTwoFactorSmsPhone(event.target.value)
-                                    }
-                                    className={inputClass}
-                                    placeholder="+639171234567"
-                                  />
-                                </div>
-                                <div className="mt-2 text-xs text-[#5f6f67]">
-                                  Use international format, for example +639171234567.
-                                </div>
-                              </div>
-                            ) : null}
+                            <div className="rounded-xl border border-[#dce4da] bg-white/70 px-4 py-3 text-sm text-[#5f6f67]">
+                              Saved phone number: {savedPhoneNumber || "Not added yet"}
+                            </div>
                           </div>
                           {!twoFactorSetup ? (
                             <button
@@ -922,33 +960,24 @@ export function SettingsPage() {
 
                         {twoFactorSetup ? (
                           <div className="space-y-4 rounded-xl border border-[#e7ebe6] bg-[#f8faf6] p-4">
-                            <div className={twoFactorSetup.method === "sms" ? "grid gap-4" : "grid gap-4 lg:grid-cols-[240px_1fr]"}>
-                              {twoFactorSetup.method === "totp" ? (
-                                <div className="flex justify-center">
-                                  <img
-                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(twoFactorSetup.otpauth_url)}`}
-                                    alt="Authenticator QR code"
-                                    className="h-[220px] w-[220px] rounded-xl border border-[#dce4da] bg-white p-3"
-                                  />
-                                </div>
-                              ) : null}
+                            <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
+                              <div className="flex justify-center">
+                                <img
+                                  src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(twoFactorSetup.otpauth_url)}`}
+                                  alt="Authenticator QR code"
+                                  className="h-[220px] w-[220px] rounded-xl border border-[#dce4da] bg-white p-3"
+                                />
+                              </div>
 
                               <div className="space-y-4">
-                                {twoFactorSetup.method === "totp" ? (
-                                  <div>
+                                <div>
                                   <div className="text-sm text-[#5f6f67]">
                                     Manual Setup Key
                                   </div>
                                   <div className="mt-1 break-all rounded-xl bg-white px-4 py-3 font-mono text-sm text-[#19221d]">
                                     {twoFactorSetup.secret}
                                   </div>
-                                  </div>
-                                ) : (
-                                  <div className="rounded-xl border border-[#dce4da] bg-white px-4 py-3 text-sm text-[#5f6f67]">
-                                    SMS code sent to {twoFactorSetup.masked_phone}.
-                                    {twoFactorSetup.dev_code ? ` Dev code: ${twoFactorSetup.dev_code}` : ""}
-                                  </div>
-                                )}
+                                </div>
 
                                 <div>
                                   <label className="mb-2 block text-sm text-[#19221d]">
@@ -1130,7 +1159,6 @@ export function SettingsPage() {
                   </div>
 
                   {[
-                    ["Current Password", "currentPassword"],
                     ["New Password", "newPassword"],
                     ["Confirm New Password", "confirmPassword"],
                   ].map(([label, field]) => (
@@ -1163,6 +1191,32 @@ export function SettingsPage() {
                     )}
                   </div>
                 ))}
+
+                  <div className="rounded-2xl border-2 border-[#d6c8a5] bg-[#fffaf0] p-4 shadow-sm dark:border-amber-300/25 dark:bg-amber-300/10">
+                    <label className="mb-1 block text-sm font-semibold text-[#19221d] dark:text-amber-100">
+                      Current password required
+                    </label>
+                    <p className="mb-3 text-sm text-[#6f6242] dark:text-amber-100/80">
+                      Confirm your current password before updating your account password.
+                    </p>
+                    <div className="relative">
+                      <Lock className={iconClass} />
+                      <input
+                        type="password"
+                        placeholder="Current password"
+                        value={security.currentPassword}
+                        onFocus={() => setFocusedPasswordField("currentPassword")}
+                        onBlur={() => setFocusedPasswordField("")}
+                        onChange={(event) =>
+                          setSecurity({
+                            ...security,
+                            currentPassword: event.target.value,
+                          })
+                        }
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
 
                   <button
                     onClick={handleSecuritySave}

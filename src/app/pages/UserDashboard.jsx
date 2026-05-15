@@ -393,6 +393,7 @@ export function UserDashboard() {
           ))}
         </section>
 
+        {false ? (
         <motion.section
           ref={requestsRef}
           initial={{ opacity: 0, y: 20 }}
@@ -482,6 +483,7 @@ export function UserDashboard() {
             ))}
           </div>
         </motion.section>
+        ) : null}
 
         <section className="grid md:grid-cols-2 gap-6 mb-8">
           <motion.div
@@ -545,27 +547,12 @@ export function UserDashboard() {
           </motion.div>
         </section>
 
-        <motion.section
-          ref={requestsRef}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.65 }}
-          className={`${cardClass} mb-8 rounded-2xl p-6`}
-        >
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <div>
-              <h3 className="text-xl text-[#19221d]">Partner Requests</h3>
-              <p className="mt-1 text-sm text-[#5f6f67]">
-                Track DSS briefs you sent to partners.
-              </p>
-            </div>
-            <button
-              onClick={() => navigate("/dss-requests")}
-              className="rounded-xl border border-[#dce4da] px-4 py-2 text-sm font-semibold text-[#336158] hover:bg-[#f3f5f2]"
-            >
-              View all
-            </button>
-          </div>
+        {/*
+          Partner requests are intentionally not shown on the user dashboard.
+          The dedicated DSS request views still handle sent partner requests.
+        */}
+        {false ? (
+        <motion.section>
 
           {requestError && (
             <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -623,6 +610,7 @@ export function UserDashboard() {
             </button>
           )}
         </motion.section>
+        ) : null}
 
       </main>
 

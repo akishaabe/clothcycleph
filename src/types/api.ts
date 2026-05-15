@@ -7,7 +7,7 @@ export interface User {
   status?: 'active' | 'inactive' | 'suspended';
   partner_id?: string;
   two_factor_enabled?: boolean;
-  two_factor_method?: 'totp' | 'sms';
+  two_factor_method?: 'email' | 'totp' | 'sms';
   email_verified_at?: string;
   avatar_url?: string;
   bio?: string;
@@ -64,12 +64,13 @@ export interface TwoFactorSetupResponse {
   masked_phone?: string;
   two_factor_token?: string;
   dev_code?: string;
+  recovery_codes?: string[];
 }
 
 export interface TwoFactorStatusResponse {
   enabled: boolean;
   setup_started: boolean;
-  method?: 'totp' | 'sms';
+  method?: 'email' | 'totp' | 'sms';
   phone?: string;
   confirmed_at?: string;
 }
@@ -96,7 +97,7 @@ export interface GoogleAuthPayload {
 export interface UpdateProfilePayload {
   name?: string;
   email?: string;
-  avatar_url?: string;
+  avatar_url?: string | null;
   bio?: string;
   phone?: string;
   address?: string;

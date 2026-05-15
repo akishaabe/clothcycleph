@@ -10,6 +10,8 @@ import {
   EyeOff,
   KeyRound,
   ShieldCheck,
+  MailCheck,
+  RefreshCw,
 } from "lucide-react";
 
 import { useEffect, useRef, useState } from "react";
@@ -33,6 +35,7 @@ export function LoginPage() {
   const [twoFactorCode, setTwoFactorCode] = useState("");
   const [twoFactorToken, setTwoFactorToken] = useState("");
   const [twoFactorMethod, setTwoFactorMethod] = useState("email");
+  const [twoFactorEmail, setTwoFactorEmail] = useState("");
   const [authMode, setAuthMode] = useState("login");
   const [resetStep, setResetStep] = useState("code");
   const [resetToken, setResetToken] = useState("");
@@ -41,13 +44,62 @@ export function LoginPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
   const [isNewPasswordFocused, setIsNewPasswordFocused] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
   const [resendCountdown, setResendCountdown] = useState(0);
   const googleClientId = getGoogleClientId();
+  const twoFactorStorageKey = "clothcycle_pending_2fa";
+
+  const maskEmail = (value) => {
+    if (!value || !value.includes("@")) {
+      return "your registered email";
+    }
+
+    const [name, domain] = value.split("@");
+    const safeName =
+      name.length <= 2 ? `${name[0] || ""}***` : `${name.slice(0, 2)}***${name.slice(-1)}`;
+    return `${safeName}@${domain}`;
+  };
+
+  const storeTwoFactorChallenge = (challenge, fallbackEmail = email) => {
+    const method = challenge.two_factor_method || "email";
+    setTwoFactorToken(challenge.two_factor_token);
+    setTwoFactorMethod(method);
+    setTwoFactorEmail(fallbackEmail);
+    setTwoFactorCode("");
+    sessionStorage.setItem(
+      twoFactorStorageKey,
+      JSON.stringify({
+        token: challenge.two_factor_token,
+        method,
+        email: fallbackEmail,
+      }),
+    );
+  };
+
+  const clearTwoFactorChallenge = () => {
+    setTwoFactorToken("");
+    setTwoFactorMethod("email");
+    setTwoFactorEmail("");
+    setTwoFactorCode("");
+    sessionStorage.removeItem(twoFactorStorageKey);
+  };
+
+  useEffect(() => {
+    try {
+      const storedChallenge = JSON.parse(sessionStorage.getItem(twoFactorStorageKey) || "null");
+      if (storedChallenge?.token) {
+        setTwoFactorToken(storedChallenge.token);
+        setTwoFactorMethod(storedChallenge.method || "email");
+        setTwoFactorEmail(storedChallenge.email || "");
+      }
+    } catch {
+      sessionStorage.removeItem(twoFactorStorageKey);
+    }
+  }, []);
 
   useEffect(() => {
     if (resendCountdown <= 0) {
@@ -87,11 +139,16 @@ export function LoginPage() {
             try {
               setError("");
               setSuccessMessage("");
+              setIsGoogleSubmitting(true);
+
+              if (!response?.credential) {
+                throw new Error("Google did not return a sign-in credential. Please try again.");
+              }
+
               const authResponse = await continueWithGoogle(response.credential);
 
               if ("requiresTwoFactor" in authResponse) {
-                setTwoFactorToken(authResponse.two_factor_token);
-                setTwoFactorMethod(authResponse.two_factor_method || "email");
+                storeTwoFactorChallenge(authResponse, email);
                 setSuccessMessage(
                   authResponse.two_factor_method === "totp"
                     ? "Enter your authenticator code to continue."
@@ -105,7 +162,10 @@ export function LoginPage() {
 
               navigate(getDashboardPathForRole(authResponse.user.role));
             } catch (googleError) {
+              console.error("Google sign-in callback failed", googleError);
               setError(googleError.message || "Google login failed");
+            } finally {
+              setIsGoogleSubmitting(false);
             }
           },
         });
@@ -135,8 +195,16 @@ export function LoginPage() {
 
     try {
       if (twoFactorToken) {
-        const user = await verifyTwoFactor(twoFactorToken, twoFactorCode, rememberMe);
-        navigate(getDashboardPathForRole(user.role));
+        if (!/^\d{6}$/.test(twoFactorCode)) {
+          throw new Error("Enter the 6-digit verification code.");
+        }
+
+        const user = await verifyTwoFactor(twoFactorToken, twoFactorCode);
+        clearTwoFactorChallenge();
+        setSuccessMessage("Verification successful. Redirecting...");
+        window.setTimeout(() => {
+          navigate(getDashboardPathForRole(user.role));
+        }, 500);
         return;
       }
 
@@ -182,11 +250,10 @@ export function LoginPage() {
         return;
       }
 
-      const response = await login(email, password, rememberMe);
+      const response = await login(email, password);
 
       if ("requiresTwoFactor" in response) {
-        setTwoFactorToken(response.two_factor_token);
-        setTwoFactorMethod(response.two_factor_method || "email");
+        storeTwoFactorChallenge(response, email);
         setPassword("");
         setSuccessMessage(
           response.two_factor_method === "totp"
@@ -209,9 +276,7 @@ export function LoginPage() {
 
   const returnToLogin = () => {
     setAuthMode("login");
-    setTwoFactorToken("");
-    setTwoFactorMethod("email");
-    setTwoFactorCode("");
+    clearTwoFactorChallenge();
     setResetToken("");
     setNewPassword("");
     setConfirmNewPassword("");
@@ -233,8 +298,7 @@ export function LoginPage() {
     try {
       if (twoFactorToken && ["email", "sms"].includes(twoFactorMethod)) {
         const response = await resendTwoFactorCode(twoFactorToken);
-        setTwoFactorToken(response.two_factor_token);
-        setTwoFactorMethod(response.two_factor_method || twoFactorMethod);
+        storeTwoFactorChallenge(response, twoFactorEmail || email);
         setSuccessMessage(
           response.dev_code ? `${response.message} Dev code: ${response.dev_code}` : response.message
         );
@@ -559,7 +623,33 @@ export function LoginPage() {
               ) : null}
 
               {twoFactorToken ? (
-                <div>
+                <div className="rounded-3xl border border-[#dce4da] bg-[#f8faf6]/90 p-5 shadow-[0_12px_40px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/5">
+                  <div className="mb-5 flex items-start gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#e7f0ea] text-[#336158] dark:bg-[#336158]/20 dark:text-emerald-200">
+                      {twoFactorMethod === "email" ? (
+                        <MailCheck className="h-6 w-6" />
+                      ) : (
+                        <ShieldCheck className="h-6 w-6" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-lg font-semibold text-[#19221d] dark:text-white">
+                        {twoFactorMethod === "email"
+                          ? "Email verification required"
+                          : twoFactorMethod === "sms"
+                            ? "SMS verification required"
+                            : "Authenticator verification required"}
+                      </div>
+                      <p className="mt-1 text-sm leading-relaxed text-[#5f6f67] dark:text-zinc-400">
+                        {twoFactorMethod === "email"
+                          ? `We sent a 6-digit verification code to ${maskEmail(twoFactorEmail || email)}. Enter it below to finish signing in.`
+                          : twoFactorMethod === "sms"
+                            ? "Enter the 6-digit code sent to the phone number on your profile."
+                            : "Enter the 6-digit code from your authenticator app."}
+                      </p>
+                    </div>
+                  </div>
+
                   <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
                     Verification Code
                   </label>
@@ -569,13 +659,34 @@ export function LoginPage() {
                       type="text"
                       inputMode="numeric"
                       value={twoFactorCode}
-                      onChange={(e) => setTwoFactorCode(e.target.value)}
+                      onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                       placeholder="123456"
                       maxLength={6}
+                      autoComplete="one-time-code"
+                      autoFocus
                       required
-                      className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-4 text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
+                      className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-4 text-center font-mono text-xl tracking-[0.25em] text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
                     />
                   </div>
+
+                  {["email", "sms"].includes(twoFactorMethod) ? (
+                    <div className="mt-4 flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                      <span className="text-[#5f6f67] dark:text-zinc-400">
+                        {resendCountdown > 0
+                          ? `You can resend a code in ${resendCountdown}s.`
+                          : "Didn't receive the code?"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleResend}
+                        disabled={isSubmitting || resendCountdown > 0}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#dce4da] bg-white px-4 py-2 text-[#336158] transition-colors hover:bg-[#f3f5f2] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-emerald-200 dark:hover:bg-white/10"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        Resend code
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -664,7 +775,7 @@ export function LoginPage() {
                 </>
               ) : null}
 
-              {(twoFactorToken && ["email", "sms"].includes(twoFactorMethod)) || authMode === "reset" ? (
+              {!twoFactorToken && authMode === "reset" ? (
                 <div className="text-sm text-[#5f6f67] dark:text-zinc-400">
                   {resendCountdown > 0
                     ? `Didn't receive a code? You can request ${authMode === "reset" ? "a new reset code" : "another code"} again in ${resendCountdown}s.`
@@ -700,40 +811,17 @@ export function LoginPage() {
                       <div ref={googleButtonRef} />
                     </div>
                   ) : null}
+
+                  {isGoogleSubmitting ? (
+                    <div className="rounded-xl border border-[#dce4da] bg-[#f8faf6] px-4 py-3 text-sm text-[#5f6f67] dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                      Checking your Google account...
+                    </div>
+                  ) : null}
                 </>
               ) : null}
 
               {!twoFactorToken && authMode === "login" ? (
-              <div className="flex items-center justify-between">
-                <label
-                  className="
-                    flex
-                    items-center
-                    gap-3
-                    text-sm
-                    text-[#5f6f67]
-                    dark:text-zinc-400
-                    cursor-pointer
-                  "
-                >
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(event) => setRememberMe(event.target.checked)}
-                    className="
-                      w-4
-                      h-4
-                      rounded
-                      border-[#d7ddd5]
-                      bg-white
-                      dark:border-white/20
-                      dark:bg-white/5
-                    "
-                  />
-
-                  Remember me
-                </label>
-
+              <div className="flex justify-end">
                 <button
                   type="button"
                   onClick={() => {

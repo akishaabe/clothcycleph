@@ -774,19 +774,19 @@ export function AdminDashboard() {
           transition={{ delay: 0.35 }}
           className="mb-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-lg"
         >
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <div>
+          <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
               <h3 className="text-xl text-gray-950">DSS Explanation Audit</h3>
               <p className="mt-1 text-sm text-gray-600">
                 Recent recommendation runs with engine version, rule matches,
                 and partner handoff context.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto lg:justify-end">
               <select
                 value={dssAuditSort}
                 onChange={(event) => setDssAuditSort(event.target.value)}
-                className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+                className="min-w-[160px] flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 sm:flex-none"
               >
                 <option value="newest">Newest</option>
                 <option value="confidence">Highest confidence</option>
@@ -794,13 +794,13 @@ export function AdminDashboard() {
               </select>
               <button
                 onClick={() => setShowAllDssAudit((current) => !current)}
-                className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+                className="flex-1 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 sm:flex-none"
               >
                 {showAllDssAudit ? "Show less" : "View all"}
               </button>
               <button
                 onClick={handleExportAudit}
-                className="inline-flex items-center gap-2 rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-black sm:flex-none"
               >
                 <Download className="h-4 w-4" />
                 Export CSV

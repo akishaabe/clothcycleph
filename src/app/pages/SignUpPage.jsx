@@ -28,6 +28,7 @@ export function SignUpPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
@@ -53,6 +54,12 @@ export function SignUpPage() {
             try {
               setError("");
               setSuccessMessage("");
+              setIsGoogleSubmitting(true);
+
+              if (!response?.credential) {
+                throw new Error("Google did not return a sign-in credential. Please try again.");
+              }
+
               const authResponse = await continueWithGoogle(response.credential);
 
               if ("requiresTwoFactor" in authResponse) {
@@ -70,7 +77,10 @@ export function SignUpPage() {
 
               navigate(getDashboardPathForRole(authResponse.user.role));
             } catch (googleError) {
+              console.error("Google signup callback failed", googleError);
               setError(googleError.message || "Google signup failed");
+            } finally {
+              setIsGoogleSubmitting(false);
             }
           },
         });
@@ -236,6 +246,12 @@ export function SignUpPage() {
             {googleClientId ? (
               <div className="flex justify-center">
                 <div ref={googleButtonRef} />
+              </div>
+            ) : null}
+
+            {isGoogleSubmitting ? (
+              <div className="rounded-xl border border-[#dce4da] bg-[#f8faf6] px-4 py-3 text-sm text-[#5f6f67]">
+                Checking your Google account...
               </div>
             ) : null}
 

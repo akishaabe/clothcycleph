@@ -18,6 +18,14 @@
   background-color: #6b7280 !important;
 }
 
+.settings-2fa-status-on {
+  border-color: #b9d3bd;
+}
+
+.settings-2fa-status-off {
+  border-color: #c6cec3;
+}
+
 .settings-theme-partner {
   --settings-bg: radial-gradient(circle at top left, #e4edf6, transparent 28%),
     linear-gradient(135deg, #f3f7fb, #eef4fa, #e4edf6);
@@ -144,4 +152,18 @@
 .settings-theme-admin input {
   background-color: var(--settings-card) !important;
   color: var(--settings-text) !important;
+}
+
+.dark .settings-theme-admin .settings-2fa-status-on,
+.dark .settings-theme-partner .settings-2fa-status-on {
+  background-color: rgba(52, 211, 153, 0.14) !important;
+  border-color: rgba(110, 231, 183, 0.36) !important;
+  color: #bbf7d0 !important;
+}
+
+.dark .settings-theme-admin .settings-2fa-status-off,
+.dark .settings-theme-partner .settings-2fa-status-off {
+  background-color: rgba(148, 163, 184, 0.14) !important;
+  border-color: rgba(203, 213, 225, 0.28) !important;
+  color: #d1d5db !important;
 }

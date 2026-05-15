@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS users (
   email_verified_at TEXT,
   last_login_at TEXT,
   two_factor_enabled INTEGER DEFAULT 0,
-  two_factor_method TEXT DEFAULT 'totp' CHECK (two_factor_method IN ('totp', 'sms')),
+  two_factor_method TEXT DEFAULT 'totp' CHECK (two_factor_method IN ('email', 'totp', 'sms')),
   two_factor_secret_encrypted TEXT,
   two_factor_confirmed_at TEXT,
   two_factor_code_hash TEXT,

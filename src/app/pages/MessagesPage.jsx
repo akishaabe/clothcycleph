@@ -426,7 +426,7 @@ export function MessagesPage() {
 
           <button
             onClick={() => navigate(details.backPath)}
-            className="messages-secondary-button inline-flex items-center gap-2 rounded-xl border px-4 py-2 transition-colors"
+            className="messages-secondary-button inline-flex shrink-0 items-center gap-2 rounded-xl border px-4 py-2 transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Dashboard
@@ -434,29 +434,29 @@ export function MessagesPage() {
         </div>
       </nav>
 
-      <main className="mx-auto max-w-[1650px] p-6 xl:p-8">
-        <section className="messages-shell grid h-[calc(100vh-150px)] min-h-[620px] overflow-hidden rounded-[28px] border shadow-[0_18px_54px_rgba(25,34,29,0.1)] lg:grid-cols-[430px_1fr]">
+      <main className="mx-auto max-w-[1650px] p-4 sm:p-6 xl:p-8">
+        <section className="messages-shell grid min-h-[620px] overflow-hidden rounded-[28px] border shadow-[0_18px_54px_rgba(25,34,29,0.1)] lg:h-[calc(100vh-150px)] lg:grid-cols-[minmax(320px,430px)_minmax(0,1fr)]">
           <aside className="messages-sidebar flex min-h-0 flex-col border-r">
-            <div className="border-b p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
+            <div className="border-b p-4 sm:p-6">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div className="min-w-0">
                   <h1 className="messages-heading font-sans text-2xl font-bold">
                     {details.label}
                   </h1>
-                  <p className="messages-muted mt-1 text-sm">
+                  <p className="messages-muted mt-1 break-words text-sm">
                     Signed in as {currentUser?.name} ({roleLabel[currentUser?.role]})
                   </p>
                 </div>
-                <details.icon className="messages-brand-icon h-8 w-8" />
+                <details.icon className="messages-brand-icon h-8 w-8 shrink-0" />
               </div>
-              <div className="messages-search flex items-center gap-4 rounded-2xl border px-6 py-5">
-                <Search className="h-6 w-6" />
+              <div className="messages-search flex items-center gap-3 rounded-2xl border px-4 py-3 sm:px-6 sm:py-5">
+                <Search className="h-5 w-5 shrink-0 sm:h-6 sm:w-6" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Search conversations"
-                  className="w-full bg-transparent text-lg outline-none"
+                  className="min-w-0 w-full bg-transparent text-base outline-none sm:text-lg"
                 />
               </div>
             </div>
@@ -466,11 +466,11 @@ export function MessagesPage() {
                 <button
                   key={conversation.other_user_id}
                   onClick={() => setActiveUserId(conversation.other_user_id)}
-                  className={`messages-thread flex w-full gap-4 p-5 text-left transition-colors ${
+                  className={`messages-thread flex w-full gap-3 p-4 text-left transition-colors sm:gap-4 sm:p-5 ${
                     conversation.other_user_id === activeUserId ? "is-active" : ""
                   }`}
                 >
-                  <div className="messages-avatar flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-lg">
+                  <div className="messages-avatar flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-lg sm:h-14 sm:w-14">
                     {conversation.other_user_avatar_url ? (
                       <img
                         src={conversation.other_user_avatar_url}
@@ -482,8 +482,8 @@ export function MessagesPage() {
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <h2 className="truncate font-sans text-lg font-bold messages-heading">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                      <h2 className="min-w-0 truncate font-sans text-base font-bold messages-heading sm:text-lg">
                         {conversation.other_user_name}
                       </h2>
                       <span className="shrink-0 text-sm messages-muted">
@@ -493,7 +493,7 @@ export function MessagesPage() {
                     <p className="mt-1 text-base messages-muted">
                       {roleLabel[conversation.other_user_role]}
                     </p>
-                    <p className="mt-3 truncate text-lg messages-preview">
+                    <p className="mt-2 line-clamp-2 break-words text-sm messages-preview sm:mt-3 sm:text-base">
                       {conversation.last_message_content}
                     </p>
                   </div>
@@ -549,17 +549,17 @@ export function MessagesPage() {
           <section className="messages-chat flex min-h-0 flex-col">
             {activeParticipant ? (
               <>
-                <header className="flex flex-col gap-3 border-b p-7 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h2 className="font-sans text-3xl font-bold messages-heading">
+                <header className="flex flex-col gap-3 border-b p-4 sm:p-6 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="break-words font-sans text-2xl font-bold messages-heading sm:text-3xl">
                       {activeParticipant.name}
                     </h2>
-                    <p className="mt-1 text-lg messages-muted">
+                    <p className="mt-1 break-all text-base messages-muted sm:text-lg">
                       {roleLabel[activeParticipant.role]} - {activeParticipant.email}
                     </p>
                   </div>
-                  <span className="messages-pill inline-flex w-fit items-center gap-2 rounded-full px-5 py-2.5 text-lg">
-                    <Clock3 className="h-5 w-5" />
+                  <span className="messages-pill inline-flex w-fit max-w-full items-center gap-2 rounded-full px-4 py-2 text-sm sm:px-5 sm:py-2.5 sm:text-lg">
+                    <Clock3 className="h-5 w-5 shrink-0" />
                     Transaction and inquiry thread
                   </span>
                 </header>
@@ -588,7 +588,7 @@ export function MessagesPage() {
                         className={`flex ${isMine ? "justify-end" : "justify-start"}`}
                       >
                         <div
-                          className={`messages-bubble max-w-[78%] rounded-2xl px-4 py-3 ${
+                          className={`messages-bubble max-w-[min(78%,42rem)] break-words rounded-2xl px-4 py-3 ${
                             isMine ? "is-mine" : "is-theirs"
                           }`}
                         >
@@ -613,8 +613,8 @@ export function MessagesPage() {
                   <div ref={messagesEndRef} />
                 </div>
 
-                <form onSubmit={handleSend} className="border-t p-6">
-                  <div className="messages-composer rounded-2xl border p-4">
+                <form onSubmit={handleSend} className="border-t p-4 sm:p-6">
+                  <div className="messages-composer rounded-2xl border p-3 sm:p-4">
                     {selectedFile && (
                       <div className="messages-attachment mb-2 flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm">
                         <div className="min-w-0">
@@ -638,7 +638,7 @@ export function MessagesPage() {
                         </button>
                       </div>
                     )}
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3">
                       <input
                         ref={fileInputRef}
                         type="file"
@@ -650,7 +650,7 @@ export function MessagesPage() {
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="messages-icon-button rounded-xl p-4"
+                        className="messages-icon-button rounded-xl p-3 sm:p-4"
                         aria-label="Attach file"
                         title="Attach file"
                       >
@@ -661,12 +661,12 @@ export function MessagesPage() {
                         value={draft}
                         onChange={(event) => setDraft(event.target.value)}
                         placeholder="Write a message..."
-                        className="min-w-0 flex-1 bg-transparent px-2 text-lg outline-none"
+                        className="min-w-0 flex-1 bg-transparent px-2 text-base outline-none sm:text-lg"
                       />
                       <button
                         type="submit"
                         disabled={!draft.trim()}
-                        className="messages-send inline-flex items-center gap-2 rounded-xl px-6 py-4 text-lg font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                        className="messages-send inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-3 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:py-4 sm:text-lg"
                       >
                         <Send className="h-5 w-5" />
                         Send

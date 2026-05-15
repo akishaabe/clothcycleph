@@ -153,36 +153,36 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    if (user.two_factor_enabled && user.two_factor_secret_encrypted && user.two_factor_confirmed_at) {
-      const challenge = createTotpChallenge(user);
+    if (isTwoFactorLoginRequired(user)) {
+      const method = getLoginTwoFactorMethod(user);
+      const challenge =
+        method === 'email'
+          ? await createEmailVerificationChallenge(user, 'two_factor')
+          : method === 'sms'
+            ? await createSmsChallenge(user)
+            : createTotpChallenge(user);
 
       return res.json({
-        message: 'Two-factor verification required. Enter your authenticator code.',
+        message:
+          method === 'email'
+            ? 'Two-factor verification required. Check your email for your verification code.'
+            : method === 'sms'
+              ? 'Two-factor verification required. Check your phone for your verification code.'
+              : 'Two-factor verification required. Enter your authenticator code.',
         requiresTwoFactor: true,
         two_factor_token: challenge.twoFactorToken,
-        two_factor_method: 'totp',
+        two_factor_method: method,
       });
     }
 
-    await query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
-    await recordAuthEvent({
-      userId: user.id,
-      eventType: 'login_success',
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
-    });
-
-    const token = generateToken({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-    });
-
+    const emailChallenge = await createEmailVerificationChallenge(user, 'two_factor');
     return res.json({
-      message: 'Login successful',
-      user: toAuthUser(user),
-      token,
+      message: 'Two-factor verification required. Check your email for your verification code.',
+      requiresTwoFactor: true,
+      two_factor_token: emailChallenge.twoFactorToken,
+      two_factor_method: 'email',
     });
+
   } catch (error) {
     sendAuthError(res, error);
   }
@@ -216,17 +216,6 @@ export const continueWithGoogle = async (req: Request, res: Response) => {
     }
 
     const user = userResult.rows[0];
-
-    if (user.two_factor_enabled && user.two_factor_secret_encrypted && user.two_factor_confirmed_at) {
-      const challenge = createTotpChallenge(user);
-
-      return res.json({
-        message: 'Google account verified. Enter your authenticator code.',
-        requiresTwoFactor: true,
-        two_factor_token: challenge.twoFactorToken,
-        two_factor_method: 'totp',
-      });
-    }
 
     await query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
     await recordAuthEvent({
@@ -309,6 +298,31 @@ export const verifyTwoFactor = async (req: Request, res: Response) => {
          WHERE id = $1`,
         [user.id]
       );
+    } else if (decoded.method === 'sms') {
+      if (!user.two_factor_code_hash || !user.two_factor_code_is_valid) {
+        throw new AppError(400, 'Verification code has expired');
+      }
+
+      const isValidSmsCode = await comparePassword(code, user.two_factor_code_hash);
+
+      if (!isValidSmsCode) {
+        await recordAuthEvent({
+          userId: user.id,
+          eventType: 'two_factor_failed',
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+        });
+        throw new AppError(401, 'Invalid two-factor code');
+      }
+
+      await query(
+        `UPDATE users
+         SET two_factor_code_hash = NULL,
+             two_factor_code_expires_at = NULL,
+             last_login_at = NOW()
+         WHERE id = $1`,
+        [user.id]
+      );
     } else {
       if (!user.two_factor_enabled || !user.two_factor_secret_encrypted || !user.two_factor_confirmed_at) {
         throw new AppError(400, 'Two-factor authentication is not enabled');
@@ -362,12 +376,12 @@ export const resendTwoFactorCode = async (req: Request, res: Response) => {
     const { two_factor_token } = req.body;
     const decoded = verifyToken(two_factor_token);
 
-    if (decoded.purpose !== 'email_verification' && decoded.method !== 'email') {
-      throw new AppError(400, 'This verification flow cannot resend email codes');
+    if (decoded.purpose !== 'email_verification' && decoded.method !== 'email' && decoded.method !== 'sms') {
+      throw new AppError(400, 'This verification flow cannot resend codes');
     }
 
     const result = await query(
-      `SELECT id, email, role
+      `SELECT id, email, role, phone
        FROM users
        WHERE id = $1`,
       [decoded.id]
@@ -378,20 +392,28 @@ export const resendTwoFactorCode = async (req: Request, res: Response) => {
     }
 
     const user = result.rows[0];
-    const challenge = await createEmailVerificationChallenge(user);
+    const isSms = decoded.method === 'sms';
+    const challenge = isSms
+      ? await createSmsChallenge(user)
+      : await createEmailVerificationChallenge(
+          user,
+          decoded.purpose === 'email_verification' ? 'email_verification' : 'two_factor'
+        );
 
     await recordAuthEvent({
       userId: user.id,
-      eventType: 'email_verification_resent',
+      eventType: isSms ? 'two_factor_sms_resent' : 'email_verification_resent',
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
 
     res.json({
-      message: 'A new verification code has been sent to your email.',
+      message: isSms
+        ? 'A new verification code has been prepared for SMS two-factor authentication.'
+        : 'A new verification code has been sent to your email.',
       requiresTwoFactor: true,
       two_factor_token: challenge.twoFactorToken,
-      two_factor_method: 'email',
+      two_factor_method: isSms ? 'sms' : 'email',
     });
   } catch (error) {
     sendAuthError(res, error);
@@ -459,7 +481,7 @@ export const getTwoFactorStatus = async (req: Request, res: Response) => {
     }
 
     const result = await query(
-      `SELECT two_factor_enabled, two_factor_secret_encrypted, two_factor_confirmed_at
+      `SELECT two_factor_enabled, two_factor_method, two_factor_secret_encrypted, two_factor_confirmed_at, phone
        FROM users
        WHERE id = $1`,
       [userId]
@@ -472,9 +494,11 @@ export const getTwoFactorStatus = async (req: Request, res: Response) => {
     const user = result.rows[0];
 
     res.json({
-      enabled: Boolean(user.two_factor_enabled && user.two_factor_confirmed_at),
-      setup_started: Boolean(user.two_factor_secret_encrypted),
+      enabled: isTwoFactorLoginRequired(user),
+      method: user.two_factor_method || 'totp',
+      setup_started: Boolean(user.two_factor_secret_encrypted || user.two_factor_method === 'sms'),
       confirmed_at: user.two_factor_confirmed_at,
+      phone: user.phone,
     });
   } catch (error) {
     sendAuthError(res, error);
@@ -484,7 +508,7 @@ export const getTwoFactorStatus = async (req: Request, res: Response) => {
 export const setupTwoFactor = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { password } = req.body;
+    const { password, method = 'totp' } = req.body;
 
     if (!userId) {
       throw new AppError(401, 'User not authenticated');
@@ -496,7 +520,7 @@ export const setupTwoFactor = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await query('SELECT id, email, password_hash FROM users WHERE id = $1', [userId]);
+    const result = await query('SELECT id, email, phone, password_hash FROM users WHERE id = $1', [userId]);
 
     if (result.rows.length === 0) {
       throw new AppError(404, 'User not found');
@@ -509,12 +533,46 @@ export const setupTwoFactor = async (req: Request, res: Response) => {
       throw new AppError(401, 'Invalid password');
     }
 
+    if (!user.phone) {
+      throw new AppError(400, 'Add a phone number in your profile settings before setting up two-factor authentication');
+    }
+
+    if (method === 'sms') {
+      const recoveryCodes = await replaceRecoveryCodes(userId);
+
+      await query(
+        `UPDATE users
+         SET two_factor_enabled = true,
+             two_factor_method = 'sms',
+             two_factor_secret_encrypted = NULL,
+             two_factor_confirmed_at = NOW(),
+             two_factor_code_hash = NULL,
+             two_factor_code_expires_at = NULL
+         WHERE id = $1`,
+        [userId]
+      );
+
+      await recordAuthEvent({
+        userId,
+        eventType: 'two_factor_enabled',
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+
+      return res.json({
+        message: 'SMS two-factor authentication enabled',
+        method: 'sms',
+        recovery_codes: recoveryCodes,
+      });
+    }
+
     const secret = generateTotpSecret();
     const encryptedSecret = encryptSecret(secret);
 
     await query(
       `UPDATE users
        SET two_factor_enabled = false,
+           two_factor_method = 'totp',
            two_factor_secret_encrypted = $1,
            two_factor_confirmed_at = NULL
        WHERE id = $2`,
@@ -541,20 +599,20 @@ export const setupTwoFactor = async (req: Request, res: Response) => {
 export const enableTwoFactor = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { code, password } = req.body;
+    const { code, password, method = 'totp' } = req.body;
 
     if (!userId) {
       throw new AppError(401, 'User not authenticated');
     }
 
     const result = await query(
-      `SELECT password_hash, two_factor_secret_encrypted
+      `SELECT password_hash, phone, two_factor_secret_encrypted
        FROM users
        WHERE id = $1`,
       [userId]
     );
 
-    if (result.rows.length === 0 || !result.rows[0].two_factor_secret_encrypted) {
+    if (result.rows.length === 0 || (method !== 'sms' && !result.rows[0].two_factor_secret_encrypted)) {
       throw new AppError(400, 'Start two-factor setup before enabling it');
     }
 
@@ -562,6 +620,38 @@ export const enableTwoFactor = async (req: Request, res: Response) => {
 
     if (!isValidPassword) {
       throw new AppError(401, 'Invalid password');
+    }
+
+    if (!result.rows[0].phone) {
+      throw new AppError(400, 'Add a phone number in your profile settings before setting up two-factor authentication');
+    }
+
+    if (method === 'sms') {
+      const recoveryCodes = await replaceRecoveryCodes(userId);
+
+      await query(
+        `UPDATE users
+         SET two_factor_enabled = true,
+             two_factor_method = 'sms',
+             two_factor_secret_encrypted = NULL,
+             two_factor_confirmed_at = NOW(),
+             two_factor_code_hash = NULL,
+             two_factor_code_expires_at = NULL
+         WHERE id = $1`,
+        [userId]
+      );
+
+      await recordAuthEvent({
+        userId,
+        eventType: 'two_factor_enabled',
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+
+      return res.json({
+        message: 'SMS two-factor authentication enabled',
+        recovery_codes: recoveryCodes,
+      });
     }
 
     const secret = decryptSecret(result.rows[0].two_factor_secret_encrypted);
@@ -581,6 +671,7 @@ export const enableTwoFactor = async (req: Request, res: Response) => {
     await query(
       `UPDATE users
        SET two_factor_enabled = true,
+           two_factor_method = 'totp',
            two_factor_confirmed_at = NOW()
        WHERE id = $1`,
       [userId]
@@ -701,7 +792,10 @@ function shouldExposeDevSecrets() {
   return process.env.NODE_ENV !== 'production' && config.email.provider === 'console';
 }
 
-async function createEmailVerificationChallenge(user: { id: string; email: string; role: string }) {
+async function createEmailVerificationChallenge(
+  user: { id: string; email: string; role: string },
+  purpose: 'email_verification' | 'two_factor' = 'email_verification'
+) {
   const code = generateNumericCode();
   const codeHash = await hashPassword(code);
 
@@ -719,7 +813,7 @@ async function createEmailVerificationChallenge(user: { id: string; email: strin
     id: user.id,
     email: user.email,
     role: user.role,
-    purpose: 'email_verification',
+    purpose,
     method: 'email',
   });
 
@@ -742,6 +836,61 @@ function createTotpChallenge(user: { id: string; email: string; role: string }) 
   return { twoFactorToken };
 }
 
+function getLoginTwoFactorMethod(user: any): 'email' | 'sms' | 'totp' {
+  if (user.two_factor_method === 'email' || user.two_factor_method === 'sms') {
+    return user.two_factor_method;
+  }
+
+  return 'totp';
+}
+
+function isTwoFactorLoginRequired(user: any): boolean {
+  if (!user.two_factor_enabled) {
+    return false;
+  }
+
+  if (user.two_factor_method === 'email') {
+    return true;
+  }
+
+  if (user.two_factor_method === 'sms') {
+    return Boolean(user.two_factor_confirmed_at);
+  }
+
+  return Boolean(user.two_factor_secret_encrypted && user.two_factor_confirmed_at);
+}
+
+async function createSmsChallenge(user: { id: string; email: string; role: string; phone?: string | null }) {
+  if (!user.phone) {
+    throw new AppError(400, 'A phone number is required for SMS two-factor authentication');
+  }
+
+  const code = generateNumericCode();
+  const codeHash = await hashPassword(code);
+
+  await query(
+    `UPDATE users
+     SET two_factor_code_hash = $1,
+         two_factor_code_expires_at = NOW() + INTERVAL '10 minutes'
+     WHERE id = $2`,
+    [codeHash, user.id]
+  );
+
+  if (shouldExposeDevSecrets()) {
+    console.log(`Dev SMS 2FA code for ${user.email}: ${code}`);
+  }
+
+  const twoFactorToken = generateToken({
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    purpose: 'two_factor',
+    method: 'sms',
+  });
+
+  return { twoFactorToken };
+}
+
 function toAuthUser(user: any) {
   return {
     id: user.id,
@@ -752,7 +901,8 @@ function toAuthUser(user: any) {
     bio: user.bio,
     phone: user.phone,
     address: user.address,
-    two_factor_enabled: Boolean(user.two_factor_enabled && user.two_factor_confirmed_at),
+    two_factor_enabled: isTwoFactorLoginRequired(user),
+    two_factor_method: user.two_factor_method,
     email_verified_at: user.email_verified_at,
     created_at: user.created_at,
     updated_at: user.updated_at,
@@ -761,14 +911,31 @@ function toAuthUser(user: any) {
 
 async function verifyGoogleCredential(credential: string) {
   if (!config.google.clientId) {
+    console.error('Google auth configuration missing: GOOGLE_CLIENT_ID is not set');
     throw new AppError(500, 'Google login is not configured');
   }
 
-  const response = await fetch(
-    `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
-  );
+  let response: globalThis.Response;
+  try {
+    response = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
+  } catch (error) {
+    console.error('Google credential verification network error', {
+      message: (error as Error).message,
+      name: (error as Error).name,
+    });
+    throw new AppError(502, 'Could not contact Google to verify the sign-in credential');
+  }
 
   if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    console.error('Google credential verification rejected', {
+      status: response.status,
+      statusText: response.statusText,
+      body: errorText.slice(0, 300),
+    });
     throw new AppError(401, 'Invalid Google credential');
   }
 
@@ -781,10 +948,18 @@ async function verifyGoogleCredential(credential: string) {
   };
 
   if (payload.aud !== config.google.clientId) {
+    console.error('Google credential audience mismatch', {
+      expectedClientIdPrefix: config.google.clientId.slice(0, 12),
+      receivedAudiencePrefix: payload.aud?.slice(0, 12),
+    });
     throw new AppError(401, 'Google credential audience mismatch');
   }
 
   if (!payload.email || payload.email_verified === false || payload.email_verified === 'false') {
+    console.error('Google credential email not verified or missing', {
+      hasEmail: Boolean(payload.email),
+      emailVerified: payload.email_verified,
+    });
     throw new AppError(401, 'Google email is not verified');
   }
 
@@ -926,15 +1101,21 @@ export const updateProfile = async (req: Request, res: Response) => {
       }
     }
 
+    const hasAvatarUrl = Object.prototype.hasOwnProperty.call(req.body, 'avatar_url');
+    const profilePhoto =
+      hasAvatarUrl && avatar_url
+        ? JSON.stringify({ url: avatar_url, updated_at: new Date().toISOString() })
+        : null;
+
     const result = await query(
       `UPDATE users 
        SET name = COALESCE($2, name), 
            email = COALESCE($3, email),
-           avatar_url = COALESCE($4, avatar_url),
-           profile_photo = COALESCE($5::jsonb, profile_photo),
-           bio = COALESCE($6, bio),
-           phone = COALESCE($7, phone),
-           address = COALESCE($8, address),
+           avatar_url = CASE WHEN $4 THEN $5 ELSE avatar_url END,
+           profile_photo = CASE WHEN $4 THEN $6::jsonb ELSE profile_photo END,
+           bio = COALESCE($7, bio),
+           phone = COALESCE($8, phone),
+           address = COALESCE($9, address),
            updated_at = NOW()
        WHERE id = $1
        RETURNING id, email, name, role, avatar_url, profile_photo, bio, phone, address, two_factor_enabled, created_at, updated_at`,
@@ -942,8 +1123,9 @@ export const updateProfile = async (req: Request, res: Response) => {
         userId,
         name,
         email,
+        hasAvatarUrl,
         avatar_url,
-        avatar_url ? JSON.stringify({ url: avatar_url, updated_at: new Date().toISOString() }) : null,
+        profilePhoto,
         bio,
         phone,
         address,

@@ -176,6 +176,21 @@
   color: var(--messages-muted);
 }
 
+@media (max-width: 1199px) {
+  .messages-shell {
+    height: auto !important;
+    min-height: calc(100vh - 128px);
+  }
+
+  .messages-sidebar {
+    max-height: 34vh;
+  }
+
+  .messages-chat {
+    min-height: min(62vh, 680px);
+  }
+}
+
 @media (max-width: 1023px) {
   .messages-shell,
   .messages-chat {
@@ -185,5 +200,23 @@
   .messages-sidebar {
     border-right-width: 0;
     border-bottom: 1px solid var(--messages-border);
+  }
+}
+
+@media (max-width: 640px) {
+  .messages-page nav > div {
+    gap: 0.75rem;
+  }
+
+  .messages-shell {
+    border-radius: 1.25rem;
+  }
+
+  .messages-sidebar {
+    max-height: 38vh;
+  }
+
+  .messages-bubble {
+    max-width: min(88%, 32rem) !important;
   }
 }

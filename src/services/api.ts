@@ -29,6 +29,7 @@ import {
 } from '../types/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const REQUEST_TIMEOUT_MS = 20000;
 
 // Helper function to get auth token
 const getAuthToken = (): string | null => {
@@ -45,12 +46,22 @@ const persistAuth = (data: AuthResponse, remember = true) => {
   persistentStorage.setItem('user', JSON.stringify(data.user));
 };
 
+const clearStoredAuth = () => {
+  localStorage.removeItem('auth_token');
+  localStorage.removeItem('user');
+  sessionStorage.removeItem('auth_token');
+  sessionStorage.removeItem('user');
+};
+
 // Helper function to make authenticated requests
 async function fetchWithAuth(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<any> {
   const token = getAuthToken();
+  const url = `${API_URL}${endpoint}`;
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...options.headers,
@@ -60,17 +71,44 @@ async function fetchWithAuth(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'API request failed');
+    if (!response.ok) {
+      let errorMessage = 'API request failed';
+      try {
+        const error = await response.json();
+        errorMessage = error.error || error.message || errorMessage;
+      } catch {
+        errorMessage = `${errorMessage} (${response.status})`;
+      }
+      throw new Error(errorMessage);
+    }
+
+    return response.json();
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+      throw new Error(`Request timed out while contacting ${url}. Check that the backend is running and reachable.`);
+    }
+
+    if (error instanceof TypeError) {
+      console.error('Network request failed', {
+        url,
+        apiUrl: API_URL,
+        origin: window.location.origin,
+        message: error.message,
+      });
+      throw new Error(`Could not reach the backend at ${API_URL}. Check VITE_API_URL, backend server status, and CORS_ORIGIN.`);
+    }
+
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
-
-  return response.json();
 }
 
 // ============= AUTH ENDPOINTS =============
@@ -82,9 +120,10 @@ export const authService = {
       body: JSON.stringify(payload),
     });
 
-    // Save token to localStorage
     if (data.token) {
       persistAuth(data, true);
+    } else if (data.requiresTwoFactor) {
+      clearStoredAuth();
     }
 
     return data;
@@ -96,9 +135,10 @@ export const authService = {
       body: JSON.stringify(payload),
     });
 
-    // Save token to localStorage
     if (data.token) {
       persistAuth(data, remember);
+    } else if (data.requiresTwoFactor) {
+      clearStoredAuth();
     }
 
     return data;
@@ -135,6 +175,8 @@ export const authService = {
     if (data.token) {
       localStorage.setItem('auth_token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
+    } else if (data.requiresTwoFactor) {
+      clearStoredAuth();
     }
 
     return data;

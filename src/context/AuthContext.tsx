@@ -84,6 +84,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authService.login({ email, password }, remember);
       if ('requiresTwoFactor' in response) {
+        setToken(null);
+        setUser(null);
         return response;
       }
 
@@ -114,6 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const continueWithGoogle = async (credential: string, role: 'user' = 'user') => {
     const response = await authService.continueWithGoogle({ credential, role });
     if ('requiresTwoFactor' in response) {
+      setToken(null);
+      setUser(null);
       return response;
     }
 
@@ -186,6 +190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authService.signup({ email, name, password, role: role as any });
       if ('requiresTwoFactor' in response) {
+        setToken(null);
+        setUser(null);
         return response;
       }
 
