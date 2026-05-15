@@ -63,15 +63,52 @@ function formatStatusLabel(status) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function stripSelectedServiceBriefLines(value) {
-  return String(value || "")
-    .split("\n")
-    .filter((line) => {
-      const normalizedLine = line.toLowerCase();
+function formatRecommendationScores(recommendations = []) {
+  return recommendations
+    .filter((recommendation) => recommendation?.recommended_pathway !== "rejected")
+    .map((recommendation) => {
+      const label =
+        pathwayLabels[recommendation.recommended_pathway] ||
+        recommendation.recommended_pathway;
+      const score =
+        recommendation.score == null
+          ? "N/A"
+          : Number(recommendation.score).toFixed(1);
+      const confidence = Math.round(Number(recommendation.confidence || 0) * 100);
 
-      return `#${recommendation.rank} ${label}: ${confidence}% confidence, score ${score}/100`;
+      return `${label}: ${score}/100 (${confidence}%)`;
     })
     .join(" | ");
+}
+
+function formatCheckList(checks = [], expectedMatch) {
+  const labels = checks
+    .filter((check) => Boolean(check?.matched) === expectedMatch && !check?.skipped)
+    .map((check) => check.question);
+
+  return labels.length > 0 ? labels.join(", ") : "None";
+}
+
+function formatListValue(value) {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean).join(", ") || "Not specified";
+  }
+
+  if (typeof value === "string") {
+    return value.trim() || "Not specified";
+  }
+
+  return "Not specified";
+}
+
+function formatBurnTest(submission) {
+  const burnTest = submission?.burn_test;
+
+  if (!burnTest?.performed) {
+    return "Not performed";
+  }
+
+  return "Performed";
 }
 
 function buildPartnerBrief(submission, pathway, recommendation, recommendations = []) {
@@ -79,43 +116,53 @@ function buildPartnerBrief(submission, pathway, recommendation, recommendations 
     return "";
   }
 
-  const confidence = recommendation
-    ? `${Math.round(Number(recommendation.confidence || 0) * 100)}%`
-    : "Not available";
-  const score = recommendation?.score != null
-    ? `${Number(recommendation.score).toFixed(1)} / 100`
-    : "Not available";
+  const details = submission.details || {};
+  const fabricIdentifiedBy = formatListValue(
+    details.fabric_identification_list ||
+      details.fabric_identification ||
+      details.fabricIdentification,
+  );
+  const brand = submission.brand || details.brand || "Not specified";
+  const dssContext = [
+    `Selected pathway: ${pathwayLabels[pathway] || pathway}`,
+    recommendation ? `DSS rank: #${recommendation.rank}` : "",
+    recommendation ? `DSS score: ${Number(recommendation.score || 0).toFixed(1)} / 100` : "",
+    recommendations.length > 0
+      ? `All DSS pathway scores: ${formatRecommendationScores(recommendations)}`
+      : "",
+    recommendation ? `Selected pathway reasoning: ${recommendation.explanation}` : "",
+    recommendation ? `Matched DSS checks: ${formatCheckList(recommendation.checks, true)}` : "",
+    recommendation ? `Needs review: ${formatCheckList(recommendation.checks, false)}` : "",
+  ].filter(Boolean);
 
   return [
-    `Selected pathway: ${pathwayLabels[pathway] || pathway}`,
-    `DSS confidence: ${confidence}`,
-    recommendation ? `DSS rank: #${recommendation.rank}` : "",
-    `DSS score: ${score}`,
-    `All DSS pathway scores: ${formatRecommendationScores(recommendations)}`,
     `Submission name: ${submission.submission_name || submission.item_type}`,
     `Item: ${submission.item_type}`,
     `Quantity: ${submission.quantity || 1}`,
     `Condition: ${submission.condition || "Not specified"}`,
     `Cleanliness: ${submission.cleanliness || "Not specified"}`,
-    `Fabric: ${submission.fabric || submission.details?.fabric_types || "Not specified"}`,
+    `Fabric: ${submission.fabric || formatListValue(details.fabric_types_list || details.fabric_types)}`,
+    `Fabric identified by: ${fabricIdentifiedBy}`,
+    `Brand: ${brand}`,
+    `Burn test: ${formatBurnTest(submission)}`,
     submission.upcycle_request
       ? `User upcycle request: ${submission.upcycle_request}`
       : "",
-    recommendation ? `Selected pathway reasoning: ${recommendation.explanation}` : "",
-    recommendation ? `Matched DSS checks: ${formatCheckList(recommendation.checks, true)}` : "",
-    recommendation ? `Needs review: ${formatCheckList(recommendation.checks, false)}` : "",
+    "",
+    ...dssContext,
   ].filter(Boolean).join("\n");
 }
 
-function BriefPreview({ brief }) {
+function BriefPreview({ brief, maxLines }) {
   const lines = String(brief || "")
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+  const visibleLines = maxLines ? lines.slice(0, maxLines) : lines;
 
   return (
     <div className="rounded-2xl border border-[#dce4da] bg-[#fbfcfa] p-4 text-sm leading-7 text-[#19221d] dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-100">
-      {lines.map((line, index) => {
+      {visibleLines.map((line, index) => {
         const separatorIndex = line.indexOf(":");
 
         if (separatorIndex <= 0) {
@@ -237,6 +284,25 @@ export function DssConfirmationPage() {
   }, [preview, selectedPathway]);
 
   const topRecommendation = preview?.recommendations?.[0];
+
+  const dssAverageScore = useMemo(() => {
+    const scoredRecommendations = (preview?.recommendations || []).filter(
+      (recommendation) =>
+        recommendation.recommended_pathway !== "rejected" &&
+        recommendation.score != null,
+    );
+
+    if (scoredRecommendations.length === 0) {
+      return null;
+    }
+
+    const total = scoredRecommendations.reduce(
+      (sum, recommendation) => sum + Number(recommendation.score || 0),
+      0,
+    );
+
+    return total / scoredRecommendations.length;
+  }, [preview]);
 
   const selectedServicePathway = useMemo(() => {
     const servicePathway = normalizePathway(
@@ -697,9 +763,10 @@ export function DssConfirmationPage() {
           <aside className="space-y-6">
             <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_12px_34px_rgba(0,0,0,0.3)]">
               <h2 className="mb-3 text-xl font-semibold">Partner brief</h2>
-              <BriefPreview brief={brief} />
+              <BriefPreview brief={brief} maxLines={9} />
               {selectedRecommendation && (
                 <div className="mt-3 rounded-xl bg-[#f7faf5] px-4 py-3 text-sm text-[#5f6f67] dark:bg-white/[0.05] dark:text-zinc-300">
+                  <div>DSS average score: {dssAverageScore?.toFixed(1) || "N/A"} / 100</div>
                   DSS score: {selectedRecommendation.score.toFixed(1)} / 100 · Rank #{selectedRecommendation.rank}
                 </div>
               )}

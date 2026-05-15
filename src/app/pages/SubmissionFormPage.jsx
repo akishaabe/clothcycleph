@@ -2024,6 +2024,8 @@ function CheckboxOption({ label, checked, onChange }) {
 function RadioOption({ name, label, checked, onChange, disabled = false }) {
   return (
     <label
+      aria-disabled={disabled}
+      style={disabled ? { cursor: "not-allowed" } : undefined}
       className={`flex min-h-12 items-center gap-3 rounded-xl border-2 px-4 py-3 text-[#2d4a2d] transition-all ${
         disabled
           ? "cursor-not-allowed border-[#d4d8d0] bg-[#f1f3ef] opacity-60"
@@ -2036,9 +2038,9 @@ function RadioOption({ name, label, checked, onChange, disabled = false }) {
         type="radio"
         name={name}
         checked={checked}
-        onChange={onChange}
+        onChange={disabled ? undefined : onChange}
         disabled={disabled}
-        className="h-4 w-4 accent-[#6b8e6b]"
+        className="h-4 w-4 accent-[#6b8e6b] disabled:cursor-not-allowed"
       />
       <span>{label}</span>
     </label>
