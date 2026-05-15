@@ -48,13 +48,16 @@ function Write-Sheet($path, $rows) {
 $intake = @(
   @("Area", "Field", "Question / Source", "Choices / Input"),
   @("Screening", "details.restricted_category", "Does the item belong to any restricted category?", "Hospital/medical uniform; PPE or contaminated workwear; Used undergarments; Mold/chemical contaminated; None"),
-  @("Item", "item_type/details.item_types", "What type of item/s are you submitting?", "Top; Pants/Jeans; Dress; Jacket; Household textile; Fabric scraps; Other"),
+  @("Screening", "details.uniform_branding", "Donation only: uniform or identifiable company/school/institutional branding?", "Yes blocks Donation and recommends Upcycle or Recycle; No continues"),
+  @("Item", "item_type/details.item_types", "What type of item/s are you submitting?", "Donation excludes Fabric scraps. Recycle/Upcycle: Top; Pants/Jeans; Dress; Jacket; Household textile; Fabric scraps; Other"),
   @("Condition", "condition", "Overall condition", "Good; Minor damage; Heavily damaged"),
-  @("Cleanliness", "cleanliness", "Is/are the item/s clean?", "Clean; Needs cleaning; Heavily soiled/contaminated"),
+  @("Cleanliness", "cleanliness", "Is/are the item/s clean?", "Donation blocks Heavily soiled/contaminated; other forms keep existing behavior"),
   @("Fabric", "details.knows_fabric_type", "Do you know the fabric type?", "Yes; No"),
   @("Fabric", "details.fabric_types", "What is the fabric type?", "Cotton/Linen; Polyester/nylon/acrylic; Viscose/Rayon; Blends; Coated/PPE; Wool/Silk; Other/user-defined"),
   @("Fabric", "details.custom_fabric_text", "User-defined fabric text", "Free text"),
   @("Fabric", "details.fiber_composition", "Main material/fiber composition", "Cotton/natural; Polyester/synthetic; Blend; Wool/silk/delicate; Mixed/unknown"),
+  @("Recovery", "details.wearability", "Is the item still wearable or usable?", "Donation skips Recovery. Recycle/Upcycle disable and do not require/score when Fabric scraps is the only selected item type"),
+  @("Recovery", "details.repairability", "Is the item repairable?", "Donation skips Recovery. Recycle/Upcycle disable and do not require/score when Fabric scraps is the only selected item type"),
   @("Recovery", "details.contamination_level", "Contamination level", "Only if condition is minor/heavy damage")
 )
 
@@ -74,9 +77,13 @@ $burn = @(
 
 $score = @(
   @("Pathway", "Criterion", "Weight", "Match"),
+  @("Donation", "Hard eligibility", "Block", "Blocks uniforms/branded institutional clothing, heavily damaged items, heavily soiled/contaminated items, and Fabric scraps"),
+  @("Donation", "Item choices", "N/A", "Fabric scraps is removed from Donation item type choices"),
+  @("Donation", "Recovery Criteria", "N/A", "Donation form skips Recovery Criteria entirely"),
   @("Donation", "Wearability", "20", "Wearable as-is or minor repair"),
   @("Donation", "Cleanliness/contamination", "30", "Clean or washable only"),
   @("Donation", "Damage/repair", "17", "No damage or minor repairable damage"),
+  @("All applicable Recovery forms", "Fabric scraps-only skip", "Normalize", "When only Fabric scraps is selected, Wearability and Repairability are disabled, cleared, not required, and excluded from scoring normalization"),
   @("Upcycle", "Repurposing potential", "15", "High or medium"),
   @("Upcycle", "Repairability/damage", "30", "Repair/redesign can preserve material value"),
   @("Recycle", "Fabric/material signal", "40", "Identifiable recyclable fiber/material"),
@@ -87,7 +94,9 @@ $cleanup = @(
   @("Candidate", "Decision"),
   @("condition + wearability + damage + repairability", "Keep all, arranged as condition first then recovery detail"),
   @("cleanliness + contamination_level", "Keep both; contamination only appears for minor/heavy damage"),
-  @("fabric type + fiber composition + burn test", "Keep all as separate evidence sources")
+  @("fabric type + fiber composition + burn test", "Keep all as separate evidence sources"),
+  @("Donation uniform/branded clothing", "Block Donation only; store details.uniform_branding for DSS audit consistency"),
+  @("Fabric scraps-only Recovery Criteria", "Disable Wearability and Repairability; submit null values and exclude their weights from scoring")
 )
 
 Write-Sheet "$root\xl\worksheets\sheet1.xml" $intake

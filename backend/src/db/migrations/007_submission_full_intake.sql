@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS submission_details (
   no_brand_visible BOOLEAN DEFAULT false,
   fabric_description TEXT,
   restricted_category TEXT DEFAULT 'none',
+  uniform_branding TEXT,
   fiber_composition TEXT,
   wearability TEXT,
   repairability TEXT,

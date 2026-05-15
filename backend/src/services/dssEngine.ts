@@ -9,6 +9,7 @@ interface RuleCheck {
   selected: string;
   score?: number;
   total?: number;
+  skipped?: boolean;
 }
 
 interface EligibilityResult {
@@ -228,6 +229,69 @@ function includesAnyText(value: unknown, hints: string[]) {
   return hints.some((hint) => normalize(haystack).includes(normalize(hint)));
 }
 
+function isFabricScrapsOnly(submission: any) {
+  const itemTypes = normalizeList(submission.details?.item_types);
+  if (itemTypes.length > 0) {
+    return itemTypes.length === 1 && itemTypes[0] === 'fabric scraps';
+  }
+
+  const itemType = normalize(submission.item_type);
+  return itemType === 'fabric scraps';
+}
+
+function hasUniformBranding(submission: any) {
+  const explicit = normalize(firstDetail(submission, 'uniform_branding'));
+  if (['yes', 'true', 'uniform', 'branded'].includes(explicit)) {
+    return true;
+  }
+
+  const textSignal = normalizeList([
+    submission.item_type,
+    submission.details?.item_types,
+    submission.details?.other_item_type,
+    submission.description,
+  ].filter(Boolean).flat() as any).join(' ');
+
+  return /uniform|company branding|school branding|institutional branding|branded work/.test(textSignal);
+}
+
+function getDonationBlock(submission: any): EligibilityResult | null {
+  const condition = normalize(firstDetail(submission, 'condition'));
+  const cleanliness = normalize(firstDetail(submission, 'cleanliness'));
+
+  if (hasUniformBranding(submission)) {
+    return {
+      eligible: false,
+      category: 'donation_uniform_branding',
+      reason: 'Uniform or identifiable institutional/company branding',
+      message:
+        'Uniforms or clothing with identifiable company, school, or institutional branding are not suitable for donation. Please choose Upcycle or Recycle instead.',
+    };
+  }
+
+  if (condition.includes('heavily damaged')) {
+    return {
+      eligible: false,
+      category: 'donation_heavily_damaged',
+      reason: 'Heavily damaged item',
+      message:
+        'Heavily damaged items are not suitable for donation. Please choose Upcycle or Recycle instead, since donated clothing must still be wearable and usable.',
+    };
+  }
+
+  if (cleanliness.includes('heavily soiled') || cleanliness.includes('contaminated')) {
+    return {
+      eligible: false,
+      category: 'donation_heavily_soiled',
+      reason: 'Heavily soiled or contaminated item',
+      message:
+        'Heavily soiled or contaminated items cannot be accepted for donation. Please clean the item first or choose another recovery option.',
+    };
+  }
+
+  return null;
+}
+
 function firstDetail(submission: any, key: string, fallback?: string) {
   return submission.details?.[key] || submission[key] || fallback || '';
 }
@@ -411,11 +475,19 @@ function pathwayRuleScore(pathway: Exclude<Pathway, 'buyback' | 'rejected'>, sub
   const repurposing = inferRepurposingPotential(submission);
   const trimRemoval = inferTrimRemoval(submission);
   const quantity = Number(submission.quantity || 1);
+  const scrapsOnly = isFabricScrapsOnly(submission);
+  const uniformBranding = hasUniformBranding(submission);
   const conditionMatched = rule.conditions.map(normalize).includes(normalize(condition));
   const cleanlinessMatched = rule.cleanliness.map(normalize).includes(normalize(cleanliness));
   const itemMatched = includesAnyText(itemSignal, rule.itemHints);
   const fabricMatched = includesAnyText(fabricSignal, rule.fabricHints);
   const scoringChecks = [
+    {
+      question: 'Donation uniform eligibility',
+      matched: pathway !== 'donate' || !uniformBranding,
+      expected: pathway === 'donate' ? 'No uniforms or identifiable institutional/company branding' : 'Not applicable',
+      selected: uniformBranding ? 'Uniform or identifiable branding indicated' : 'No uniform branding indicated',
+    },
     {
       question: 'Condition',
       matched: conditionMatched,
@@ -458,35 +530,41 @@ function pathwayRuleScore(pathway: Exclude<Pathway, 'buyback' | 'rejected'>, sub
     },
     {
       question: 'Wearability',
-      matched:
-        pathway === 'donate'
+      matched: scrapsOnly
+        ? true
+        : pathway === 'donate'
           ? ['wearable_as_is', 'wearable_after_minor_repair'].includes(wearability)
           : pathway === 'upcycle'
             ? wearability !== 'not_usable'
             : wearability !== 'wearable_as_is',
-      expected:
-        pathway === 'donate'
+      expected: scrapsOnly
+        ? 'Not applicable for fabric scraps-only submissions'
+        : pathway === 'donate'
           ? 'Wearable as-is or after minor repair'
           : pathway === 'upcycle'
             ? 'Not necessarily wearable, but fabric remains usable'
             : 'No longer suitable for direct reuse',
-      selected: wearability,
+      selected: scrapsOnly ? 'Skipped' : wearability,
+      skipped: scrapsOnly,
     },
     {
       question: 'Repairability',
-      matched:
-        pathway === 'donate'
+      matched: scrapsOnly
+        ? true
+        : pathway === 'donate'
           ? ['no_repair_needed', 'minor_repair'].includes(repairability)
           : pathway === 'upcycle'
             ? ['minor_repair', 'moderate_repair', 'not_practical'].includes(repairability)
             : ['moderate_repair', 'not_practical'].includes(repairability),
-      expected:
-        pathway === 'donate'
+      expected: scrapsOnly
+        ? 'Not applicable for fabric scraps-only submissions'
+        : pathway === 'donate'
           ? 'No repair or minor repair'
           : pathway === 'upcycle'
             ? 'Repair or redesign can preserve material value'
             : 'Repair is not the main route',
-      selected: repairability,
+      selected: scrapsOnly ? 'Skipped' : repairability,
+      skipped: scrapsOnly,
     },
     {
       question: 'Contamination level',
@@ -559,11 +637,24 @@ function pathwayRuleScore(pathway: Exclude<Pathway, 'buyback' | 'rejected'>, sub
   ];
   const weights =
     pathway === 'donate'
-      ? [12, 15, 8, 5, 8, 20, 10, 15, 7, 0, 0, 0]
+      ? [0, 12, 15, 8, 5, 8, 20, 10, 15, 7, 0, 0, 0]
       : pathway === 'upcycle'
-        ? [5, 10, 10, 5, 5, 5, 15, 15, 15, 15, 5, 5]
-        : [8, 15, 5, 20, 20, 0, 5, 15, 15, 5, 10, 7];
-  const score = scoringChecks.reduce((total, check, index) => total + (check.matched ? weights[index] : 0), 0);
+        ? [0, 5, 10, 10, 5, 5, 5, 15, 15, 15, 15, 5, 5]
+        : [0, 8, 15, 5, 20, 20, 0, 5, 15, 15, 5, 10, 7];
+  const applicableWeights = weights.map((weight, index) =>
+    scoringChecks[index]?.skipped ? 0 : weight,
+  );
+  const earned = scoringChecks.reduce(
+    (total, check, index) => total + (check.matched ? applicableWeights[index] : 0),
+    0,
+  );
+  const possible = applicableWeights.reduce((total, weight) => total + weight, 0);
+  const score =
+    pathway === 'donate' && uniformBranding
+      ? 0
+      : possible > 0
+        ? (earned / possible) * 100
+        : 0;
   const matched = scoringChecks.filter((check) => check.matched).length;
 
   return {
@@ -622,6 +713,31 @@ export function buildPathwayRecommendations(submission: any) {
   const preferred = normalize(submission.service_type || submission.action);
   const burnAnalysis = analyzeBurnTest(submission.burn_test);
   const eligibility = evaluateEligibility(submission);
+  const donationBlock = preferred === 'donate' ? getDonationBlock(submission) : null;
+
+  if (donationBlock) {
+    return [
+      {
+        recommended_pathway: 'rejected' as const,
+        score: 100,
+        rawScore: 100,
+        confidence: 1,
+        explanation:
+          donationBlock.message || 'This item is not suitable for donation.',
+        checks: [
+          {
+            question: 'Donation eligibility',
+            matched: true,
+            expected: 'Clean, wearable, non-uniform clothing suitable for redistribution',
+            selected: donationBlock.reason || donationBlock.category,
+          },
+        ],
+        rank: 1,
+        burn_test_result: burnAnalysis.top_fibers[0]?.fiber || null,
+        eligibility: donationBlock,
+      },
+    ];
+  }
 
   if (!eligibility.eligible) {
     return [
@@ -702,8 +818,9 @@ export function buildPathwayRecommendations(submission: any) {
 }
 
 function buildPathwayExplanation(pathway: Pathway, checks: RuleCheck[]) {
-  const matched = checks.filter((check) => check.matched).map((check) => check.question);
-  const missing = checks.filter((check) => !check.matched).map((check) => check.question);
+  const matched = checks.filter((check) => check.matched && !check.skipped).map((check) => check.question);
+  const skipped = checks.filter((check) => check.skipped).map((check) => check.question);
+  const missing = checks.filter((check) => !check.matched && !check.skipped).map((check) => check.question);
   const pathwayLabel = pathway === 'donate' ? 'donation' : pathway;
   const parts = [
     `${pathwayLabel} is based on textile recovery DSS rules for condition, cleanliness, fiber composition, wearability, repairability, contamination, damage, and repurposing potential.`,
@@ -715,6 +832,10 @@ function buildPathwayExplanation(pathway: Pathway, checks: RuleCheck[]) {
 
   if (missing.length > 0) {
     parts.push(`Not matched: ${missing.join(', ')}.`);
+  }
+
+  if (skipped.length > 0) {
+    parts.push(`Skipped as not applicable: ${skipped.join(', ')}.`);
   }
 
   return parts.join(' ');

@@ -100,6 +100,7 @@ Table submission_details {
   no_brand_visible boolean
   fabric_description text
   restricted_category text
+  uniform_branding text
   fiber_composition text
   wearability text
   repairability text

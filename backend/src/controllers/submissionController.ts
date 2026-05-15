@@ -100,6 +100,7 @@ export const createSubmission = async (req: Request, res: Response) => {
            no_brand_visible,
            fabric_description,
            restricted_category,
+           uniform_branding,
            fiber_composition,
            wearability,
            repairability,
@@ -108,7 +109,7 @@ export const createSubmission = async (req: Request, res: Response) => {
            repurposing_potential,
            trim_removal
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
           ON CONFLICT (submission_id)
           DO UPDATE SET
             item_types = EXCLUDED.item_types,
@@ -123,6 +124,7 @@ export const createSubmission = async (req: Request, res: Response) => {
             no_brand_visible = EXCLUDED.no_brand_visible,
             fabric_description = EXCLUDED.fabric_description,
             restricted_category = EXCLUDED.restricted_category,
+            uniform_branding = EXCLUDED.uniform_branding,
             fiber_composition = EXCLUDED.fiber_composition,
             wearability = EXCLUDED.wearability,
             repairability = EXCLUDED.repairability,
@@ -145,6 +147,7 @@ export const createSubmission = async (req: Request, res: Response) => {
           details.no_brand_visible ?? false,
           joinTextValues(details.fabric_description),
           details.restricted_category ?? 'none',
+          details.uniform_branding ?? null,
           details.fiber_composition ?? null,
           details.wearability ?? null,
           details.repairability ?? null,

@@ -40,6 +40,7 @@ export const createSubmissionSchema = z.object({
           'none',
         ])
         .default('none'),
+      uniform_branding: nullableTrimmedStringSchema,
       fiber_composition: nullableTrimmedStringSchema,
       wearability: nullableTrimmedStringSchema,
       repairability: nullableTrimmedStringSchema,

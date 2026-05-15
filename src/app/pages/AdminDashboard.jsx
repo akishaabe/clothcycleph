@@ -100,6 +100,19 @@ const formatStatusLabel = (status) =>
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
+const pathwayLabels = {
+  recycle: "Recycle",
+  donate: "Donate",
+  upcycle: "Upcycle",
+  buyback: "Buyback",
+  rejected: "Rejected",
+};
+
+const toConfidencePercent = (value) => {
+  const numericValue = Number(value || 0);
+  return numericValue > 1 ? numericValue : numericValue * 100;
+};
+
 const canCreateRole = (role) => role === "Admin" || role === "Partner";
 const canSuspendRole = (role) => role === "User" || role === "Partner";
 
@@ -273,6 +286,35 @@ export function AdminDashboard() {
       return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
     });
   }, [dssAuditRuns, dssAuditSort]);
+
+  const averageDssConfidenceByPathway = useMemo(() => {
+    const groupedRuns = dssAuditRuns.reduce((groups, run) => {
+      const pathway = String(run.recommended_pathway || "unknown").toLowerCase();
+      const confidence = toConfidencePercent(run.confidence);
+
+      if (!groups[pathway]) {
+        groups[pathway] = {
+          pathway,
+          totalConfidence: 0,
+          count: 0,
+        };
+      }
+
+      groups[pathway].totalConfidence += confidence;
+      groups[pathway].count += 1;
+
+      return groups;
+    }, {});
+
+    return Object.values(groupedRuns)
+      .map((group) => ({
+        pathway: group.pathway,
+        label: pathwayLabels[group.pathway] || formatStatusLabel(group.pathway),
+        average: group.count ? Math.round(group.totalConfidence / group.count) : 0,
+        count: group.count,
+      }))
+      .sort((a, b) => b.average - a.average);
+  }, [dssAuditRuns]);
 
   const sortedRuleChangeRequests = useMemo(() => {
     return [...ruleChangeRequests].sort((a, b) => {
@@ -705,6 +747,57 @@ export function AdminDashboard() {
             </div>
           )}
 
+          <div className="mb-5 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h4 className="font-semibold text-gray-950 dark:text-white">
+                  Average DSS confidence per pathway
+                </h4>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Mean confidence from saved DSS audit runs.
+                </p>
+              </div>
+              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                {dssAuditRuns.length} total runs
+              </span>
+            </div>
+
+            {averageDssConfidenceByPathway.length > 0 ? (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {averageDssConfidenceByPathway.map((item) => (
+                  <div
+                    key={item.pathway}
+                    className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-black/20"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-gray-950 dark:text-white">
+                          {item.label}
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          {item.count} {item.count === 1 ? "run" : "runs"}
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-gray-950 px-3 py-1 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">
+                        {item.average}%
+                      </span>
+                    </div>
+                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-emerald-600 dark:bg-emerald-400"
+                        style={{ width: `${Math.min(item.average, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-white px-4 py-4 text-sm text-gray-600 dark:border-white/10 dark:bg-black/20 dark:text-gray-300">
+                No confidence data available yet.
+              </div>
+            )}
+          </div>
+
           <div className="grid gap-3">
             {dssAuditRuns.length === 0 && (
               <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-600">
@@ -840,10 +933,10 @@ export function AdminDashboard() {
                     )}
                   </div>
 
-                  <div className="rounded-2xl border border-gray-200 bg-gray-950 p-4 text-white shadow-lg dark:border-white/10 dark:bg-black/30">
+                  <div className="rounded-2xl border border-gray-200 bg-white p-4 text-gray-950 shadow-lg dark:border-white/10 dark:bg-white/[0.05] dark:text-white">
                     <div className="mb-3">
-                      <div className="font-semibold">Admin decision</div>
-                      <p className="mt-1 text-sm leading-6 text-gray-300">
+                      <div className="font-semibold text-gray-950 dark:text-white">Admin decision</div>
+                      <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
                         This note and status will be sent to the partner.
                       </p>
                     </div>
@@ -856,7 +949,7 @@ export function AdminDashboard() {
                       }))
                     }
                     rows={4}
-                    className="w-full resize-none rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none placeholder:text-gray-400 focus:border-white/40"
+                    className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-950 outline-none placeholder:text-gray-500 focus:border-gray-500 dark:border-white/10 dark:bg-black/20 dark:text-white dark:placeholder:text-gray-400 dark:focus:border-white/40"
                     placeholder="Optional message to partner before updating status"
                   />
                   <div className="mt-3 grid gap-2">

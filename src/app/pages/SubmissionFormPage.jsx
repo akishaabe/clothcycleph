@@ -11,7 +11,7 @@ import {
   AlertCircle,
   X,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useFileUpload } from "../../hooks/useFileUpload";
 import { useSubmissions } from "../../hooks/useSubmissions";
@@ -28,16 +28,20 @@ const itemTypes = [
   "Other",
 ];
 
+const HEAVILY_DAMAGED_CONDITION =
+  "Heavily damaged (large tears, unusable as clothing)";
+const HEAVILY_SOILED_CLEANLINESS = "Heavily soiled or contaminated";
+
 const conditionOptions = [
   "Good condition (wearable, no major damage)",
   "Minor damage (small tears, loose seams, stains)",
-  "Heavily damaged (large tears, unusable as clothing)",
+  HEAVILY_DAMAGED_CONDITION,
 ];
 
 const cleanlinessOptions = [
   "Yes, clean and ready for use",
   "Needs cleaning",
-  "Heavily soiled or contaminated",
+  HEAVILY_SOILED_CLEANLINESS,
 ];
 
 const restrictedCategoryOptions = [
@@ -357,6 +361,7 @@ export function SubmissionFormPage() {
 
   const [formData, setFormData] = useState({
     restrictedCategory: "",
+    uniformBranding: "",
     submissionName: "",
     itemTypes: [],
     otherItemType: "",
@@ -412,10 +417,29 @@ export function SubmissionFormPage() {
     setFormData((prev) => ({
       ...prev,
       action,
+      uniformBranding: action === "Donate" ? prev.uniformBranding : "",
       buybackInterest: action === "Upcycle" ? prev.buybackInterest : "",
       upcycleRequest: action === "Upcycle" ? prev.upcycleRequest : "",
     }));
   };
+
+  const goToStep = (targetStep) => {
+    setStep(targetStep);
+  };
+
+  useEffect(() => {
+    if (
+      formData.itemTypes.length === 1 &&
+      formData.itemTypes[0] === "Fabric scraps" &&
+      (formData.wearability || formData.repairability)
+    ) {
+      setFormData((prev) => ({
+        ...prev,
+        wearability: "",
+        repairability: "",
+      }));
+    }
+  }, [formData.itemTypes, formData.wearability, formData.repairability]);
 
   const setBurnTestChoice = (choice) => {
     setShowBurnTestResult(false);
@@ -532,6 +556,14 @@ export function SubmissionFormPage() {
   const handleSubmit = async () => {
     setSubmitError("");
 
+    if (!canSubmitForm) {
+      setSubmitError(
+        "Please update the highlighted donation answers before submitting.",
+      );
+      setStep(hasDonationBlockedUniform ? 1 : 2);
+      return;
+    }
+
     try {
       let photoUrls = [];
 
@@ -582,9 +614,15 @@ export function SubmissionFormPage() {
           no_brand_visible: formData.noBrandVisible,
           fabric_description: formData.fabricDescription,
           restricted_category: formData.restrictedCategory || "none",
+          uniform_branding:
+            formData.action === "Donate" ? formData.uniformBranding || null : null,
           fiber_composition: toFiberComposition(),
-          wearability: toValueKey(formData.wearability) || null,
-          repairability: toValueKey(formData.repairability) || null,
+          wearability: isFabricScrapsOnly
+            ? null
+            : toValueKey(formData.wearability) || null,
+          repairability: isFabricScrapsOnly
+            ? null
+            : toValueKey(formData.repairability) || null,
           contamination_level:
             formData.condition === "Good condition (wearable, no major damage)"
               ? null
@@ -639,11 +677,49 @@ export function SubmissionFormPage() {
     formData.itemTypes.length > 0 &&
     (!formData.itemTypes.includes("Other") || formData.otherItemType.trim());
 
+  const isDonation = formData.action === "Donate";
+  const itemTypeOptions = isDonation
+    ? itemTypes.filter((type) => type !== "Fabric scraps")
+    : itemTypes;
+  const hasDonationBlockedCondition =
+    isDonation && formData.condition === HEAVILY_DAMAGED_CONDITION;
+  const hasDonationBlockedCleanliness =
+    isDonation && formData.cleanliness === HEAVILY_SOILED_CLEANLINESS;
+  const hasDonationBlockedUniform =
+    isDonation && formData.uniformBranding === "Yes";
+  const hasDonationBlockingAnswer =
+    hasDonationBlockedCondition ||
+    hasDonationBlockedCleanliness ||
+    hasDonationBlockedUniform;
+  const isFabricScrapsOnly =
+    formData.itemTypes.length === 1 && formData.itemTypes[0] === "Fabric scraps";
+  const stepFlow = isDonation
+    ? [
+        { number: 1, label: "Screening" },
+        { number: 2, label: "Items" },
+        { number: 3, label: "Fabric" },
+        { number: 5, label: "Pathway" },
+        { number: 6, label: "Review" },
+      ]
+    : [
+        { number: 1, label: "Screening" },
+        { number: 2, label: "Items" },
+        { number: 3, label: "Fabric" },
+        { number: 4, label: "Recovery" },
+        { number: 5, label: "Pathway" },
+        { number: 6, label: "Review" },
+      ];
+  const activeStepIndex = Math.max(
+    stepFlow.findIndex(({ number }) => number === step),
+    0,
+  );
+
   const isRestrictedItem =
     formData.restrictedCategory && formData.restrictedCategory !== "none";
 
   const isBurnTestComplete =
     formData.restrictedCategory === "none" &&
+    (!isDonation || formData.uniformBranding === "No") &&
     (formData.burnTestChoice === "No" ||
       (formData.burnTestChoice === "Yes" && formData.burnTestAshes.length > 0));
 
@@ -651,7 +727,8 @@ export function SubmissionFormPage() {
     hasItemTypes &&
     formData.condition &&
     formData.cleanliness &&
-    formData.quantity;
+    formData.quantity &&
+    !hasDonationBlockingAnswer;
 
   const isStepThreeComplete =
     formData.knowsFabricType &&
@@ -665,9 +742,9 @@ export function SubmissionFormPage() {
     formData.fiberComposition;
 
   const isRecoveryCriteriaComplete =
-    formData.wearability &&
+    (isFabricScrapsOnly || formData.wearability) &&
     formData.damageClassification &&
-    formData.repairability &&
+    (isFabricScrapsOnly || formData.repairability) &&
     (formData.condition === "Good condition (wearable, no major damage)" ||
       formData.contaminationLevel) &&
     formData.repurposingPotential &&
@@ -675,11 +752,17 @@ export function SubmissionFormPage() {
 
   const isStepFourComplete =
     isBurnTestComplete &&
-    isRecoveryCriteriaComplete &&
+    (isDonation || isRecoveryCriteriaComplete) &&
     (!shouldShowPathwaySelection || formData.action) &&
     (formData.action !== "Upcycle" ||
       (formData.buybackInterest &&
         (formData.buybackInterest !== "Yes" || formData.upcycleRequest.trim())));
+
+  const canSubmitForm =
+    !hasDonationBlockingAnswer &&
+    isStepTwoComplete &&
+    isStepThreeComplete &&
+    isStepFourComplete;
 
   const burnTestResult = analyzeBurnTestAnswers(formData);
 
@@ -691,6 +774,7 @@ export function SubmissionFormPage() {
         formData.restrictedCategory,
       step: 1,
     },
+    isDonation && { label: "Uniform or Institutional Branding", value: formData.uniformBranding, step: 1 },
     { label: "Submission Name", value: formData.submissionName, step: 2 },
     { label: "Burn Test", value: formData.burnTestChoice, step: 1 },
     { label: "Moment Flame", value: formData.burnTestMoment.join(", "), step: 1, burnPage: 2 },
@@ -718,16 +802,16 @@ export function SubmissionFormPage() {
     },
     { label: "Fabric Identified By", value: formData.fabricIdentification.join(", "), step: 3 },
     { label: "Brand", value: formData.noBrandVisible ? "No brand visible" : formData.brand, step: 3 },
-    { label: "Wearability", value: formData.wearability, step: 4 },
-    { label: "Damage Classification", value: formData.damageClassification, step: 4 },
-    { label: "Repairability", value: formData.repairability, step: 4 },
-    { label: "Contamination Level", value: formData.contaminationLevel, step: 4 },
-    { label: "Repurposing Potential", value: formData.repurposingPotential, step: 4 },
-    { label: "Trim/Accessory Removal", value: formData.trimRemoval, step: 4 },
+    !isDonation && !isFabricScrapsOnly && { label: "Wearability", value: formData.wearability, step: 4 },
+    !isDonation && { label: "Damage Classification", value: formData.damageClassification, step: 4 },
+    !isDonation && !isFabricScrapsOnly && { label: "Repairability", value: formData.repairability, step: 4 },
+    !isDonation && { label: "Contamination Level", value: formData.contaminationLevel, step: 4 },
+    !isDonation && { label: "Repurposing Potential", value: formData.repurposingPotential, step: 4 },
+    !isDonation && { label: "Trim/Accessory Removal", value: formData.trimRemoval, step: 4 },
     { label: "Intended Pathway", value: formData.action, step: 5 },
     { label: "Buyback Interest", value: formData.buybackInterest, step: 5 },
     { label: "Upcycle Request", value: formData.upcycleRequest, step: 5 },
-  ].filter(({ value }) => value);
+  ].filter((row) => row && row.value);
 
   if (step === 7) {
     return (
@@ -786,22 +870,26 @@ export function SubmissionFormPage() {
 
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
-            {[1, 2, 3, 4, 5, 6].map((num) => (
-              <div key={num} className="flex items-center flex-1">
+            {stepFlow.map(({ number }, index) => (
+              <div key={number} className="flex items-center flex-1">
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-                    step >= num
+                    activeStepIndex >= index
                       ? "bg-[#6b8e6b] text-white"
                       : "bg-white text-[#5a6f5a] border-2 border-[#d4d8d0]"
                   }`}
                 >
-                  {step > num ? <CheckCircle className="w-5 h-5" /> : num}
+                  {activeStepIndex > index ? (
+                    <CheckCircle className="w-5 h-5" />
+                  ) : (
+                    index + 1
+                  )}
                 </div>
 
-                {num < 6 && (
+                {index < stepFlow.length - 1 && (
                   <div
                     className={`flex-1 h-1 mx-2 transition-all ${
-                      step > num ? "bg-[#6b8e6b]" : "bg-[#d4d8d0]"
+                      activeStepIndex > index ? "bg-[#6b8e6b]" : "bg-[#d4d8d0]"
                     }`}
                   />
                 )}
@@ -809,13 +897,13 @@ export function SubmissionFormPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-6 text-center text-sm text-[#5a6f5a]">
-            <span>Screening</span>
-            <span>Items</span>
-            <span>Fabric</span>
-            <span>Recovery</span>
-            <span>Pathway</span>
-            <span>Review</span>
+          <div
+            className="grid text-center text-sm text-[#5a6f5a]"
+            style={{ gridTemplateColumns: `repeat(${stepFlow.length}, minmax(0, 1fr))` }}
+          >
+            {stepFlow.map(({ number, label }) => (
+              <span key={number}>{label}</span>
+            ))}
           </div>
         </div>
 
@@ -852,11 +940,44 @@ export function SubmissionFormPage() {
                 </div>
               )}
 
-              {formData.restrictedCategory === "none" && (
+              {isDonation && formData.restrictedCategory === "none" && (
+                <QuestionBlock label="Is the item a uniform or does it have identifiable company, school, or institutional branding?">
+                  <p className="mb-4 text-sm text-[#5a6f5a]/80">
+                    Examples include bank uniforms, company uniforms, school
+                    uniforms, branded work uniforms, or clothing with visible
+                    institutional branding.
+                  </p>
+
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {["Yes", "No"].map((answer) => (
+                      <RadioOption
+                        key={answer}
+                        name="uniformBranding"
+                        label={answer}
+                        checked={formData.uniformBranding === answer}
+                        onChange={() => updateField("uniformBranding", answer)}
+                      />
+                    ))}
+                  </div>
+
+                  {hasDonationBlockedUniform && (
+                    <div className="mt-3 rounded-xl border border-[#d4a574] bg-[#fff8e8] px-4 py-3 text-sm text-[#7a5427]">
+                      Uniforms or clothing with identifiable company, school,
+                      or institutional branding are not suitable for donation.
+                      Please choose Upcycle or Recycle instead.
+                    </div>
+                  )}
+                </QuestionBlock>
+              )}
+
+              {formData.restrictedCategory === "none" &&
+                (!isDonation || formData.uniformBranding === "No") && (
                 <h7 className="text-2xl text-[#2d4a2d]">Burn Test</h7>
               )}
 
-              {formData.restrictedCategory === "none" && showBurnTestResult && (
+              {formData.restrictedCategory === "none" &&
+                (!isDonation || formData.uniformBranding === "No") &&
+                showBurnTestResult && (
                 <QuestionBlock label="Burn test fabric result">
                   <div className="rounded-2xl border border-[#d4d8d0] bg-[#f5f5f0] p-5">
                     <p className="mb-4 text-[#5a6f5a]">
@@ -902,7 +1023,9 @@ export function SubmissionFormPage() {
                 </QuestionBlock>
               )}
 
-              {formData.restrictedCategory === "none" && !showBurnTestResult && !formData.burnTestChoice && (
+              {formData.restrictedCategory === "none" &&
+                (!isDonation || formData.uniformBranding === "No") &&
+                !showBurnTestResult && !formData.burnTestChoice && (
                 <QuestionBlock label="Do you want to do a burn test?">
                   <p className="text-sm text-[#5a6f5a]/80 mb-4">
                     A burn test can help determine if your textile item is
@@ -923,7 +1046,9 @@ export function SubmissionFormPage() {
                 </QuestionBlock>
               )}
 
-              {formData.restrictedCategory === "none" && !showBurnTestResult && formData.burnTestChoice === "No" && (
+              {formData.restrictedCategory === "none" &&
+                (!isDonation || formData.uniformBranding === "No") &&
+                !showBurnTestResult && formData.burnTestChoice === "No" && (
                 <QuestionBlock label="Do you want to do a burn test?">
                   <p className="text-sm text-[#5a6f5a]/80 mb-4">
                     A burn test can help determine if your textile item is
@@ -1122,7 +1247,7 @@ export function SubmissionFormPage() {
 
               <QuestionBlock label="Q1: What type of item/s are you submitting?">
                 <div className="grid md:grid-cols-2 gap-3">
-                  {itemTypes.map((type) => (
+                  {itemTypeOptions.map((type) => (
                     <CheckboxOption
                       key={type}
                       label={type}
@@ -1157,6 +1282,14 @@ export function SubmissionFormPage() {
                     />
                   ))}
                 </div>
+
+                {hasDonationBlockedCondition && (
+                  <div className="mt-3 rounded-xl border border-[#d4a574] bg-[#fff8e8] px-4 py-3 text-sm text-[#7a5427]">
+                    Heavily damaged items are not suitable for donation. Please
+                    choose Upcycle or Recycle instead, since donated clothing
+                    must still be wearable and usable.
+                  </div>
+                )}
               </QuestionBlock>
 
               <QuestionBlock label="Q3: Is/are the item/s clean?">
@@ -1172,7 +1305,15 @@ export function SubmissionFormPage() {
                   ))}
                 </div>
 
-                {formData.cleanliness === "Heavily soiled or contaminated" && (
+                {hasDonationBlockedCleanliness && (
+                  <div className="mt-3 rounded-xl border border-[#d4a574] bg-[#fff8e8] px-4 py-3 text-sm text-[#7a5427]">
+                    Heavily soiled or contaminated items cannot be accepted for
+                    donation. Please clean the item first or choose another
+                    recovery option.
+                  </div>
+                )}
+
+                {!isDonation && formData.cleanliness === HEAVILY_SOILED_CLEANLINESS && (
                   <div className="mt-3 rounded-xl border border-[#d4a574] bg-[#fff8e8] px-4 py-3 text-sm text-[#7a5427]">
                     Heavily soiled or contaminated items may need special
                     handling and may not be accepted for donation.
@@ -1202,7 +1343,7 @@ export function SubmissionFormPage() {
                 </button>
 
                 <button
-                  onClick={() => setStep(3)}
+                  onClick={() => goToStep(3)}
                   disabled={!isStepTwoComplete}
                   className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -1337,14 +1478,14 @@ export function SubmissionFormPage() {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setStep(2)}
+                  onClick={() => goToStep(2)}
                   className="flex-1 py-3 bg-white text-[#6b8e6b] border-2 border-[#6b8e6b] rounded-xl hover:bg-[#f5f5f0] transition-all"
                 >
                   Back
                 </button>
 
                 <button
-                  onClick={() => setStep(4)}
+                  onClick={() => goToStep(isDonation ? 5 : 4)}
                   disabled={!isStepThreeComplete}
                   className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -1359,6 +1500,11 @@ export function SubmissionFormPage() {
               <h7 className="text-2xl text-[#2d4a2d]">Recovery Criteria</h7>
 
               <QuestionBlock label="Q6: Is the item still wearable or usable in its original form?">
+                {isFabricScrapsOnly && (
+                  <p className="mb-4 text-sm text-[#5a6f5a]/80">
+                    Not applicable for fabric scraps-only submissions.
+                  </p>
+                )}
                 <div className="grid gap-3 md:grid-cols-2">
                   {["Wearable as-is", "Wearable after minor repair", "Not wearable but fabric is usable", "Not usable"].map((option) => (
                     <RadioOption
@@ -1367,6 +1513,7 @@ export function SubmissionFormPage() {
                       label={option}
                       checked={formData.wearability === option}
                       onChange={() => updateField("wearability", option)}
+                      disabled={isFabricScrapsOnly}
                     />
                   ))}
                 </div>
@@ -1387,6 +1534,11 @@ export function SubmissionFormPage() {
               </QuestionBlock>
 
               <QuestionBlock label="Q8: Is the item repairable?">
+                {isFabricScrapsOnly && (
+                  <p className="mb-4 text-sm text-[#5a6f5a]/80">
+                    Not applicable for fabric scraps-only submissions.
+                  </p>
+                )}
                 <div className="grid gap-3 md:grid-cols-2">
                   {repairabilityOptions.map((option) => (
                     <RadioOption
@@ -1395,6 +1547,7 @@ export function SubmissionFormPage() {
                       label={option}
                       checked={formData.repairability === option}
                       onChange={() => updateField("repairability", option)}
+                      disabled={isFabricScrapsOnly}
                     />
                   ))}
                 </div>
@@ -1616,14 +1769,14 @@ export function SubmissionFormPage() {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setStep(4)}
+                  onClick={() => goToStep(isDonation ? 3 : 4)}
                   className="flex-1 py-3 bg-white text-[#6b8e6b] border-2 border-[#6b8e6b] rounded-xl hover:bg-[#f5f5f0] transition-all"
                 >
                   Back
                 </button>
 
                 <button
-                  onClick={() => setStep(6)}
+                  onClick={() => goToStep(6)}
                   disabled={!isStepFourComplete}
                   className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -1694,8 +1847,8 @@ export function SubmissionFormPage() {
 
                 <button
                   onClick={handleSubmit}
-                  disabled={isSubmitting || isUploading}
-                  className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg"
+                  disabled={isSubmitting || isUploading || !canSubmitForm}
+                  className="flex-1 py-3 bg-[#6b8e6b] text-white rounded-xl hover:bg-[#5a7a5a] transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting || isUploading ? "Submitting..." : "Submit"}
                 </button>
@@ -1868,13 +2021,15 @@ function CheckboxOption({ label, checked, onChange }) {
   );
 }
 
-function RadioOption({ name, label, checked, onChange }) {
+function RadioOption({ name, label, checked, onChange, disabled = false }) {
   return (
     <label
-      className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border-2 px-4 py-3 text-[#2d4a2d] transition-all ${
-        checked
+      className={`flex min-h-12 items-center gap-3 rounded-xl border-2 px-4 py-3 text-[#2d4a2d] transition-all ${
+        disabled
+          ? "cursor-not-allowed border-[#d4d8d0] bg-[#f1f3ef] opacity-60"
+          : checked
           ? "border-[#6b8e6b] bg-[#6b8e6b]/10"
-          : "border-[#d4d8d0] hover:border-[#6b8e6b]"
+          : "cursor-pointer border-[#d4d8d0] hover:border-[#6b8e6b]"
       }`}
     >
       <input
@@ -1882,6 +2037,7 @@ function RadioOption({ name, label, checked, onChange }) {
         name={name}
         checked={checked}
         onChange={onChange}
+        disabled={disabled}
         className="h-4 w-4 accent-[#6b8e6b]"
       />
       <span>{label}</span>
