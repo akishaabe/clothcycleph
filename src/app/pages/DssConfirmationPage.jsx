@@ -66,6 +66,7 @@ function formatStatusLabel(status) {
 function formatRecommendationScores(recommendations = []) {
   return recommendations
     .filter((recommendation) => recommendation?.recommended_pathway !== "rejected")
+    .sort((a, b) => Number(a.rank || 0) - Number(b.rank || 0))
     .map((recommendation) => {
       const label =
         pathwayLabels[recommendation.recommended_pathway] ||
@@ -76,7 +77,7 @@ function formatRecommendationScores(recommendations = []) {
           : Number(recommendation.score).toFixed(1);
       const confidence = Math.round(Number(recommendation.confidence || 0) * 100);
 
-      return `${label}: ${score}/100 (${confidence}%)`;
+      return `#${recommendation.rank} ${label}: ${confidence}% confidence, score ${score}/100`;
     })
     .join(" | ");
 }
@@ -101,76 +102,56 @@ function formatListValue(value) {
   return "Not specified";
 }
 
-function formatBurnTest(submission) {
-  const burnTest = submission?.burn_test;
-
-  if (!burnTest?.performed) {
-    return "Not performed";
-  }
-
-  return "Performed";
-}
-
 function buildPartnerBrief(submission, pathway, recommendation, recommendations = []) {
   if (!submission || !pathway) {
     return "";
   }
 
   const details = submission.details || {};
-  const fabricIdentifiedBy = formatListValue(
-    details.fabric_identification_list ||
-      details.fabric_identification ||
-      details.fabricIdentification,
-  );
-  const brand = submission.brand || details.brand || "Not specified";
-  const dssContext = [
+  const confidence = recommendation
+    ? `${Math.round(Number(recommendation.confidence || 0) * 100)}%`
+    : "Not available";
+  const score = recommendation?.score != null
+    ? `${Number(recommendation.score).toFixed(1)} / 100`
+    : "Not available";
+
+  return [
     `Selected pathway: ${pathwayLabels[pathway] || pathway}`,
+    `DSS confidence: ${confidence}`,
     recommendation ? `DSS rank: #${recommendation.rank}` : "",
-    recommendation ? `DSS score: ${Number(recommendation.score || 0).toFixed(1)} / 100` : "",
+    `DSS score: ${score}`,
     recommendations.length > 0
       ? `All DSS pathway scores: ${formatRecommendationScores(recommendations)}`
       : "",
-    recommendation ? `Selected pathway reasoning: ${recommendation.explanation}` : "",
-    recommendation ? `Matched DSS checks: ${formatCheckList(recommendation.checks, true)}` : "",
-    recommendation ? `Needs review: ${formatCheckList(recommendation.checks, false)}` : "",
-  ].filter(Boolean);
-
-  return [
     `Submission name: ${submission.submission_name || submission.item_type}`,
     `Item: ${submission.item_type}`,
     `Quantity: ${submission.quantity || 1}`,
     `Condition: ${submission.condition || "Not specified"}`,
     `Cleanliness: ${submission.cleanliness || "Not specified"}`,
     `Fabric: ${submission.fabric || formatListValue(details.fabric_types_list || details.fabric_types)}`,
-    `Fabric identified by: ${fabricIdentifiedBy}`,
-    `Brand: ${brand}`,
-    `Burn test: ${formatBurnTest(submission)}`,
-    submission.upcycle_request
-      ? `User upcycle request: ${submission.upcycle_request}`
-      : "",
-    "",
-    ...dssContext,
+    recommendation ? `Selected pathway reasoning: ${recommendation.explanation}` : "",
+    recommendation ? `Matched DSS checks: ${formatCheckList(recommendation.checks, true)}` : "",
+    recommendation ? `Needs review: ${formatCheckList(recommendation.checks, false)}` : "",
   ].filter(Boolean).join("\n");
 }
 
-function BriefPreview({ brief, maxLines }) {
+function BriefPreview({ brief }) {
   const lines = String(brief || "")
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-  const visibleLines = maxLines ? lines.slice(0, maxLines) : lines;
 
   return (
     <div className="rounded-2xl border border-[#dce4da] bg-[#fbfcfa] p-4 text-sm leading-7 text-[#19221d] dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-100">
-      {visibleLines.map((line, index) => {
+      {lines.map((line, index) => {
         const separatorIndex = line.indexOf(":");
 
         if (separatorIndex <= 0) {
-          return <p key={`${line}-${index}`}>{line}</p>;
+          return <p key={`${line}-${index}`} className="mb-2 break-words last:mb-0">{line}</p>;
         }
 
         return (
-          <p key={`${line}-${index}`}>
+          <p key={`${line}-${index}`} className="mb-2 break-words last:mb-0">
             <span className="font-semibold dark:text-white">
               {line.slice(0, separatorIndex + 1)}
             </span>{" "}
@@ -763,7 +744,7 @@ export function DssConfirmationPage() {
           <aside className="space-y-6">
             <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_12px_34px_rgba(0,0,0,0.3)]">
               <h2 className="mb-3 text-xl font-semibold">Partner brief</h2>
-              <BriefPreview brief={brief} maxLines={9} />
+              <BriefPreview brief={brief} />
               {selectedRecommendation && (
                 <div className="mt-3 rounded-xl bg-[#f7faf5] px-4 py-3 text-sm text-[#5f6f67] dark:bg-white/[0.05] dark:text-zinc-300">
                   <div>DSS average score: {dssAverageScore?.toFixed(1) || "N/A"} / 100</div>
