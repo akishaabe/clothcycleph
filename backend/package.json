@@ -10,10 +10,10 @@
     "verify:crud": "tsx src/scripts/verifyCrud.ts",
     "build": "tsc",
     "worker:build": "tsc --noEmit",
-    "worker:dev": "npx --yes wrangler@4.91.0 dev",
-    "d1:apply:local": "npx --yes wrangler@4.91.0 d1 execute clothcycle --local --file=src/db/d1-schema.sql",
-    "d1:apply:remote": "npx --yes wrangler@4.91.0 d1 execute clothcycle --remote --file=src/db/d1-schema.sql",
-    "deploy": "npm run worker:build && npx --yes wrangler@4.91.0 deploy",
+    "worker:dev": "wrangler dev",
+    "d1:apply:local": "wrangler d1 execute clothcycle --local --file=src/db/d1-schema.sql",
+    "d1:apply:remote": "wrangler d1 execute clothcycle --remote --file=src/db/d1-schema.sql",
+    "deploy": "npm run worker:build && wrangler deploy",
     "start": "node dist/index.js",
     "seed": "tsx src/seeds/index.ts",
     "test": "vitest"
@@ -45,6 +45,7 @@
     "@types/uuid": "^9.0.7",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.5",
+    "wrangler": "4.91.0"
   }
 }

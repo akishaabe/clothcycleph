@@ -17,6 +17,7 @@ import {
 import { dssService } from "../../services/api";
 import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
 import { ImageCarousel } from "../components/ImageCarousel";
+import { formatManilaDate } from "../../utils/dateTime";
 
 const pathwayLabels = {
   recycle: "Recycle",
@@ -36,15 +37,11 @@ const statusClass = {
 };
 
 function formatDate(value) {
-  if (!value) {
-    return "";
-  }
-
-  return new Intl.DateTimeFormat("en-PH", {
+  return formatManilaDate(value, {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(new Date(value));
+  });
 }
 
 function normalizePathway(value) {

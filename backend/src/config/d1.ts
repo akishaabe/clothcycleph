@@ -40,7 +40,8 @@ export async function queryD1<T = any>(
 ): Promise<D1Result<T>> {
   const statement = bindParams(db.prepare(sql), params);
 
-  return statement.all<T>();
+  const result = await statement.all<T>();
+  return normalizeD1Result(result);
 }
 
 /**
@@ -53,7 +54,8 @@ export async function queryD1First<T = any>(
 ): Promise<T | undefined> {
   const statement = bindParams(db.prepare(sql), params);
 
-  return statement.first<T>();
+  const row = await statement.first<T>();
+  return normalizeD1Row(row);
 }
 
 /**
@@ -67,7 +69,8 @@ export async function executeD1<T = any>(
   const statement = bindParams(db.prepare(sql), params);
 
   if (/\bRETURNING\b/i.test(sql)) {
-    return statement.all<T>();
+    const result = await statement.all<T>();
+    return normalizeD1Result(result);
   }
 
   return statement.run();
@@ -75,6 +78,36 @@ export async function executeD1<T = any>(
 
 function bindParams(statement: D1PreparedStatement, params: any[]) {
   return params.length > 0 ? statement.bind(...params) : statement;
+}
+
+const timestampFieldPattern = /(?:^|_)(?:created_at|updated_at|submitted_at|scheduled_at|expires_at|locked_until|last_message_time|email_verified_at|read_at)$/;
+const sqliteUtcTimestampPattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+
+function normalizeD1Result<T>(result: D1Result<T>): D1Result<T> {
+  if (!result.results) {
+    return result;
+  }
+
+  return {
+    ...result,
+    results: result.results.map((row) => normalizeD1Row(row) as T),
+  };
+}
+
+function normalizeD1Row<T>(row: T | undefined): T | undefined {
+  if (!row || typeof row !== 'object') {
+    return row;
+  }
+
+  const normalized: Record<string, unknown> = { ...(row as Record<string, unknown>) };
+
+  for (const [key, value] of Object.entries(normalized)) {
+    if (typeof value === 'string' && timestampFieldPattern.test(key) && sqliteUtcTimestampPattern.test(value)) {
+      normalized[key] = `${value.replace(' ', 'T')}Z`;
+    }
+  }
+
+  return normalized as T;
 }
 
 /**

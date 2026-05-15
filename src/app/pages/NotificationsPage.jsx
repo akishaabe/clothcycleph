@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { dssService, notificationService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
+import { formatManilaDate } from "../../utils/dateTime";
 import "./NotificationsPage.css";
 
 export function NotificationsPage() {
@@ -159,29 +160,13 @@ export function NotificationsPage() {
     }
   };
 
-  const toDisplayDate = (value) => {
-    if (!value) {
-      return null;
-    }
-
-    const timestamp = String(value);
-    const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(timestamp);
-
-    return new Date(hasTimezone ? timestamp : `${timestamp}Z`);
-  };
-
   const formatTime = (value) => {
-    const date = toDisplayDate(value);
-
-    return date
-      ? new Intl.DateTimeFormat("en-PH", {
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-          timeZone: "Asia/Manila",
-        }).format(date)
-      : "";
+    return formatManilaDate(value, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
   };
 
   const ruleRequestRows = selectedRuleRequest

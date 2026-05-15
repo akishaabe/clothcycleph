@@ -16,6 +16,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { dssService, messageService, notificationService, submissionService } from "../../services/api";
+import { formatManilaDate, parseUtcTimestamp } from "../../utils/dateTime";
 import {
   BarChart,
   Bar,
@@ -161,8 +162,8 @@ export function UserDashboard() {
 
   const monthlyData = useMemo(() => {
     const grouped = submissions.reduce((acc, submission) => {
-      const date = submission.created_at ? new Date(submission.created_at) : new Date();
-      const month = date.toLocaleDateString("en-PH", { month: "short" });
+      const date = parseUtcTimestamp(submission.created_at) || new Date();
+      const month = formatManilaDate(date, { month: "short" });
       acc[month] = (acc[month] || 0) + 1;
       return acc;
     }, {});
@@ -170,7 +171,7 @@ export function UserDashboard() {
     const rows = Object.entries(grouped).map(([month, items]) => ({ month, items }));
     return rows.length > 0
       ? rows
-      : [{ month: new Date().toLocaleDateString("en-PH", { month: "short" }), items: 0 }];
+      : [{ month: formatManilaDate(new Date(), { month: "short" }), items: 0 }];
   }, [submissions]);
 
   const distributionData = useMemo(() => {

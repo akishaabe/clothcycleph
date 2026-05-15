@@ -6,6 +6,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { dssService, messageService, notificationService } from "../../services/api";
 import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
 import { ImageCarousel } from "../components/ImageCarousel";
+import { formatManilaDate, parseUtcTimestamp } from "../../utils/dateTime";
 
 const getTrendClass = (value) => {
   if (value.startsWith("-")) {
@@ -39,13 +40,11 @@ const formatStatusLabel = (status) =>
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 const formatDate = (value) =>
-  value
-    ? new Intl.DateTimeFormat("en-PH", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }).format(new Date(value))
-    : "";
+  formatManilaDate(value, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 
 const formatPercent = (value) =>
   value == null ? "Not available" : `${Math.round(Number(value) * 100)}%`;
@@ -192,8 +191,8 @@ export function PartnerDashboard() {
 
   const platformTrendData = useMemo(() => {
     const grouped = requests.reduce((acc, request) => {
-      const date = request.created_at ? new Date(request.created_at) : new Date();
-      const month = date.toLocaleDateString("en-PH", { month: "short" });
+      const date = parseUtcTimestamp(request.created_at) || new Date();
+      const month = formatManilaDate(date, { month: "short" });
 
       if (!acc[month]) {
         acc[month] = { month, users: new Set(), submissions: 0 };
@@ -215,7 +214,7 @@ export function PartnerDashboard() {
 
     return rows.length > 0
       ? rows
-      : [{ month: new Date().toLocaleDateString("en-PH", { month: "short" }), users: 0, submissions: 0 }];
+      : [{ month: formatManilaDate(new Date(), { month: "short" }), users: 0, submissions: 0 }];
   }, [requests]);
 
   const updateRequestStatus = async (request, status, noteOverride) => {

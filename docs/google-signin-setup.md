@@ -37,6 +37,39 @@ Add the production frontend origin when deployed.
 
 This Google Identity Services flow does not require a redirect URI or client secret because the frontend receives an ID token and the backend validates that token.
 
+## Cloudflare production checklist
+
+Use the deployed frontend origin as the Google OAuth **Authorized JavaScript origin**:
+
+```text
+https://clothcycleph.com
+https://<your-cloudflare-pages-project>.pages.dev
+```
+
+Do not add `/login`, `/signup`, or `/api/auth/google` as redirect URIs for the current button flow. The app uses the Google Identity Services popup/button callback, then posts the ID token to:
+
+```text
+https://api.clothcycleph.com/api/auth/google
+```
+
+Production frontend environment:
+
+```env
+VITE_API_URL=https://api.clothcycleph.com/api
+VITE_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
+VITE_DISPLAY_TIME_ZONE=Asia/Manila
+```
+
+Production Worker configuration:
+
+```text
+GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
+CORS_ORIGIN=https://clothcycleph.com,https://<your-cloudflare-pages-project>.pages.dev
+APP_URL=https://clothcycleph.com
+```
+
+The frontend stores the ClothCycle JWT in browser storage and sends it through the `Authorization` header, so cross-site cookies are not required for Google sign-in. HTTPS is required for production Google Identity Services and Cloudflare provides it for both custom domains and `pages.dev`.
+
 ## Debugging
 
 - If the Google button does not render, check `VITE_GOOGLE_CLIENT_ID`.

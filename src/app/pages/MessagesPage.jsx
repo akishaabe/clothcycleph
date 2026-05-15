@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useMessages } from "../../hooks/useMessages";
+import { formatManilaDate } from "../../utils/dateTime";
 import "./MessagesPage.css";
 
 const themeDetails = {
@@ -110,16 +111,12 @@ const previewInitialMessages = {
 };
 
 const formatMessageTime = (value) => {
-  if (!value) {
-    return "";
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
+  return formatManilaDate(value, {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(value));
+  });
 };
 
 const normalizeEmail = (email) => email?.trim().toLowerCase() ?? "";

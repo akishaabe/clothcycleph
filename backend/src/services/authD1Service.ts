@@ -1,5 +1,5 @@
 import { D1Database, generateD1UUID, queryD1, queryD1First, executeD1 } from '../config/d1.js';
-import { hashPassword, comparePassword, generateSecureToken } from '../utils/auth.js';
+import { hashPassword, comparePassword, generateSecureToken } from '../utils/workerAuth.js';
 import { signJwt, verifyJwt } from '../utils/workerJwt.js';
 import {
   generateNumericCode,

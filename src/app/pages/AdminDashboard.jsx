@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { dssService, messageService, notificationService, adminService } from "../../services/api";
+import { formatManilaDate, getTimestamp } from "../../utils/dateTime";
 
 const initialAccounts = [];
 
@@ -288,7 +289,7 @@ export function AdminDashboard() {
 
   const systemGrowthData = useMemo(() => {
     const today = new Date();
-    const label = today.toLocaleDateString("en-PH", { day: "2-digit", month: "short" });
+    const label = formatManilaDate(today, { day: "2-digit", month: "short" });
 
     return [
       {
@@ -310,7 +311,7 @@ export function AdminDashboard() {
         return Number(b.score || 0) - Number(a.score || 0);
       }
 
-      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+      return getTimestamp(b.created_at) - getTimestamp(a.created_at);
     });
   }, [dssAuditRuns, dssAuditSort]);
 
@@ -353,7 +354,7 @@ export function AdminDashboard() {
         return String(a.status || "").localeCompare(String(b.status || ""));
       }
 
-      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+      return getTimestamp(b.created_at) - getTimestamp(a.created_at);
     });
   }, [ruleChangeRequests, ruleRequestSort]);
 
@@ -364,12 +365,12 @@ export function AdminDashboard() {
       user: account.name,
     }));
     const dssEvents = dssAuditRuns.slice(0, 4).map((run) => ({
-      time: run.created_at ? new Date(run.created_at).toLocaleDateString("en-PH") : "Recent",
+      time: run.created_at ? formatManilaDate(run.created_at) : "Recent",
       action: `DSS ${run.recommended_pathway} recommendation`,
       user: run.submission_name || run.item_type || "Submission",
     }));
     const ruleEvents = ruleChangeRequests.slice(0, 4).map((request) => ({
-      time: request.created_at ? new Date(request.created_at).toLocaleDateString("en-PH") : "Recent",
+      time: request.created_at ? formatManilaDate(request.created_at) : "Recent",
       action: `Partner rule request ${request.status || "pending"}`,
       user: request.partner_name || request.requested_by_name || "Partner",
     }));

@@ -19,6 +19,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useFileUpload } from "../../hooks/useFileUpload";
 import { notificationService } from "../../services/api";
 import { isStrongPassword, PasswordChecklist } from "../../utils/passwordPolicy";
+import { formatManilaDate } from "../../utils/dateTime";
 import "./SettingsPage.css";
 
 const panelClass =
@@ -444,12 +445,11 @@ export function SettingsPage() {
   };
 
   const activeSince = user?.created_at
-    ? new Intl.DateTimeFormat("en-PH", {
-        timeZone: "Asia/Manila",
+    ? formatManilaDate(user.created_at, {
         month: "long",
         day: "numeric",
         year: "numeric",
-      }).format(new Date(user.created_at))
+      })
     : "Not available";
 
   const profileNameSize =
