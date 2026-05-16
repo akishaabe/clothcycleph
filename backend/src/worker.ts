@@ -167,8 +167,8 @@ app.onError((error, c) => {
 });
 
 const getAuthOptions = (c: any) => ({
-  jwtSecret: c.env.JWT_SECRET || 'CHANGE_ME',
-  totpEncryptionKey: c.env.TWO_FACTOR_ENCRYPTION_KEY || 'CHANGE_ME_TOO',
+  jwtSecret: requireWorkerSecret(c, 'JWT_SECRET'),
+  totpEncryptionKey: requireWorkerSecret(c, 'TWO_FACTOR_ENCRYPTION_KEY'),
   emailProvider: c.env.EMAIL_PROVIDER,
   emailApiKey: c.env.BREVO_API_KEY || c.env.SENDGRID_API_KEY,
   emailFrom: c.env.EMAIL_FROM,
@@ -176,6 +176,14 @@ const getAuthOptions = (c: any) => ({
   googleClientId: c.env.GOOGLE_CLIENT_ID,
   exposeDevSecrets: Boolean(!c.env.EMAIL_PROVIDER),
 });
+
+const requireWorkerSecret = (c: any, key: keyof CloudflareEnv) => {
+  const value = c.env[key];
+  if (!value || String(value).startsWith('replace-with')) {
+    throw new Error(`${String(key)} is required`);
+  }
+  return String(value);
+};
 
 const requireAuth = async (
   c: Context<{ Bindings: CloudflareEnv; Variables: Variables }>,
@@ -188,7 +196,7 @@ const requireAuth = async (
 
   const token = authorizationHeader.replace('Bearer ', '');
   try {
-    const payload = await verifyJwt(token, c.env.JWT_SECRET || 'CHANGE_ME');
+    const payload = await verifyJwt(token, requireWorkerSecret(c, 'JWT_SECRET'));
     c.set('user', payload as any);
     return await next();
   } catch (error) {

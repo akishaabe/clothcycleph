@@ -4,6 +4,10 @@ import crypto from 'crypto';
 import { config } from '../config/env.js';
 
 export const generateToken = (payload: any): string => {
+  if (!config.jwt.secret) {
+    throw new Error('JWT_SECRET is required');
+  }
+
   const options: jwt.SignOptions = {
     expiresIn: config.jwt.expiresIn as jwt.SignOptions['expiresIn'],
   };
@@ -13,6 +17,9 @@ export const generateToken = (payload: any): string => {
 
 export const verifyToken = (token: string): any => {
   try {
+    if (!config.jwt.secret) {
+      throw new Error('JWT_SECRET is required');
+    }
     return jwt.verify(token, config.jwt.secret!);
   } catch (error) {
     throw new Error('Invalid token');

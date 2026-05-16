@@ -1,6 +1,6 @@
 Project clothcycle_ph {
-  database_type: "PostgreSQL / Cloudflare D1"
-  Note: "Documentation ERD snapshot for the current working ClothCycle PH schema."
+  database_type: "PostgreSQL / Neon for current QA; D1 schema is reference only"
+  Note: "Documentation ERD snapshot for the current working ClothCycle PH Neon schema."
 }
 
 Table users {
@@ -26,6 +26,7 @@ Table users {
   two_factor_confirmed_at timestamp
   email_verified_at timestamp
   terms_accepted_at timestamp
+  last_login_at timestamp
   created_at timestamp
   updated_at timestamp
 }
@@ -36,6 +37,7 @@ Table user_preferences {
   email_notifications boolean
   push_notifications boolean
   sms_notifications boolean
+  newsletter boolean
   created_at timestamp
   updated_at timestamp
 }

@@ -1,95 +1,110 @@
-# Cloudflare Hono + D1 Deployment Notes
+# Cloudflare / Hono Deployment Notes
 
-Use the Hono Worker in `backend/src/worker.ts` as the deployment backend.
+## Current QA Backend
 
-## Local D1 schema apply
+The backend used for QA is:
 
-```bash
-cd backend
-npm ci
-npm run d1:apply:local
-```
+- Hono on Node via `backend/src/index.ts`
+- API routes in `backend/src/honoLocalApp.ts`
+- Neon Postgres through `backend/src/config/database.ts`
+- Local URL: `http://localhost:5000/api`
 
-Note for Windows ARM64 machines: the frontend native packages include Windows
-ARM64 builds (`esbuild`, Rollup, Tailwind Oxide), but Wrangler's local Worker
-runtime currently installs `@cloudflare/workerd-windows-64` and not a native
-`workerd-windows-arm64` package. If `wrangler dev` or local D1 fails with
-`Unsupported platform: win32 arm64 LE`, use one of these paths:
-
-- Run the backend commands in WSL2 Ubuntu with ARM64 Linux Node, where
-  `@cloudflare/workerd-linux-arm64` is available.
-- Use Windows x64 Node under emulation and regenerate `backend/node_modules`
-  with `npm ci`.
-- Skip local Worker emulation and use remote D1 / Cloudflare dry-run deploy
-  commands from a supported environment.
-
-This project pins Wrangler locally in `backend/package.json`. Use `npm run ...`
-from `backend` instead of relying on a global Wrangler install. On Windows
-PowerShell systems with script execution disabled, call `npm.cmd` directly:
+Run it with:
 
 ```powershell
 cd backend
-npm.cmd ci
-npm.cmd exec wrangler -- --version
+npm.cmd run dev
+```
+
+The frontend should point at:
+
+```env
+VITE_API_URL=http://localhost:5000/api
+```
+
+## Worker Status
+
+`backend/src/worker.ts` is a Cloudflare Worker/Hono entry, but it currently uses
+the D1 service layer. That means it is **not the production path** if the final
+database is Neon Postgres.
+
+Do not deploy the Worker as the production API until one of these decisions is
+made:
+
+1. Keep Neon: replace D1 services with a Worker-compatible Neon adapter.
+2. Switch to D1: apply and maintain `backend/src/db/d1-schema.sql` as the source
+   of truth.
+
+For the current thesis QA flow, use Hono + Neon locally.
+
+## Wrangler Wrapper
+
+Windows ARM64 can fail on native Wrangler/workerd. Use the Docker wrapper only
+for Wrangler commands:
+
+```powershell
+docker compose -f docker-compose.wrangler.yml run --rm wrangler wrangler --version
+```
+
+Cloudflare API tokens should go in a local-only `.env.wrangler` file at project
+root:
+
+```env
+CLOUDFLARE_API_TOKEN=your_token_here
+```
+
+## Required Local Backend Env
+
+`backend/.env` must define:
+
+```env
+DATABASE_URL=
+JWT_SECRET=
+TWO_FACTOR_ENCRYPTION_KEY=
+CORS_ORIGIN=http://localhost:5173,http://127.0.0.1:5173
+APP_URL=http://localhost:5173
+GOOGLE_CLIENT_ID=
+EMAIL_PROVIDER=console
+```
+
+The backend now fails in production if `DATABASE_URL`, `JWT_SECRET`, or
+`TWO_FACTOR_ENCRYPTION_KEY` is missing.
+
+## Required Worker Secrets Later
+
+When the Worker path is ready, set these with Wrangler secrets instead of
+committing them to `wrangler.toml`:
+
+```powershell
+cd backend
+docker compose -f ..\docker-compose.wrangler.yml run --rm wrangler wrangler secret put JWT_SECRET
+docker compose -f ..\docker-compose.wrangler.yml run --rm wrangler wrangler secret put TWO_FACTOR_ENCRYPTION_KEY
+docker compose -f ..\docker-compose.wrangler.yml run --rm wrangler wrangler secret put SENDGRID_API_KEY
+```
+
+## Upload Policy
+
+Current QA local uploads:
+
+- accept images only
+- reject files above 5 MB
+- save to local `backend/uploads` when R2 is not configured
+
+Production Worker uploads must use R2. Cloudflare Workers cannot write to local
+disk and should not buffer large user files beyond the configured limit.
+
+## Pre-Merge Checks
+
+```powershell
+npm.cmd run build
+cd backend
+npm.cmd run build
 npm.cmd run worker:build
-npm.cmd exec wrangler -- deploy --dry-run --outdir .wrangler-dry-run
+npm.cmd test -- --run
 ```
 
-The frontend build uses Vite/Rollup/esbuild packages that include Windows ARM64
-optional binaries. The backend Worker build now avoids Node-only auth imports in
-the Worker path, so Cloudflare bundling does not need Node built-in polyfills for
-JWT/password utilities.
+## Timestamp Policy
 
-## Remote D1 schema apply
-
-After `backend/wrangler.toml` has the real D1 `database_id`:
-
-```bash
-cd backend
-npm ci
-npm run d1:apply:remote
-```
-
-## Deploy verification
-
-Before publishing:
-
-```bash
-cd backend
-npm run worker:build
-npm exec wrangler -- deploy --dry-run --outdir .wrangler-dry-run
-```
-
-To publish after configuring real `database_id`, R2 bucket, routes, and secrets:
-
-```bash
-cd backend
-npm run deploy
-```
-
-If Wrangler warns that multiple environments are defined, either deploy the
-top-level configuration intentionally with `npm exec wrangler -- deploy --env=""`
-or add all required bindings and vars under the target environment before using
-`--env production`.
-
-## Required Cloudflare bindings / secrets
-
-- `DB`: D1 database binding
-- `R2_BUCKET`: R2 bucket binding
-- `JWT_SECRET`: Wrangler secret
-- `TWO_FACTOR_ENCRYPTION_KEY`: Wrangler secret
-- `SENDGRID_API_KEY` or `BREVO_API_KEY`: Wrangler secret when email sending is enabled
-- `CORS_ORIGIN`: comma-separated frontend origins
-- `APP_URL`: deployed frontend URL
-- `GOOGLE_CLIENT_ID`: Google OAuth Web Client ID, matching `VITE_GOOGLE_CLIENT_ID`
-- `R2_PUBLIC_BASE_URL`: Worker public URL, used for `/api/uploads/:key`
-
-Images are stored in R2. The database stores image URLs, storage keys, labels, and metadata only.
-
-## Timestamp policy
-
-D1 `CURRENT_TIMESTAMP` values are UTC and may look like
-`2026-05-15 12:30:00`. The Worker normalizes top-level timestamp fields to
-explicit UTC strings before JSON responses, and the frontend formats display
-dates with `Asia/Manila` by default. Override with `VITE_DISPLAY_TIME_ZONE` only
-if the app is deployed for another locale.
+Database timestamps are treated as UTC by the backend. The frontend formats
+dates in the viewer's browser timezone, so users in PH, Australia, US, or other
+regions see times localized to their own device.

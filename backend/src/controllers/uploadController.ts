@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import type { HttpRequest as Request, HttpResponse as Response, UploadedFile } from '../types/http.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from '../config/env.js';
@@ -6,12 +6,7 @@ import { AppError } from '../utils/errorHandler.js';
 import { uploadToR2 } from '../services/r2Service.js';
 
 export interface FileRequest extends Request {
-  file?: Express.Multer.File;
-  user?: {
-    id: string;
-    email: string;
-    role: 'user' | 'partner' | 'admin';
-  };
+  file?: UploadedFile;
 }
 
 export const uploadFile = async (req: FileRequest, res: Response) => {
@@ -67,7 +62,7 @@ export const uploadFile = async (req: FileRequest, res: Response) => {
       await fs.mkdir(uploadDir, { recursive: true });
       await fs.writeFile(path.join(uploadDir, safeName), req.file.buffer);
       key = `local/${safeName}`;
-      url = `${req.protocol}://${req.get('host')}/uploads/${safeName}`;
+      url = `${req.protocol || 'http'}://${req.get?.('host') || 'localhost:5000'}/uploads/${safeName}`;
     }
 
     res.status(201).json({

@@ -1,0 +1,22 @@
+services:
+  wrangler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.wrangler
+    working_dir: /app
+    env_file:
+      - path: ./.env.wrangler
+        required: false
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./backend:/app
+      - clothcycle_wrangler_node_modules:/app/node_modules
+      - clothcycle_wrangler_config:/root/.config/.wrangler
+      - clothcycle_wrangler_cache:/root/.cache
+    command: wrangler --version
+
+volumes:
+  clothcycle_wrangler_node_modules:
+  clothcycle_wrangler_config:
+  clothcycle_wrangler_cache:

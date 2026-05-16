@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { messageService } from '../services/api';
 import { Message, Conversation, MessageContact } from '../types/api';
-import { disconnectSocket, getSocket } from '../services/socket';
 
 export function useMessages() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -10,37 +9,6 @@ export function useMessages() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeThreadUserId, setActiveThreadUserId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const socket = getSocket();
-
-    if (!socket) {
-      return undefined;
-    }
-
-    const handleMessageCreated = (message: Message) => {
-      setMessages((current) => {
-        const isActiveThread =
-          activeThreadUserId &&
-          (message.from_user_id === activeThreadUserId ||
-            message.to_user_id === activeThreadUserId);
-
-        if (!isActiveThread || current.some((item) => item.id === message.id)) {
-          return current;
-        }
-
-        return [...current, message];
-      });
-
-      fetchConversations({ silent: true });
-    };
-
-    socket.on('message:created', handleMessageCreated);
-
-    return () => {
-      socket.off('message:created', handleMessageCreated);
-    };
-  }, [activeThreadUserId]);
 
   const fetchContacts = async () => {
     setError(null);
@@ -128,6 +96,5 @@ export function useMessages() {
     fetchMessages,
     sendMessage,
     markAsRead,
-    disconnectSocket,
   };
 }

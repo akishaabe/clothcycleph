@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import type { HttpRequest as Request, HttpResponse as Response } from '../types/http.js';
 import { getClient, query } from '../config/database.js';
 import { AppError } from '../utils/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';

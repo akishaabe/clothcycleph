@@ -2,6 +2,19 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const isProduction = process.env.NODE_ENV === 'production';
+const missingRequiredEnv = ['DATABASE_URL', 'JWT_SECRET', 'TWO_FACTOR_ENCRYPTION_KEY'].filter(
+  (key) => !process.env[key]
+);
+
+if (missingRequiredEnv.length > 0) {
+  const message = `Missing required backend environment variables: ${missingRequiredEnv.join(', ')}`;
+  if (isProduction) {
+    throw new Error(message);
+  }
+  console.warn(message);
+}
+
 const corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
   .split(',')
   .map((origin) => origin.trim())

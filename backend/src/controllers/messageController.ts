@@ -1,8 +1,7 @@
-import { Request, Response } from 'express';
+import type { HttpRequest as Request, HttpResponse as Response } from '../types/http.js';
 import { query } from '../config/database.js';
 import { AppError } from '../utils/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
-import { emitMessageCreated } from '../services/socketService.js';
 
 export const getMessageContacts = async (req: Request, res: Response) => {
   try {
@@ -76,8 +75,6 @@ export const sendMessage = async (req: Request, res: Response) => {
        RETURNING *`,
       [id, fromUserId, to_user_id, content.trim()]
     );
-
-    emitMessageCreated(result.rows[0], [fromUserId, to_user_id]);
 
     res.status(201).json({
       message: 'Message sent successfully',

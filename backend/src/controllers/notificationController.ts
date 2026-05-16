@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
-import { AuthRequest } from '../middleware/auth.js';
+import type { HttpRequest as Request, HttpResponse as Response } from '../types/http.js';
+import type { HttpRequest as AuthRequest } from '../types/http.js';
 import { AppError } from '../utils/errorHandler.js';
 import {
   getUserNotifications,
@@ -86,14 +86,10 @@ export const markAsRead = async (req: AuthRequest, res: Response) => {
       throw new AppError(401, 'User not authenticated');
     }
 
-    const notification = await markNotificationAsRead(id);
+    const notification = await markNotificationAsRead(id, userId);
 
     if (!notification) {
       throw new AppError(404, 'Notification not found');
-    }
-
-    if (notification.user_id !== userId) {
-      throw new AppError(403, 'You do not have permission to mark this notification');
     }
 
     res.json({

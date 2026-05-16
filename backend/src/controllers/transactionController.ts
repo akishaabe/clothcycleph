@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
-import { AuthRequest } from '../middleware/auth.js';
+import type { HttpRequest as Request, HttpResponse as Response } from '../types/http.js';
+import type { HttpRequest as AuthRequest } from '../types/http.js';
 import { AppError } from '../utils/errorHandler.js';
 import { query } from '../config/database.js';
 import { v4 as uuidv4 } from 'uuid';

@@ -1,7 +1,7 @@
-import { Response } from 'express';
+import type { HttpResponse as Response } from '../types/http.js';
 import { v4 as uuidv4 } from 'uuid';
 import { getClient, query } from '../config/database.js';
-import { AuthRequest } from '../middleware/auth.js';
+import type { HttpRequest as AuthRequest } from '../types/http.js';
 import { AppError } from '../utils/errorHandler.js';
 import { enqueueNotification } from '../services/jobQueue.js';
 import { analyzeBurnTest, buildPathwayRecommendations, DSS_ENGINE_VERSION } from '../services/dssEngine.js';

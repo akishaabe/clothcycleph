@@ -157,14 +157,14 @@ export async function updateNotificationPreferences(
   return result.rows[0];
 }
 
-export async function markNotificationAsRead(notificationId: string) {
+export async function markNotificationAsRead(notificationId: string, userId: string) {
   try {
     const result = await query(
       `UPDATE notifications
        SET read = true, read_at = NOW()
-       WHERE id = $1
+       WHERE id = $1 AND user_id = $2
        RETURNING *`,
-      [notificationId]
+      [notificationId, userId]
     );
 
     if (result.rows.length > 0) {
@@ -172,7 +172,7 @@ export async function markNotificationAsRead(notificationId: string) {
       const redis = getRedisClient();
       if (redis) {
         try {
-          await redis.del(`notifications:${result.rows[0].user_id}:count`);
+          await redis.del(`notifications:${userId}:count`);
         } catch (error) {
           console.warn('Redis cache deletion failed:', error);
         }

@@ -13,6 +13,10 @@ const POSTGRES_TIMESTAMP_OID = 1114;
 pgTypes.setTypeParser(POSTGRES_TIMESTAMP_OID, (value: string) => new Date(`${value.replace(' ', 'T')}Z`));
 
 const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is required');
+}
+
 const requiresSsl =
   process.env.NODE_ENV === 'production' || databaseUrl?.includes('sslmode=require');
 

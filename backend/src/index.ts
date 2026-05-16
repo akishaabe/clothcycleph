@@ -1,129 +1,76 @@
-import express from 'express';
-import cors from 'cors';
-import path from 'node:path';
-import { createServer } from 'http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { config } from './config/env.js';
 import { initializeDatabase } from './models/schema.js';
-import { initializeRedis, closeRedis } from './config/redis.js';
-import { initializeQueues, setupQueueProcessors, closeQueues } from './services/jobQueue.js';
-import { errorHandler } from './middleware/errorHandler.js';
-import authRoutes from './routes/auth.js';
-import submissionRoutes from './routes/submissions.js';
-import messageRoutes from './routes/messages.js';
-import uploadRoutes from './routes/upload.js';
-import notificationRoutes from './routes/notifications.js';
-import transactionRoutes from './routes/transactions.js';
-import dssRoutes from './routes/dss.js';
-import adminRoutes from './routes/admin.js';
-import { initializeSocketServer } from './services/socketService.js';
+import app, { setLocalDatabaseStatus } from './honoLocalApp.js';
 
-const app = express();
-const httpServer = createServer(app);
+const httpServer = createServer(handleRequest);
 let databaseStatus: 'starting' | 'connected' | 'error' = 'starting';
-let redisStatus: 'starting' | 'connected' | 'error' = 'starting';
-let queueStatus: 'disabled' | 'initialized' = 'disabled';
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
-app.use(
-  cors({
-    origin(
-      origin: string | undefined,
-      callback: (error: Error | null, allow?: boolean) => void
-    ) {
-      if (!origin || isAllowedCorsOrigin(origin)) {
-        callback(null, true);
-        return;
-      }
+async function handleRequest(req: IncomingMessage, res: ServerResponse) {
+  try {
+    const origin = `http://${req.headers.host || `localhost:${config.server.port}`}`;
+    const url = new URL(req.url || '/', origin);
+    const request = new Request(url, {
+      method: req.method,
+      headers: req.headers as any,
+      body: ['GET', 'HEAD'].includes(req.method || 'GET') ? undefined : (req as any),
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' });
 
-      callback(new Error(`CORS blocked origin: ${origin}`));
-    },
-  })
-);
+    const response =
+      url.pathname === '/api/health'
+        ? await app.fetch(request)
+        : await app.fetch(request);
 
-// Health check
-app.get('/api/health', (req, res) => {
-  const isHealthy = databaseStatus === 'connected';
+    res.statusCode = response.status;
+    response.headers.forEach((value, key) => res.setHeader(key, value));
 
-  res.status(isHealthy ? 200 : 503).json({
-    status: isHealthy ? 'ok' : 'degraded',
-    message: 'ClothCycle Backend is running',
-    database: databaseStatus,
-    redis: redisStatus,
-    queues: queueStatus,
-  });
-});
+    if (!response.body) {
+      res.end();
+      return;
+    }
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/submissions', submissionRoutes);
-app.use('/api/messages', messageRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/transactions', transactionRoutes);
-app.use('/api/upload', uploadRoutes);
-app.use('/api/dss', dssRoutes);
-app.use('/api/admin', adminRoutes);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    res.end(buffer);
+  } catch (error) {
+    console.error('Hono server error:', error);
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.end(JSON.stringify({ error: 'Internal server error' }));
+  }
+}
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' });
-});
-
-// Error handling middleware
-app.use(errorHandler);
-
-// Start Express first so health checks can report database startup failures.
 async function startServer() {
-  const PORT = config.server.port;
-
-  initializeSocketServer(httpServer);
+  const port = config.server.port;
 
   try {
-    await listen(PORT);
+    await listen(port);
   } catch (error) {
     const serverError = error as NodeJS.ErrnoException;
 
     if (serverError.code === 'EADDRINUSE') {
       console.error(
-        `Port ${PORT} is already in use. Stop the other backend process or set a different PORT in backend/.env.`
+        `Port ${port} is already in use. Stop the other backend process or set a different PORT in backend/.env.`
       );
     } else {
-      console.error('Failed to start HTTP server:', error);
+      console.error('Failed to start Hono HTTP server:', error);
     }
 
     process.exit(1);
   }
 
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Hono server running on http://localhost:${port}`);
   console.log(`Environment: ${config.server.env}`);
 
   try {
     await initializeDatabase();
     databaseStatus = 'connected';
-    console.log('✅ Database initialized');
+    setLocalDatabaseStatus(databaseStatus);
+    console.log('Database initialized');
   } catch (error) {
     databaseStatus = 'error';
-    console.error('❌ Database initialization failed:', error);
-  }
-
-  // Initialize Redis
-  try {
-    const redis = await initializeRedis();
-    if (redis) {
-      redisStatus = 'connected';
-      initializeQueues();
-      setupQueueProcessors();
-      queueStatus = 'initialized';
-    } else {
-      redisStatus = 'error';
-      queueStatus = 'disabled';
-    }
-  } catch (error) {
-    redisStatus = 'error';
-    queueStatus = 'disabled';
-    console.warn('⚠️ Redis unavailable - running in degraded mode');
+    setLocalDatabaseStatus(databaseStatus);
+    console.error('Database initialization failed:', error);
   }
 }
 
@@ -145,40 +92,14 @@ function listen(port: number) {
   });
 }
 
-function isAllowedCorsOrigin(origin: string) {
-  if (config.cors.origins.includes(origin)) {
-    return true;
-  }
-
-  if (config.server.env === 'development') {
-    return /^http:\/\/(localhost|127\.0\.0\.1):517\d$/.test(origin);
-  }
-
-  return false;
-}
-
-// Graceful shutdown
 async function gracefulShutdown(signal: string) {
   console.log(`\nReceived ${signal}, starting graceful shutdown...`);
-
-  try {
-    await closeQueues();
-  } catch (error) {
-    console.error('Error closing job queues:', error);
-  }
-
-  try {
-    await closeRedis();
-  } catch (error) {
-    console.error('Error closing Redis:', error);
-  }
 
   httpServer.close(() => {
     console.log('HTTP server closed');
     process.exit(0);
   });
 
-  // Force exit after 10 seconds if graceful shutdown takes too long
   setTimeout(() => {
     console.error('Graceful shutdown timeout, forcing exit');
     process.exit(1);
