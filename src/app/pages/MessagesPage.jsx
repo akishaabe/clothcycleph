@@ -16,6 +16,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { useMessages } from "../../hooks/useMessages";
 import { formatManilaDate } from "../../utils/dateTime";
+import { resolveMediaUrl } from "../../utils/mediaUrl";
 import "./MessagesPage.css";
 
 const themeDetails = {
@@ -467,17 +468,11 @@ export function MessagesPage() {
                     conversation.other_user_id === activeUserId ? "is-active" : ""
                   }`}
                 >
-                  <div className="messages-avatar flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-lg sm:h-14 sm:w-14">
-                    {conversation.other_user_avatar_url ? (
-                      <img
-                        src={conversation.other_user_avatar_url}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      conversation.other_user_name.charAt(0)
-                    )}
-                  </div>
+                  <MessageAvatar
+                    name={conversation.other_user_name}
+                    url={conversation.other_user_avatar_url}
+                    className="h-12 w-12 rounded-2xl text-lg sm:h-14 sm:w-14"
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                       <h2 className="min-w-0 truncate font-sans text-base font-bold messages-heading sm:text-lg">
@@ -516,9 +511,11 @@ export function MessagesPage() {
                           contact.id === activeUserId ? "is-active" : ""
                         }`}
                       >
-                        <div className="messages-avatar flex h-12 w-12 shrink-0 items-center justify-center rounded-xl">
-                          {contact.name.charAt(0)}
-                        </div>
+                        <MessageAvatar
+                          name={contact.name}
+                          url={contact.avatar_url}
+                          className="h-12 w-12 rounded-xl"
+                        />
                         <div className="min-w-0">
                           <h2 className="truncate font-sans font-bold messages-heading">
                             {contact.name}
@@ -547,13 +544,20 @@ export function MessagesPage() {
             {activeParticipant ? (
               <>
                 <header className="flex flex-col gap-3 border-b p-4 sm:p-6 md:flex-row md:items-center md:justify-between">
-                  <div className="min-w-0">
-                    <h2 className="break-words font-sans text-2xl font-bold messages-heading sm:text-3xl">
-                      {activeParticipant.name}
-                    </h2>
-                    <p className="mt-1 break-all text-base messages-muted sm:text-lg">
-                      {roleLabel[activeParticipant.role]} - {activeParticipant.email}
-                    </p>
+                  <div className="flex min-w-0 items-center gap-4">
+                    <MessageAvatar
+                      name={activeParticipant.name}
+                      url={activeParticipant.avatar_url}
+                      className="h-12 w-12 rounded-2xl text-lg sm:h-14 sm:w-14"
+                    />
+                    <div className="min-w-0">
+                      <h2 className="break-words font-sans text-2xl font-bold messages-heading sm:text-3xl">
+                        {activeParticipant.name}
+                      </h2>
+                      <p className="mt-1 break-all text-base messages-muted sm:text-lg">
+                        {roleLabel[activeParticipant.role]} - {activeParticipant.email}
+                      </p>
+                    </div>
                   </div>
                   <span className="messages-pill inline-flex w-fit max-w-full items-center gap-2 rounded-full px-4 py-2 text-sm sm:px-5 sm:py-2.5 sm:text-lg">
                     <Clock3 className="h-5 w-5 shrink-0" />
@@ -696,6 +700,35 @@ function MessageEmptyIcon() {
   return (
     <div className="messages-avatar mx-auto flex h-16 w-16 items-center justify-center rounded-2xl">
       <Send className="h-7 w-7" />
+    </div>
+  );
+}
+
+function MessageAvatar({ name, url, className = "" }) {
+  const [hasImageError, setHasImageError] = useState(false);
+  const imageUrl = resolveMediaUrl(url);
+  const fallback = name?.trim().charAt(0).toUpperCase() || "?";
+
+  useEffect(() => {
+    setHasImageError(false);
+  }, [imageUrl]);
+
+  return (
+    <div
+      className={`messages-avatar flex shrink-0 items-center justify-center overflow-hidden ${className}`}
+      title={name}
+    >
+      {imageUrl && !hasImageError ? (
+        <img
+          src={imageUrl}
+          alt=""
+          className="h-full w-full object-cover"
+          loading="lazy"
+          onError={() => setHasImageError(true)}
+        />
+      ) : (
+        fallback
+      )}
     </div>
   );
 }

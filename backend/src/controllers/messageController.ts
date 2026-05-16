@@ -20,7 +20,7 @@ export const getMessageContacts = async (req: Request, res: Response) => {
           : ['user', 'partner', 'admin'];
 
     const result = await query(
-      `SELECT id, name, email, role, avatar_url
+      `SELECT id, name, email, role, COALESCE(avatar_url, profile_photo->>'url') AS avatar_url
        FROM users
        WHERE id <> $1 AND role = ANY($2)
        ORDER BY
@@ -156,7 +156,7 @@ export const getConversations = async (req: Request, res: Response) => {
          u.name AS other_user_name,
          u.email AS other_user_email,
          u.role AS other_user_role,
-         u.avatar_url AS other_user_avatar_url,
+         COALESCE(u.avatar_url, u.profile_photo->>'url') AS other_user_avatar_url,
          rm.content AS last_message_content,
          rm.from_user_id AS last_message_from_user_id,
          rm.created_at AS last_message_time,

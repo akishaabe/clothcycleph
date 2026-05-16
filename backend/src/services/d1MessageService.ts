@@ -10,7 +10,12 @@ export async function getMessageContactsD1(db: D1Database, userId: string, role:
 
   return queryD1(
     db,
-    `SELECT id, name, email, role, avatar_url
+    `SELECT
+       id,
+       name,
+       email,
+       role,
+       COALESCE(avatar_url, json_extract(profile_photo, '$.url')) AS avatar_url
      FROM users
      WHERE id <> ? AND role IN (${allowedRoles.map(() => '?').join(',')})
      ORDER BY CASE role WHEN 'partner' THEN 1 WHEN 'user' THEN 2 ELSE 3 END, name ASC`,
@@ -124,7 +129,7 @@ export async function getConversationsD1(db: D1Database, userId: string) {
        u.name AS other_user_name,
        u.email AS other_user_email,
        u.role AS other_user_role,
-       u.avatar_url AS other_user_avatar_url,
+       COALESCE(u.avatar_url, json_extract(u.profile_photo, '$.url')) AS other_user_avatar_url,
        rm.content AS last_message_content,
        rm.from_user_id AS last_message_from_user_id,
        rm.created_at AS last_message_time,

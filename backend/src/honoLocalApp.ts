@@ -153,7 +153,7 @@ export function setLocalDatabaseStatus(status: 'starting' | 'connected' | 'error
   localDatabaseStatus = status;
 }
 
-app.use('*', secureHeaders());
+app.use('*', secureHeaders({ crossOriginResourcePolicy: 'cross-origin' }));
 app.use(
   '*',
   cors({
@@ -187,6 +187,7 @@ app.get('/uploads/:filename', async (c) => {
       headers: {
         'Content-Type': contentTypeFromFilename(filename),
         'Cache-Control': 'public, max-age=31536000, immutable',
+        'Cross-Origin-Resource-Policy': 'cross-origin',
       },
     });
   } catch {

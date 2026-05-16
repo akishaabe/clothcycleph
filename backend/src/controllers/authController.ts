@@ -735,7 +735,7 @@ function toAuthUser(user: any) {
     email: user.email,
     name: user.name,
     role: user.role,
-    avatar_url: user.avatar_url,
+    avatar_url: user.avatar_url || getProfilePhotoUrl(user.profile_photo),
     bio: user.bio,
     phone: user.phone,
     address: user.address,
@@ -745,6 +745,28 @@ function toAuthUser(user: any) {
     created_at: user.created_at,
     updated_at: user.updated_at,
   };
+}
+
+function getProfilePhotoUrl(profilePhoto: unknown) {
+  if (!profilePhoto) {
+    return null;
+  }
+
+  if (typeof profilePhoto === 'object' && 'url' in profilePhoto) {
+    const url = (profilePhoto as { url?: unknown }).url;
+    return typeof url === 'string' ? url : null;
+  }
+
+  if (typeof profilePhoto !== 'string') {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(profilePhoto);
+    return parsed && typeof parsed.url === 'string' ? parsed.url : null;
+  } catch {
+    return null;
+  }
 }
 
 async function verifyGoogleCredential(credential: string) {
@@ -902,7 +924,7 @@ export const getProfile = async (req: Request, res: Response) => {
       throw new AppError(404, 'User not found');
     }
 
-    res.json({ data: result.rows[0] });
+    res.json({ data: toAuthUser(result.rows[0]) });
   } catch (error) {
     sendAuthError(res, error);
   }
@@ -972,7 +994,7 @@ export const updateProfile = async (req: Request, res: Response) => {
 
     res.json({
       message: 'Profile updated successfully',
-      data: result.rows[0],
+      data: toAuthUser(result.rows[0]),
     });
   } catch (error) {
     sendAuthError(res, error);

@@ -895,7 +895,7 @@ function toAuthUser(user: any): AuthUser {
     email: user.email,
     name: user.name,
     role: user.role as 'user' | 'partner' | 'admin',
-    avatar_url: user.avatar_url,
+    avatar_url: user.avatar_url || getProfilePhotoUrl(user.profile_photo),
     bio: user.bio,
     phone: user.phone,
     address: user.address,
@@ -905,4 +905,26 @@ function toAuthUser(user: any): AuthUser {
     created_at: user.created_at,
     updated_at: user.updated_at,
   };
+}
+
+function getProfilePhotoUrl(profilePhoto: unknown) {
+  if (!profilePhoto) {
+    return null;
+  }
+
+  if (typeof profilePhoto === 'object' && 'url' in profilePhoto) {
+    const url = (profilePhoto as { url?: unknown }).url;
+    return typeof url === 'string' ? url : null;
+  }
+
+  if (typeof profilePhoto !== 'string') {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(profilePhoto);
+    return parsed && typeof parsed.url === 'string' ? parsed.url : null;
+  } catch {
+    return null;
+  }
 }

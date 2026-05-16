@@ -136,7 +136,7 @@ const ALLOWED_UPLOAD_MIMETYPES = [
 
 const app = new Hono<{ Bindings: CloudflareEnv; Variables: Variables }>();
 
-app.use('*', secureHeaders());
+app.use('*', secureHeaders({ crossOriginResourcePolicy: 'cross-origin' }));
 app.use(
   '*',
   cors({
@@ -727,6 +727,7 @@ app.get('/api/uploads/:key', async (c) => {
       'content-type': object.httpMetadata?.contentType || 'application/octet-stream',
       etag: object.httpEtag || object.etag || '',
       'cache-control': 'public, max-age=31536000, immutable',
+      'cross-origin-resource-policy': 'cross-origin',
     },
   });
 });

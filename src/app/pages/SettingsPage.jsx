@@ -20,6 +20,7 @@ import { useFileUpload } from "../../hooks/useFileUpload";
 import { notificationService } from "../../services/api";
 import { isStrongPassword, PasswordChecklist } from "../../utils/passwordPolicy";
 import { formatManilaDate } from "../../utils/dateTime";
+import { resolveMediaUrl } from "../../utils/mediaUrl";
 import "./SettingsPage.css";
 
 const panelClass =
@@ -61,6 +62,8 @@ export function SettingsPage() {
   });
   const [profile, setProfile] = useState(savedProfile);
   const [profilePhoto, setProfilePhoto] = useState(user?.avatar_url || "");
+  const [profilePhotoPreview, setProfilePhotoPreview] = useState("");
+  const [profilePhotoError, setProfilePhotoError] = useState(false);
   const [profilePassword, setProfilePassword] = useState("");
   const [deletePassword, setDeletePassword] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -159,7 +162,17 @@ export function SettingsPage() {
     setSavedProfile(nextProfile);
     setProfile(nextProfile);
     setProfilePhoto(user?.avatar_url || "");
+    setProfilePhotoPreview("");
+    setProfilePhotoError(false);
   }, [user]);
+
+  useEffect(() => {
+    return () => {
+      if (profilePhotoPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(profilePhotoPreview);
+      }
+    };
+  }, [profilePhotoPreview]);
 
   const showSaveMessage = (type, text) => {
     setSaveMessage({ type, text });
@@ -400,15 +413,31 @@ export function SettingsPage() {
       return;
     }
 
+    const previewUrl = URL.createObjectURL(file);
+    setProfilePhotoPreview((currentPreview) => {
+      if (currentPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(currentPreview);
+      }
+      return previewUrl;
+    });
+    setProfilePhotoError(false);
+
     try {
       const resizedFile = await resizeProfilePhoto(file);
       const url = await uploadFile(resizedFile);
-      if (url) {
-        setProfilePhoto(url);
-        await updateProfile({ avatar_url: url });
-        showSaveMessage("success", "Profile photo updated at 500x500px.");
+      if (!url) {
+        setProfilePhotoPreview("");
+        showSaveMessage("error", "Photo upload failed.");
+        return;
       }
+
+      const updated = await updateProfile({ avatar_url: url });
+      setProfilePhoto(updated.avatar_url || url);
+      setProfilePhotoPreview("");
+      setProfilePhotoError(false);
+      showSaveMessage("success", "Profile photo updated at 500x500px.");
     } catch (error) {
+      setProfilePhotoPreview("");
       showSaveMessage("error", error.message || "Photo upload failed.");
     }
   };
@@ -420,6 +449,8 @@ export function SettingsPage() {
 
     const previousPhoto = profilePhoto;
     setProfilePhoto("");
+    setProfilePhotoPreview("");
+    setProfilePhotoError(false);
 
     try {
       await updateProfile({ avatar_url: null });
@@ -464,6 +495,7 @@ export function SettingsPage() {
     twoFactorPanel === "setup" || Boolean(twoFactorSetup);
   const isRecoveryPanelOpen =
     hasFreshRecoveryCodes && twoFactorPanel === "recovery";
+  const profilePhotoSrc = profilePhotoPreview || resolveMediaUrl(profilePhoto);
 
   return (
     <div
@@ -525,11 +557,12 @@ export function SettingsPage() {
               className={`${panelClass} h-fit rounded-2xl p-6 text-center`}
             >
               <div className="mx-auto mb-5 flex h-32 w-32 items-center justify-center overflow-hidden rounded-full bg-[#e5e7eb]">
-                {profilePhoto ? (
+                {profilePhotoSrc && !profilePhotoError ? (
                   <img
-                    src={profilePhoto}
+                    src={profilePhotoSrc}
                     alt="Profile"
                     className="h-full w-full object-cover"
+                    onError={() => setProfilePhotoError(true)}
                   />
                 ) : (
                   <User className="h-16 w-16 text-[#4b5563]" />
