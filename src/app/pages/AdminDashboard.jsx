@@ -28,6 +28,7 @@ import {
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { dssService, messageService, notificationService, adminService } from "../../services/api";
 import { formatManilaDate, getTimestamp } from "../../utils/dateTime";
+import { useAuth } from "../../context/AuthContext";
 
 const initialAccounts = [];
 
@@ -127,6 +128,7 @@ const mapUserToAccount = (user) => ({
 
 export function AdminDashboard() {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [searchParams] = useSearchParams();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -1422,7 +1424,11 @@ export function AdminDashboard() {
                 Cancel
               </button>
               <button
-                onClick={() => navigate("/")}
+                onClick={() => {
+                  logout();
+                  setShowLogoutConfirm(false);
+                  navigate("/login", { replace: true });
+                }}
                 className="rounded-xl bg-gray-950 px-4 py-2 text-white hover:bg-black"
               >
                 Log Out

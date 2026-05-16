@@ -1,7 +1,16 @@
-import { Pool, PoolClient } from 'pg';
+import pg, { PoolClient } from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+const { Pool } = pg;
+const pgTypes = (pg as any).types;
+
+// Neon stores legacy TIMESTAMP columns as UTC values. node-postgres parses
+// TIMESTAMP WITHOUT TIME ZONE as local machine time by default, which shifts
+// displayed times by the server timezone. Treat those values as UTC instead.
+const POSTGRES_TIMESTAMP_OID = 1114;
+pgTypes.setTypeParser(POSTGRES_TIMESTAMP_OID, (value: string) => new Date(`${value.replace(' ', 'T')}Z`));
 
 const databaseUrl = process.env.DATABASE_URL;
 const requiresSsl =

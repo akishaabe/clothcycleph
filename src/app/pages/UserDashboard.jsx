@@ -16,6 +16,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { dssService, messageService, notificationService, submissionService } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 import { formatManilaDate, parseUtcTimestamp } from "../../utils/dateTime";
 import {
   BarChart,
@@ -87,6 +88,7 @@ const formatStatusLabel = (status) =>
 
 export function UserDashboard() {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const location = useLocation();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -632,7 +634,11 @@ export function UserDashboard() {
                 Cancel
               </button>
               <button
-                onClick={() => navigate("/")}
+                onClick={() => {
+                  logout();
+                  setShowLogoutConfirm(false);
+                  navigate("/login", { replace: true });
+                }}
                 className="rounded-xl bg-[#336158] px-4 py-2 text-white hover:bg-[#2a4c48]"
               >
                 Log Out

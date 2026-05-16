@@ -7,6 +7,7 @@ import { dssService, messageService, notificationService } from "../../services/
 import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
 import { ImageCarousel } from "../components/ImageCarousel";
 import { formatManilaDate, parseUtcTimestamp } from "../../utils/dateTime";
+import { useAuth } from "../../context/AuthContext";
 
 const getTrendClass = (value) => {
   if (value.startsWith("-")) {
@@ -59,6 +60,7 @@ const getDssRecommendation = (request) =>
 
 export function PartnerDashboard() {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [searchParams] = useSearchParams();
   const requestsSectionRef = useRef(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -814,7 +816,11 @@ export function PartnerDashboard() {
                 Cancel
               </button>
               <button
-                onClick={() => navigate("/")}
+                onClick={() => {
+                  logout();
+                  setShowLogoutConfirm(false);
+                  navigate("/login", { replace: true });
+                }}
                 className="rounded-xl bg-[#4f6f9f] px-4 py-2 text-white hover:bg-[#3f5f8f]"
               >
                 Log Out
