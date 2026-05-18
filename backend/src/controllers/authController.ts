@@ -6,7 +6,6 @@ import {
   hashPassword,
   comparePassword,
   generateNumericCode,
-  generateSecureToken,
   hashToken,
   verifyToken,
 } from '../utils/auth.js';
@@ -188,22 +187,16 @@ export const login = async (req: Request, res: Response) => {
 
 export const continueWithGoogle = async (req: Request, res: Response) => {
   try {
-    const { credential, role = 'user' } = req.body;
+    const { credential } = req.body;
     const googleUser = await verifyGoogleCredential(credential);
 
     let userResult = await query('SELECT * FROM users WHERE email = $1', [googleUser.email]);
 
     if (userResult.rows.length === 0) {
-      const userId = uuidv4();
-      const passwordHash = await hashPassword(generateSecureToken());
+      throw new AppError(404, 'No account found for this Google email. Please sign up first before logging in.');
+    }
 
-      userResult = await query(
-        `INSERT INTO users (id, email, name, password_hash, role, avatar_url, two_factor_enabled, email_verified_at)
-         VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
-         RETURNING *`,
-        [userId, googleUser.email, googleUser.name, passwordHash, role, googleUser.picture]
-      );
-    } else if (!userResult.rows[0].email_verified_at) {
+    if (!userResult.rows[0].email_verified_at) {
       userResult = await query(
         `UPDATE users
          SET email_verified_at = NOW()
@@ -734,8 +727,14 @@ function isTwoFactorLoginRequired(user: any): boolean {
 }
 
 function assertAccountCanAuthenticate(user: any) {
-  if (String(user.status || 'active').toLowerCase() === 'suspended') {
+  const status = String(user.status || 'active').toLowerCase();
+
+  if (status === 'suspended') {
     throw new AppError(403, 'Your account has been suspended. Please contact support or the administrator.');
+  }
+
+  if (['deactivated', 'deleted', 'inactive'].includes(status)) {
+    throw new AppError(403, 'Your account is not active. Please contact support or the administrator.');
   }
 }
 

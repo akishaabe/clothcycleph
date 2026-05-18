@@ -177,7 +177,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const deleteAccount = async (password: string) => {
     const response = await authService.deleteAccount({ password });
-    logout();
     return response;
   };
 

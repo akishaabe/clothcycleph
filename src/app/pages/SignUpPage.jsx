@@ -1,20 +1,15 @@
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { Recycle, Mail, Lock, User, Leaf, ShieldCheck, Eye, EyeOff } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { getDashboardPathForRole } from "../../utils/roleRoutes";
-import {
-  getGoogleClientId,
-  loadGoogleIdentityScript,
-} from "../../services/googleIdentity";
 import "./SignUpPage.css";
 import { isStrongPassword, PasswordChecklist, PasswordMatchHint } from "../../utils/passwordPolicy";
 
 export function SignUpPage() {
   const navigate = useNavigate();
-  const { signup, continueWithGoogle, verifyTwoFactor } = useAuth();
-  const googleButtonRef = useRef(null);
+  const { signup, verifyTwoFactor } = useAuth();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -28,78 +23,10 @@ export function SignUpPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const [isConfirmPasswordFocused, setIsConfirmPasswordFocused] = useState(false);
-  const googleClientId = getGoogleClientId();
-
-  useEffect(() => {
-    if (!googleClientId || !googleButtonRef.current || twoFactorToken) {
-      return;
-    }
-
-    let isMounted = true;
-
-    loadGoogleIdentityScript()
-      .then(() => {
-        if (!isMounted || !window.google || !googleButtonRef.current) {
-          return;
-        }
-
-        googleButtonRef.current.innerHTML = "";
-        window.google.accounts.id.initialize({
-          client_id: googleClientId,
-          callback: async (response) => {
-            try {
-              setError("");
-              setSuccessMessage("");
-              setIsGoogleSubmitting(true);
-
-              if (!response?.credential) {
-                throw new Error("Google did not return a sign-in credential. Please try again.");
-              }
-
-              const authResponse = await continueWithGoogle(response.credential);
-
-              if ("requiresTwoFactor" in authResponse) {
-                setTwoFactorToken(authResponse.two_factor_token);
-                setTwoFactorMethod(authResponse.two_factor_method || "email");
-                setSuccessMessage(
-                  authResponse.two_factor_method === "totp"
-                    ? "Enter your authenticator code to continue."
-                    : "Check your email for the 6-digit verification code."
-                );
-                return;
-              }
-
-              navigate(getDashboardPathForRole(authResponse.user.role));
-            } catch (googleError) {
-              console.error("Google signup callback failed", googleError);
-              setError(googleError.message || "Google signup failed");
-            } finally {
-              setIsGoogleSubmitting(false);
-            }
-          },
-        });
-        window.google.accounts.id.renderButton(googleButtonRef.current, {
-          theme: "outline",
-          size: "large",
-          width: 360,
-          text: "continue_with",
-        });
-      })
-      .catch((googleError) => {
-        if (isMounted) {
-          setError(googleError.message);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [continueWithGoogle, googleClientId, navigate, twoFactorToken]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -238,26 +165,6 @@ export function SignUpPage() {
               </div>
             ) : (
               <>
-            {googleClientId ? (
-              <div className="flex justify-center">
-                <div ref={googleButtonRef} />
-              </div>
-            ) : null}
-
-            {isGoogleSubmitting ? (
-              <div className="rounded-xl border border-[#dce4da] bg-[#f8faf6] px-4 py-3 text-sm text-[#5f6f67]">
-                Checking your Google account...
-              </div>
-            ) : null}
-
-            {googleClientId ? (
-              <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-[#8a9a91]">
-                <div className="h-px flex-1 bg-[#e7ebe6]" />
-                or
-                <div className="h-px flex-1 bg-[#e7ebe6]" />
-              </div>
-            ) : null}
-
             <div>
               <label className="block text-sm mb-2 text-[#19221d]">Full Name</label>
               <div className="relative">

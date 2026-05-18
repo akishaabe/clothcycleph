@@ -13,6 +13,7 @@ import {
   Copy,
   Download,
   AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
@@ -36,7 +37,7 @@ const actionButtonClass =
   "inline-flex min-w-[190px] items-center justify-center gap-2 px-6 py-3 bg-[#336158] text-white rounded-xl hover:bg-[#2a4c48] transition-all hover:shadow-lg";
 
 export function SettingsPage() {
-  const { user, updateProfile, changePassword, getTwoFactorStatus, setupTwoFactor, enableTwoFactor, deleteAccount } =
+  const { user, updateProfile, changePassword, getTwoFactorStatus, setupTwoFactor, enableTwoFactor, deleteAccount, logout } =
     useAuth();
   const navigate = useNavigate();
   const { uploadFile, isLoading: isPhotoUploading } = useFileUpload();
@@ -67,6 +68,7 @@ export function SettingsPage() {
   const [profilePassword, setProfilePassword] = useState("");
   const [deletePassword, setDeletePassword] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState("");
   const messageRef = useRef(null);
   const [saveMessage, setSaveMessage] = useState(null);
   const [security, setSecurity] = useState({
@@ -468,11 +470,20 @@ export function SettingsPage() {
     }
 
     try {
+      const message = "Your account has been deleted. Thank you for being part of ClothCycle PH.";
       await deleteAccount(deletePassword);
-      navigate("/login", { replace: true });
+      setShowDeleteConfirm(false);
+      setDeletePassword("");
+      setSaveMessage(null);
+      setDeleteSuccessMessage(message);
     } catch (error) {
       showSaveMessage("error", error.message || "Account deletion failed.");
     }
+  };
+
+  const finishDeleteRedirect = () => {
+    logout();
+    navigate("/", { replace: true });
   };
 
   const activeSince = user?.created_at
@@ -1193,6 +1204,37 @@ export function SettingsPage() {
           </motion.section>
         </div>
       </main>
+
+      {deleteSuccessMessage ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-success-title"
+        >
+          <div className="w-full max-w-md rounded-3xl border border-[#dce4da] bg-white p-6 text-center shadow-[0_24px_80px_rgba(0,0,0,0.28)] dark:border-white/10 dark:bg-[#151a18]">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#eaf6ef] text-[#336158] dark:bg-emerald-400/10 dark:text-emerald-200">
+              <CheckCircle2 className="h-7 w-7" />
+            </div>
+            <h2
+              id="delete-success-title"
+              className="font-gloock text-2xl text-[#19221d] dark:text-white"
+            >
+              Account Deleted
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-[#5f6f67] dark:text-white/75">
+              {deleteSuccessMessage}
+            </p>
+            <button
+              type="button"
+              onClick={finishDeleteRedirect}
+              className="mt-6 w-full rounded-xl bg-[#336158] px-5 py-3 font-semibold text-white transition-colors hover:bg-[#2a4c48] dark:bg-[#8bc3b8] dark:text-[#07100e] dark:hover:bg-[#a8d8cf]"
+            >
+              Bye!
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

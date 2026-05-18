@@ -265,6 +265,15 @@ export const authService = {
     });
   },
 
+  async deleteAccount(payload: { password: string }): Promise<{ message: string }> {
+    const data = await fetchWithAuth('/auth/account', {
+      method: 'DELETE',
+      body: JSON.stringify(payload),
+    });
+    clearStoredAuth();
+    return data;
+  },
+
   getStoredUser(): User | null {
     const user = localStorage.getItem('user') || sessionStorage.getItem('user');
     return user ? JSON.parse(user) : null;
@@ -424,13 +433,6 @@ export const dssService = {
   async getRuleChangeRequests(): Promise<{ data: any[]; count: number }> {
     return fetchWithAuth('/dss/rule-change-requests', {
       method: 'GET',
-    });
-  },
-
-  async deleteAccount(payload: { password: string }): Promise<{ message: string }> {
-    return fetchWithAuth('/auth/account', {
-      method: 'DELETE',
-      body: JSON.stringify(payload),
     });
   },
 

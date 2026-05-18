@@ -154,7 +154,7 @@ export async function loginD1(
 export async function continueWithGoogleD1(
   db: D1Database,
   credential: string,
-  role: 'user' | 'partner' | 'admin',
+  _role: 'user' | 'partner' | 'admin',
   options: AuthD1Options,
   ipAddress?: string,
   userAgent?: string
@@ -174,15 +174,7 @@ export async function continueWithGoogleD1(
   let user = await queryD1First(db, 'SELECT * FROM users WHERE email = ?', [googleUser.email]);
 
   if (!user) {
-    const userId = generateD1UUID();
-    const passwordHash = await hashPassword(generateSecureToken());
-    await executeD1(
-      db,
-      `INSERT INTO users (id, email, name, password_hash, role, avatar_url, two_factor_enabled, email_verified_at)
-       VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)`,
-      [userId, googleUser.email, googleUser.name, passwordHash, role, googleUser.picture || null]
-    );
-    user = await queryD1First(db, 'SELECT * FROM users WHERE id = ?', [userId]);
+    throw new Error('No account found for this Google email. Please sign up first before logging in.');
   }
 
   assertAccountCanAuthenticate(user);
@@ -836,8 +828,14 @@ function isTwoFactorLoginRequired(user: any): boolean {
 }
 
 function assertAccountCanAuthenticate(user: any) {
-  if (String(user?.status || 'active').toLowerCase() === 'suspended') {
+  const status = String(user?.status || 'active').toLowerCase();
+
+  if (status === 'suspended') {
     throw new Error('Your account has been suspended. Please contact support or the administrator.');
+  }
+
+  if (['deactivated', 'deleted', 'inactive'].includes(status)) {
+    throw new Error('Your account is not active. Please contact support or the administrator.');
   }
 }
 

@@ -147,6 +147,7 @@ export function MessagesPage() {
     sendMessage,
   } = useMessages();
   const [activeUserId, setActiveUserId] = useState(null);
+  const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
@@ -238,6 +239,15 @@ export function MessagesPage() {
 
   const isMessageFromCurrentUser = (message) =>
     Boolean(currentUser?.id && message.from_user_id === currentUser.id);
+
+  const openConversation = (userId) => {
+    setActiveUserId(userId);
+    setIsMobileChatOpen(true);
+  };
+
+  const closeMobileChat = () => {
+    setIsMobileChatOpen(false);
+  };
 
   useEffect(() => {
     if (!isAuthenticated || isPreview) {
@@ -434,7 +444,11 @@ export function MessagesPage() {
 
       <main className="mx-auto max-w-[1650px] p-4 sm:p-6 xl:p-8">
         <section className="messages-shell grid min-h-[620px] overflow-hidden rounded-[28px] border shadow-[0_18px_54px_rgba(25,34,29,0.1)] lg:h-[calc(100vh-150px)] lg:grid-cols-[minmax(320px,430px)_minmax(0,1fr)]">
-          <aside className="messages-sidebar flex min-h-0 flex-col border-r">
+          <aside
+            className={`messages-sidebar messages-panel-list flex min-h-0 flex-col border-r ${
+              isMobileChatOpen ? "is-hidden-mobile" : ""
+            }`}
+          >
             <div className="border-b p-4 sm:p-6">
               <div className="mb-4 flex items-start justify-between gap-4">
                 <div className="min-w-0">
@@ -463,7 +477,7 @@ export function MessagesPage() {
               {visibleConversations.map((conversation) => (
                 <button
                   key={conversation.other_user_id}
-                  onClick={() => setActiveUserId(conversation.other_user_id)}
+                  onClick={() => openConversation(conversation.other_user_id)}
                   className={`messages-thread flex w-full gap-3 p-4 text-left transition-colors sm:gap-4 sm:p-5 ${
                     conversation.other_user_id === activeUserId ? "is-active" : ""
                   }`}
@@ -506,7 +520,7 @@ export function MessagesPage() {
                     {visibleStarterContacts.map((contact) => (
                       <button
                         key={contact.id}
-                        onClick={() => setActiveUserId(contact.id)}
+                        onClick={() => openConversation(contact.id)}
                         className={`messages-thread flex w-full gap-4 rounded-2xl p-4 text-left transition-colors ${
                           contact.id === activeUserId ? "is-active" : ""
                         }`}
@@ -540,10 +554,22 @@ export function MessagesPage() {
             </div>
           </aside>
 
-          <section className="messages-chat flex min-h-0 flex-col">
+          <section
+            className={`messages-chat messages-panel-chat flex min-h-0 flex-col ${
+              isMobileChatOpen ? "is-open-mobile" : ""
+            }`}
+          >
             {activeParticipant ? (
               <>
                 <header className="flex flex-col gap-3 border-b p-4 sm:p-6 md:flex-row md:items-center md:justify-between">
+                  <button
+                    type="button"
+                    onClick={closeMobileChat}
+                    className="messages-mobile-back mb-1 inline-flex w-fit items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Conversations
+                  </button>
                   <div className="flex min-w-0 items-center gap-4">
                     <MessageAvatar
                       name={activeParticipant.name}
