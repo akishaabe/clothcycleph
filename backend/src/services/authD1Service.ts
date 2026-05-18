@@ -114,6 +114,8 @@ export async function loginD1(
     throw new Error('Invalid credentials');
   }
 
+  assertAccountCanAuthenticate(user);
+
   await executeD1(db, `UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE id = ?`, [user.id]);
 
   if (!user.email_verified_at) {
@@ -183,6 +185,8 @@ export async function continueWithGoogleD1(
     user = await queryD1First(db, 'SELECT * FROM users WHERE id = ?', [userId]);
   }
 
+  assertAccountCanAuthenticate(user);
+
   if (!user.email_verified_at) {
     await executeD1(db, `UPDATE users SET email_verified_at = CURRENT_TIMESTAMP WHERE id = ?`, [user.id]);
   }
@@ -208,6 +212,8 @@ export async function verifyTwoFactorD1(
   if (!user) {
     throw new Error('User not found');
   }
+
+  assertAccountCanAuthenticate(user);
 
   if (decoded.purpose === 'email_verification' || decoded.method === 'email') {
     if (!user.two_factor_code_hash || !user.two_factor_code_expires_at) {
@@ -827,6 +833,12 @@ function getLoginTwoFactorMethod(user: any): 'email' | 'totp' {
 
 function isTwoFactorLoginRequired(user: any): boolean {
   return true;
+}
+
+function assertAccountCanAuthenticate(user: any) {
+  if (String(user?.status || 'active').toLowerCase() === 'suspended') {
+    throw new Error('Your account has been suspended. Please contact support or the administrator.');
+  }
 }
 
 async function generateAuthToken(payload: Record<string, unknown>, options: AuthD1Options) {

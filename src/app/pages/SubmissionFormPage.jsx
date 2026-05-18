@@ -1316,7 +1316,7 @@ export function SubmissionFormPage() {
                 {!isDonation && formData.cleanliness === HEAVILY_SOILED_CLEANLINESS && (
                   <div className="mt-3 rounded-xl border border-[#d4a574] bg-[#fff8e8] px-4 py-3 text-sm text-[#7a5427]">
                     Heavily soiled or contaminated items may need special
-                    handling and may not be accepted for donation.
+                    handling.
                   </div>
                 )}
               </QuestionBlock>

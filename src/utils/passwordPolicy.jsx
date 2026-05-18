@@ -46,17 +46,25 @@ export function PasswordChecklist({ password, confirmPassword = null }) {
           );
         })}
         {confirmPassword !== null && (
-          <div
-            className={
-              password && confirmPassword && password === confirmPassword
-                ? "text-[#336158]"
-                : "text-[#7a6b52]"
-            }
-          >
-            {password && confirmPassword && password === confirmPassword ? "✓" : "•"} Passwords match
-          </div>
+          <PasswordMatchHint password={password} confirmPassword={confirmPassword} />
         )}
       </div>
+    </div>
+  );
+}
+
+export function PasswordMatchHint({ password, confirmPassword }) {
+  const hasConfirmPassword = Boolean(confirmPassword);
+  const passwordsMatch = Boolean(password && confirmPassword && password === confirmPassword);
+
+  return (
+    <div
+      className={`mt-2 text-sm ${
+        passwordsMatch ? "text-[#336158]" : "text-[#7a6b52]"
+      }`}
+      role={hasConfirmPassword && !passwordsMatch ? "alert" : undefined}
+    >
+      {passwordsMatch ? "✓" : "•"} Passwords should match
     </div>
   );
 }
