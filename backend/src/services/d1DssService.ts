@@ -7,9 +7,29 @@ import { listPartnerLocationsD1, PartnerSearchOptions } from './d1GisService.js'
 const statusLabels: Record<string, string> = {
   pending: 'Pending',
   accepted: 'Accepted',
-  declined: 'Declined',
   completed: 'Completed',
+  rejected: 'Rejected',
 };
+
+function normalizeRequestStatus(status?: string | null) {
+  if (status === 'declined' || status === 'rejected') {
+    return 'rejected';
+  }
+
+  if (status === 'in_progress') {
+    return 'accepted';
+  }
+
+  if (status === 'completed') {
+    return 'completed';
+  }
+
+  if (status === 'accepted') {
+    return 'accepted';
+  }
+
+  return 'pending';
+}
 
 export async function listDssPartnersD1(db: D1Database, options: PartnerSearchOptions = {}) {
   return listPartnerLocationsD1(db, options);
@@ -342,8 +362,11 @@ export async function getUserDssRequestsD1(db: D1Database, userId: string) {
        s.quantity,
        s.condition,
        s.cleanliness,
+       s.submission_name,
        rr.confidence,
-       rr.explanation
+       rr.score,
+       rr.explanation,
+       rr.output_payload
      FROM transactions t
      JOIN partners p ON p.id = t.to_partner_id
      JOIN submissions s ON s.id = t.submission_id
@@ -434,6 +457,7 @@ export async function updateDssRequestStatusD1(
   status: string,
   notes?: string
 ) {
+  const normalizedStatus = normalizeRequestStatus(status);
   const transaction = await queryD1First(
     db,
     `SELECT t.*, p.user_id AS partner_user_id, p.email AS partner_email
@@ -461,15 +485,15 @@ export async function updateDssRequestStatusD1(
      SET status = ?, notes = COALESCE(?, notes), updated_at = CURRENT_TIMESTAMP
      WHERE id = ?
      RETURNING *`,
-    [status, notes || null, requestId]
+    [normalizedStatus, notes || null, requestId]
   );
 
   await createNotificationD1(db, {
     userId: transaction.from_user_id,
-    type: status === 'declined' ? 'submission_rejected' : 'submission_approved',
-    title: `Partner ${status === 'declined' ? 'declined' : 'accepted'} your request`,
-    body: `Your ${titleCase(transaction.type)} request is now ${statusLabels[status] || status}.`,
-    data: { submissionId: transaction.submission_id, transactionId: transaction.id, status },
+    type: normalizedStatus === 'rejected' ? 'submission_rejected' : 'submission_approved',
+    title: `Partner ${normalizedStatus === 'rejected' ? 'rejected' : 'updated'} your request`,
+    body: `Your ${titleCase(transaction.type)} request is now ${statusLabels[normalizedStatus] || normalizedStatus}.`,
+    data: { submissionId: transaction.submission_id, transactionId: transaction.id, status: normalizedStatus },
   });
 
   return result.results?.[0] ?? null;
@@ -610,20 +634,26 @@ function normalizeSubmissionForDss(row: any) {
 }
 
 function normalizeRequest(row: any) {
+  const status = normalizeRequestStatus(row.status);
   return {
     ...row,
+    status,
+    status_label: statusLabels[status] || status,
     confidence: row.confidence == null ? null : Number(row.confidence),
+    score: row.score == null ? null : Number(row.score),
+    output_payload: parseJsonObject(row.output_payload),
     partner_latitude: row.partner_latitude == null ? null : Number(row.partner_latitude),
     partner_longitude: row.partner_longitude == null ? null : Number(row.partner_longitude),
   };
 }
 
 function normalizePartnerRequest(row: any) {
+  const normalized = normalizeRequest(row);
   return {
-    ...normalizeRequest(row),
+    ...normalized,
     photos: parseJsonArray(row.photos),
     output_payload: parseJsonObject(row.output_payload),
-    status_label: statusLabels[row.status] || row.status,
+    status_label: statusLabels[normalized.status] || normalized.status,
     details: {
       item_types: parseJsonArray(row.item_types),
       item_types_list: parseJsonArray(row.item_types),

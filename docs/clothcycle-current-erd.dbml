@@ -203,7 +203,7 @@ Table transactions {
   from_user_id uuid [not null, ref: > users.id]
   to_partner_id uuid [ref: > partners.id]
   type varchar [note: "recycle, donate, upcycle, buyback"]
-  status varchar [note: "pending, accepted, declined, in_progress, completed, rejected"]
+  status varchar [note: "pending, accepted, completed, rejected"]
   amount decimal
   notes text
   created_at timestamp

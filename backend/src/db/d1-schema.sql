@@ -216,7 +216,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   from_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   to_partner_id TEXT NOT NULL REFERENCES partners(id) ON DELETE SET NULL,
   type TEXT NOT NULL CHECK (type IN ('recycle', 'donate', 'upcycle', 'buyback')),
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'in_progress', 'completed', 'rejected')),
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'completed', 'rejected')),
   amount REAL,
   notes TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,

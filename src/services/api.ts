@@ -365,7 +365,7 @@ export const dssService = {
 
   async updateRequestStatus(
     requestId: string,
-    payload: { status: 'pending' | 'accepted' | 'declined' | 'completed' | 'in_progress' | 'rejected'; notes?: string }
+    payload: { status: 'pending' | 'accepted' | 'completed' | 'rejected'; notes?: string }
   ): Promise<{ message: string; data: DssRequest }> {
     return fetchWithAuth(`/dss/requests/${requestId}/status`, {
       method: 'PUT',

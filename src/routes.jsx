@@ -20,6 +20,7 @@ const NotificationsPage = lazyPage(() => import("./app/pages/NotificationsPage")
 const MessagesPage = lazyPage(() => import("./app/pages/MessagesPage"), "MessagesPage");
 const DssConfirmationPage = lazyPage(() => import("./app/pages/DssConfirmationPage"), "DssConfirmationPage");
 const DssRequestsPage = lazyPage(() => import("./app/pages/DssRequestsPage"), "DssRequestsPage");
+const SubmittedRequestsPage = lazyPage(() => import("./app/pages/SubmittedRequestsPage"), "SubmittedRequestsPage");
 
 const withPageControls = (Page, props) => {
   return function PageWithControls() {
@@ -92,6 +93,10 @@ export const router = createBrowserRouter([
   {
     path: "/dss-requests",
     Component: protectedPage(DssRequestsPage, ["user"]),
+  },
+  {
+    path: "/my-requests",
+    Component: protectedPage(SubmittedRequestsPage, ["user"]),
   },
   {
     path: "/terms",
