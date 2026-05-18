@@ -263,7 +263,7 @@ export interface DssRequest {
   from_user_id: string;
   to_partner_id: string;
   type: 'recycle' | 'donate' | 'upcycle' | 'buyback';
-  status: 'pending' | 'accepted' | 'declined' | 'completed' | 'in_progress' | 'rejected';
+  status: 'pending' | 'accepted' | 'completed' | 'rejected';
   status_label?: string;
   notes?: string;
   partner_name?: string;
@@ -301,9 +301,7 @@ export interface DssRequest {
 export type DssRequestStatus =
   | 'pending'
   | 'accepted'
-  | 'declined'
   | 'completed'
-  | 'in_progress'
   | 'rejected';
 
 export interface SendDssRecommendationPayload {

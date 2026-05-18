@@ -14,6 +14,9 @@ import {
   User,
   Settings,
   LogOut,
+  Search,
+  X,
+  Image as ImageIcon,
 } from "lucide-react";
 import { dssService, messageService, notificationService, submissionService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
@@ -86,6 +89,46 @@ const formatStatusLabel = (status) =>
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
+const dashboardStatusFromSubmission = (submission, latestPartnerRequest) => {
+  if (latestPartnerRequest?.status) {
+    return latestPartnerRequest.status;
+  }
+
+  if (submission.status === "processed") {
+    return "completed";
+  }
+
+  if (submission.status === "verified") {
+    return "accepted";
+  }
+
+  if (submission.status === "rejected") {
+    return "rejected";
+  }
+
+  return "pending";
+};
+
+const toPhotoUrl = (photo) => {
+  if (!photo) {
+    return "";
+  }
+
+  if (typeof photo === "string") {
+    return photo;
+  }
+
+  return photo.url || "";
+};
+
+const formatConfidence = (value) => {
+  if (value == null || Number.isNaN(Number(value))) {
+    return "N/A";
+  }
+
+  return `${Math.round(Number(value) * 100)}%`;
+};
+
 export function UserDashboard() {
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -97,6 +140,7 @@ export function UserDashboard() {
   const [requestError, setRequestError] = useState("");
   const [requestFilter, setRequestFilter] = useState("all");
   const [requestSearch, setRequestSearch] = useState("");
+  const [selectedRequest, setSelectedRequest] = useState(null);
   const [badgeCounts, setBadgeCounts] = useState({ messages: 0, notifications: 0 });
   const requestsRef = useRef(null);
   const isNewSignup = location.state?.entry === "signup";
@@ -136,15 +180,63 @@ export function UserDashboard() {
     };
   }, []);
 
+  const submittedRequests = useMemo(() => {
+    const requestsBySubmission = requests.reduce((acc, request) => {
+      if (!request.submission_id) {
+        return acc;
+      }
+
+      acc[request.submission_id] = [...(acc[request.submission_id] || []), request];
+      return acc;
+    }, {});
+
+    return submissions.map((submission) => {
+      const relatedRequests = (requestsBySubmission[submission.id] || []).sort(
+        (first, second) =>
+          new Date(second.updated_at || second.created_at || 0).getTime() -
+          new Date(first.updated_at || first.created_at || 0).getTime(),
+      );
+      const latestPartnerRequest = relatedRequests[0] || null;
+      const recommendation =
+        latestPartnerRequest?.output_payload?.recommendation ||
+        latestPartnerRequest?.output_payload?.recommendations?.[0] ||
+        null;
+      const selectedPathway =
+        latestPartnerRequest?.type ||
+        submission.service_type ||
+        submission.action ||
+        "not_sure";
+      const status = dashboardStatusFromSubmission(submission, latestPartnerRequest);
+
+      return {
+        id: submission.id,
+        submission,
+        relatedRequests,
+        latestPartnerRequest,
+        recommendation,
+        title: submission.submission_name || submission.item_type || "Untitled request",
+        itemType: submission.item_type,
+        selectedPathway,
+        recommendedPathway: recommendation?.recommended_pathway || null,
+        partnerName: latestPartnerRequest?.partner_name || "",
+        status,
+        submittedAt: submission.created_at,
+        confidence:
+          latestPartnerRequest?.confidence ?? recommendation?.confidence ?? null,
+        score: recommendation?.score ?? null,
+      };
+    });
+  }, [requests, submissions]);
+
   const dashboardStats = useMemo(() => {
-    const pending = requests.filter((request) => request.status === "pending").length;
-    const accepted = requests.filter((request) => request.status === "accepted").length;
+    const pending = submittedRequests.filter((request) => request.status === "pending").length;
+    const accepted = submittedRequests.filter((request) => request.status === "accepted").length;
 
     return [
       {
         icon: Package,
         label: "Total Requests",
-        value: String(requests.length),
+        value: String(submittedRequests.length),
         color: "#336158",
       },
       {
@@ -160,7 +252,7 @@ export function UserDashboard() {
         color: "#336158",
       },
     ];
-  }, [requests]);
+  }, [submittedRequests]);
 
   const monthlyData = useMemo(() => {
     const grouped = submissions.reduce((acc, submission) => {
@@ -201,15 +293,16 @@ export function UserDashboard() {
   const filteredRequests = useMemo(() => {
     const query = requestSearch.trim().toLowerCase();
 
-    return requests.filter((request) => {
+    return submittedRequests.filter((request) => {
       const statusMatch = requestFilter === "all" || request.status === requestFilter;
       const queryMatch =
         !query ||
         [
-          request.submission_name,
-          request.item_type,
-          request.partner_name,
-          request.type,
+          request.title,
+          request.itemType,
+          request.partnerName,
+          request.selectedPathway,
+          request.recommendedPathway,
           request.status,
         ]
           .join(" ")
@@ -218,7 +311,7 @@ export function UserDashboard() {
 
       return statusMatch && queryMatch;
     });
-  }, [requests, requestFilter, requestSearch]);
+  }, [submittedRequests, requestFilter, requestSearch]);
 
   return (
     <div className="app-darkable-page min-h-screen bg-[radial-gradient(circle_at_top_left,_#e7ebe6,_transparent_28%),linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)] text-[#19221d]">
@@ -374,8 +467,7 @@ export function UserDashboard() {
                   : widget.label.includes("Accepted")
                     ? "accepted"
                     : "all";
-                setRequestFilter(nextFilter);
-                requestsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                navigate(`/my-requests${nextFilter === "all" ? "" : `?status=${nextFilter}`}`);
               }}
               className={`${cardClass} p-6 rounded-2xl text-left transition-all hover:-translate-y-1`}
             >
@@ -395,6 +487,136 @@ export function UserDashboard() {
             </motion.button>
           ))}
         </section>
+
+        {false ? (
+        <motion.section
+          ref={requestsRef}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.65 }}
+          className={`${cardClass} mb-8 rounded-2xl p-6`}
+        >
+          <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h3 className="text-xl text-[#19221d]">My Requests</h3>
+              <p className="mt-1 text-sm text-[#5f6f67]">
+                View submitted textile requests, DSS outcomes, partner routing, and current status.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate("/dss-requests")}
+              className="w-full rounded-xl border border-[#dce4da] px-4 py-2 text-sm font-semibold text-[#336158] hover:bg-[#f3f5f2] md:w-auto"
+            >
+              Sent partner requests
+            </button>
+          </div>
+
+          <div className="mb-5 grid gap-3 md:grid-cols-[1fr_auto]">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5f6f67]" />
+              <input
+                value={requestSearch}
+                onChange={(event) => setRequestSearch(event.target.value)}
+                className="w-full rounded-xl border border-[#dce4da] bg-[#fbfcfa] py-3 pl-10 pr-4 text-sm text-[#19221d] outline-none focus:border-[#336158]"
+                placeholder="Search item, pathway, partner, or status"
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {["all", "pending", "accepted", "in_progress", "completed", "declined", "rejected"].map(
+                (status) => (
+                  <button
+                    key={status}
+                    onClick={() => setRequestFilter(status)}
+                    className={`rounded-xl px-4 py-2 text-sm capitalize ${
+                      requestFilter === status
+                        ? "bg-[#336158] text-white"
+                        : "bg-[#f3f5f2] text-[#5f6f67] hover:bg-[#e7ebe6]"
+                    }`}
+                  >
+                    {formatStatusLabel(status)}
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+
+          {requestError && (
+            <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {requestError}
+            </div>
+          )}
+
+          <div className="grid gap-3">
+            {filteredRequests.length === 0 && (
+              <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] px-4 py-5 text-sm text-[#5f6f67]">
+                No submitted requests match this view. New submissions will appear here after you complete the textile request form.
+              </div>
+            )}
+
+            {filteredRequests.map((request) => (
+              <article
+                key={request.id}
+                className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4"
+              >
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-[#19221d]">
+                      {request.title}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#5f6f67]">
+                      <span>{pathwayLabels[request.selectedPathway] || formatStatusLabel(request.selectedPathway)}</span>
+                      <span>Partner: {request.partnerName || "Not sent yet"}</span>
+                      <span>{formatManilaDate(request.submittedAt)}</span>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-sm text-[#5f6f67] sm:grid-cols-2 lg:grid-cols-3">
+                      <div className="rounded-xl border border-[#e1e7df] bg-white/70 px-3 py-2">
+                        Recommended: {pathwayLabels[request.recommendedPathway] || "DSS pending"}
+                      </div>
+                      <div className="rounded-xl border border-[#e1e7df] bg-white/70 px-3 py-2">
+                        Confidence: {formatConfidence(request.confidence)}
+                      </div>
+                      <div className="rounded-xl border border-[#e1e7df] bg-white/70 px-3 py-2">
+                        Score: {request.score == null ? "N/A" : `${Number(request.score).toFixed(1)} / 100`}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs ${
+                        requestStatusClass[request.status] ||
+                        requestStatusClass.pending
+                      }`}
+                    >
+                      {formatStatusLabel(request.status)}
+                    </span>
+                    <button
+                      onClick={() => setSelectedRequest(request)}
+                      className="rounded-xl border border-[#dce4da] px-3 py-2 text-sm font-semibold text-[#5f6f67] hover:bg-[#f3f5f2]"
+                    >
+                      View Details
+                    </button>
+                    <button
+                      onClick={() =>
+                        navigate(
+                          `/dss/${request.submission.id}${
+                            request.latestPartnerRequest
+                              ? `?request=${request.latestPartnerRequest.id}`
+                              : ""
+                          }`,
+                        )
+                      }
+                      className="rounded-xl bg-[#336158] px-3 py-2 text-sm font-semibold text-white hover:bg-[#2a4c48]"
+                    >
+                      Open DSS
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </motion.section>
+        ) : null}
 
         {false ? (
         <motion.section
@@ -551,8 +773,8 @@ export function UserDashboard() {
         </section>
 
         {/*
-          Partner requests are intentionally not shown on the user dashboard.
-          The dedicated DSS request views still handle sent partner requests.
+          Historical disabled request-preview markup remains off while My Requests
+          above owns the dashboard request list.
         */}
         {false ? (
         <motion.section>
@@ -617,6 +839,164 @@ export function UserDashboard() {
 
       </main>
 
+      {selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#19221d]/40 p-4 backdrop-blur-sm">
+          <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-[#e1e7df] bg-white p-5 shadow-[0_24px_70px_rgba(25,34,29,0.24)] md:p-6">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="font-sans text-2xl font-bold text-[#19221d]">
+                  {selectedRequest.title}
+                </h2>
+                <p className="mt-1 text-sm text-[#5f6f67]">
+                  Submitted {formatManilaDate(selectedRequest.submittedAt)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedRequest(null)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#dce4da] text-[#5f6f67] hover:bg-[#f3f5f2]"
+                aria-label="Close request details"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+              <section className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4">
+                <h3 className="mb-3 font-semibold text-[#19221d]">Submission Details</h3>
+                <div className="grid gap-3 text-sm text-[#5f6f67] sm:grid-cols-2">
+                  <DetailItem label="Item" value={selectedRequest.submission.item_type} />
+                  <DetailItem
+                    label="Selected pathway"
+                    value={pathwayLabels[selectedRequest.selectedPathway] || formatStatusLabel(selectedRequest.selectedPathway)}
+                  />
+                  <DetailItem label="Condition" value={selectedRequest.submission.condition} />
+                  <DetailItem label="Cleanliness" value={selectedRequest.submission.cleanliness} />
+                  <DetailItem label="Fabric" value={selectedRequest.submission.fabric} />
+                  <DetailItem label="Quantity" value={selectedRequest.submission.quantity || "1"} />
+                  <DetailItem label="Brand" value={selectedRequest.submission.details?.brand || "Not specified"} />
+                  <DetailItem label="Repairability" value={selectedRequest.submission.details?.repairability || "Not specified"} />
+                </div>
+                {selectedRequest.submission.description && (
+                  <p className="mt-4 rounded-xl bg-white px-4 py-3 text-sm leading-6 text-[#5f6f67]">
+                    {selectedRequest.submission.description}
+                  </p>
+                )}
+
+                <div className="mt-4">
+                  <h4 className="mb-2 text-sm font-semibold text-[#19221d]">Uploaded Images</h4>
+                  {selectedRequest.submission.photos?.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {selectedRequest.submission.photos.slice(0, 6).map((photo, index) => {
+                        const url = toPhotoUrl(photo);
+                        return (
+                          <div
+                            key={`${url}-${index}`}
+                            className="overflow-hidden rounded-xl border border-[#e1e7df] bg-white"
+                          >
+                            <img
+                              src={url}
+                              alt={`Submitted textile ${index + 1}`}
+                              className="h-28 w-full object-cover"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 rounded-xl border border-[#e1e7df] bg-white px-4 py-3 text-sm text-[#5f6f67]">
+                      <ImageIcon className="h-4 w-4" />
+                      No images uploaded.
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4">
+                  <h3 className="mb-3 font-semibold text-[#19221d]">DSS Recommendation</h3>
+                  <div className="grid gap-3 text-sm text-[#5f6f67]">
+                    <DetailItem
+                      label="Recommended pathway"
+                      value={pathwayLabels[selectedRequest.recommendedPathway] || "DSS pending"}
+                    />
+                    <DetailItem label="Confidence" value={formatConfidence(selectedRequest.confidence)} />
+                    <DetailItem
+                      label="Score"
+                      value={selectedRequest.score == null ? "N/A" : `${Number(selectedRequest.score).toFixed(1)} / 100`}
+                    />
+                  </div>
+                  {selectedRequest.recommendation?.explanation && (
+                    <p className="mt-3 rounded-xl bg-white px-4 py-3 text-sm leading-6 text-[#5f6f67]">
+                      {selectedRequest.recommendation.explanation}
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4">
+                  <h3 className="mb-3 font-semibold text-[#19221d]">Partner Brief</h3>
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs ${
+                        requestStatusClass[selectedRequest.status] || requestStatusClass.pending
+                      }`}
+                    >
+                      {formatStatusLabel(selectedRequest.status)}
+                    </span>
+                    <span className="rounded-full bg-white px-3 py-1 text-xs text-[#5f6f67]">
+                      {selectedRequest.partnerName || "Not sent to a partner yet"}
+                    </span>
+                  </div>
+                  {selectedRequest.relatedRequests.length > 0 ? (
+                    <div className="space-y-2">
+                      {selectedRequest.relatedRequests.map((request) => (
+                        <div key={request.id} className="rounded-xl border border-[#e1e7df] bg-white px-4 py-3 text-sm text-[#5f6f67]">
+                          <div className="font-semibold text-[#19221d]">
+                            {pathwayLabels[request.type] || request.type} to {request.partner_name || "partner"}
+                          </div>
+                          <div className="mt-1">
+                            {formatStatusLabel(request.status)} · {formatManilaDate(request.created_at)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm leading-6 text-[#5f6f67]">
+                      This submission is saved, but no partner brief has been sent yet.
+                    </p>
+                  )}
+                </div>
+              </section>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => navigate("/messages")}
+                className="rounded-xl border border-[#dce4da] px-4 py-2 text-sm font-semibold text-[#5f6f67] hover:bg-[#f3f5f2]"
+              >
+                Messages
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    `/dss/${selectedRequest.submission.id}${
+                      selectedRequest.latestPartnerRequest
+                        ? `?request=${selectedRequest.latestPartnerRequest.id}`
+                        : ""
+                    }`,
+                  )
+                }
+                className="rounded-xl bg-[#336158] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2a4c48]"
+              >
+                Open Full Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showLogoutConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#19221d]/35 p-6 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border border-[#e1e7df] bg-white p-6 shadow-[0_24px_70px_rgba(25,34,29,0.24)]">
@@ -647,6 +1027,17 @@ export function UserDashboard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function DetailItem({ label, value }) {
+  return (
+    <div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-[#7d8a82]">
+        {label}
+      </div>
+      <div className="mt-1 text-[#19221d]">{value || "Not specified"}</div>
     </div>
   );
 }

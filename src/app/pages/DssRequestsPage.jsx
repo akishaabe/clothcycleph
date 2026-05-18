@@ -7,10 +7,16 @@ import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
 const statusClass = {
   pending: "bg-[#fff8e8] text-[#7a5427] border-[#ead6ae]",
   accepted: "bg-[#edf7ed] text-[#336158] border-[#cfe2cf]",
-  declined: "bg-red-50 text-red-700 border-red-100",
-  in_progress: "bg-[#eef5ff] text-[#3f5f8f] border-[#cfe0f4]",
   completed: "bg-[#eef5ff] text-[#3f5f8f] border-[#cfe0f4]",
   rejected: "bg-red-50 text-red-700 border-red-100",
+};
+
+const normalizeStatus = (status) => {
+  if (status === "declined" || status === "rejected") return "rejected";
+  if (status === "in_progress") return "accepted";
+  if (status === "completed") return "completed";
+  if (status === "accepted") return "accepted";
+  return "pending";
 };
 
 const formatStatusLabel = (status) =>
@@ -57,7 +63,8 @@ export function DssRequestsPage() {
     const query = search.trim().toLowerCase();
 
     return requests.filter((request) => {
-      const statusMatch = filter === "all" || request.status === filter;
+      const status = normalizeStatus(request.status);
+      const statusMatch = filter === "all" || status === filter;
       const queryMatch =
         !query ||
         [
@@ -65,7 +72,7 @@ export function DssRequestsPage() {
           request.submission_name,
           request.item_type,
           request.type,
-          request.status,
+          status,
         ]
           .join(" ")
           .toLowerCase()
@@ -96,7 +103,7 @@ export function DssRequestsPage() {
       <BrandLoadingScreen
         title="Loading sent DSS requests"
         message="We are gathering partner replies and pending briefs."
-        detail="Accepted, declined, and pending requests will appear here."
+        detail="Accepted, rejected, completed, and pending requests will appear here."
       />
     );
   }
@@ -139,7 +146,7 @@ export function DssRequestsPage() {
               />
             </label>
             <div className="flex flex-wrap gap-2">
-              {["all", "pending", "accepted", "declined", "in_progress", "completed", "rejected"].map((status) => (
+              {["all", "pending", "accepted", "completed", "rejected"].map((status) => (
                 <button
                   key={status}
                   onClick={() => setFilter(status)}
@@ -198,11 +205,11 @@ export function DssRequestsPage() {
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full border px-3 py-1 text-xs ${statusClass[request.status] || statusClass.pending}`}>
-                      {formatStatusLabel(request.status)}
+                    <span className={`rounded-full border px-3 py-1 text-xs ${statusClass[normalizeStatus(request.status)] || statusClass.pending}`}>
+                      {formatStatusLabel(normalizeStatus(request.status))}
                     </span>
-                    {request.status === "accepted" && <CheckCircle className="h-4 w-4 text-[#336158]" />}
-                    {request.status === "pending" && <Clock className="h-4 w-4 text-[#7a5427]" />}
+                    {normalizeStatus(request.status) === "accepted" && <CheckCircle className="h-4 w-4 text-[#336158]" />}
+                    {normalizeStatus(request.status) === "pending" && <Clock className="h-4 w-4 text-[#7a5427]" />}
                   </div>
                 </div>
 
@@ -213,7 +220,7 @@ export function DssRequestsPage() {
                   >
                     View submission DSS
                   </button>
-                  {request.status === "pending" && (
+                  {normalizeStatus(request.status) === "pending" && (
                     <button
                       onClick={() => handleReminder(request.id)}
                       disabled={remindingId === request.id}

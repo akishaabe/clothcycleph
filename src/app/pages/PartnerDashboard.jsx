@@ -31,8 +31,16 @@ const pathwayLabels = {
 const statusStyles = {
   pending: "bg-[#8aa6c8]/20 text-[#3f5f8f]",
   accepted: "bg-[#4f6f9f]/20 text-[#10233f]",
-  declined: "bg-red-100 text-red-700",
   completed: "bg-green-100 text-green-700",
+  rejected: "bg-red-100 text-red-700",
+};
+
+const normalizeStatus = (status) => {
+  if (status === "declined" || status === "rejected") return "rejected";
+  if (status === "in_progress") return "accepted";
+  if (status === "completed") return "completed";
+  if (status === "accepted") return "accepted";
+  return "pending";
 };
 
 const formatStatusLabel = (status) =>
@@ -158,8 +166,8 @@ export function PartnerDashboard() {
   }, [selectedRequest]);
 
   const metrics = useMemo(() => {
-    const pending = requests.filter((request) => request.status === "pending").length;
-    const accepted = requests.filter((request) => request.status === "accepted").length;
+    const pending = requests.filter((request) => normalizeStatus(request.status) === "pending").length;
+    const accepted = requests.filter((request) => normalizeStatus(request.status) === "accepted").length;
 
     return [
       { icon: Package, label: "Active Requests", value: String(accepted), filter: "accepted", color: "#8aa6c8" },
@@ -172,7 +180,8 @@ export function PartnerDashboard() {
     const query = searchQuery.trim().toLowerCase();
 
     return requests.filter((request) => {
-      const statusMatch = activeFilter === "all" || request.status === activeFilter;
+      const status = normalizeStatus(request.status);
+      const statusMatch = activeFilter === "all" || status === activeFilter;
       const queryMatch =
         !query ||
         [
@@ -181,7 +190,7 @@ export function PartnerDashboard() {
           request.submission_name,
           request.item_type,
           request.type,
-          request.status,
+          status,
         ]
           .join(" ")
           .toLowerCase()
@@ -230,8 +239,9 @@ export function PartnerDashboard() {
         notes: noteToSend || undefined,
       });
       await loadRequests();
+      const normalizedStatus = normalizeStatus(status);
       setSelectedRequest((current) =>
-        current?.id === request.id ? { ...current, status, notes: noteToSend || current.notes } : current,
+        current?.id === request.id ? { ...current, status: normalizedStatus, notes: noteToSend || current.notes } : current,
       );
       setStatusNote("");
     } catch (error) {
@@ -434,7 +444,7 @@ export function PartnerDashboard() {
               />
             </label>
             <div className="flex flex-wrap gap-2">
-              {["all", "pending", "accepted", "declined", "completed"].map(
+              {["all", "pending", "accepted", "completed", "rejected"].map(
                 (status) => (
                   <button
                     key={status}
@@ -500,10 +510,10 @@ export function PartnerDashboard() {
                     <td className="py-3 px-4">
                       <span
                         className={`px-3 py-1 rounded-full text-xs ${
-                          statusStyles[request.status] || statusStyles.pending
+                          statusStyles[normalizeStatus(request.status)] || statusStyles.pending
                         }`}
                       >
-                        {request.status_label || formatStatusLabel(request.status)}
+                        {request.status_label || formatStatusLabel(normalizeStatus(request.status))}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm text-[#41668f]">{formatDate(request.created_at)}</td>
@@ -527,9 +537,9 @@ export function PartnerDashboard() {
                           <CheckCircle className="w-4 h-4 text-[#4f6f9f]" />
                         </button>
                         <button
-                          onClick={() => updateRequestStatus(request, "declined", "")}
+                          onClick={() => updateRequestStatus(request, "rejected", "")}
                           className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center hover:bg-red-200 transition-colors"
-                          title="Decline"
+                          title="Reject"
                         >
                           <XCircle className="w-4 h-4 text-red-600" />
                         </button>
@@ -775,7 +785,7 @@ export function PartnerDashboard() {
                   <div className="grid gap-2 sm:grid-cols-3">
                     {[
                       ["accepted", "Accept request"],
-                      ["declined", "Decline request"],
+                      ["rejected", "Reject request"],
                       ["completed", "Mark completed"],
                     ].map(([status, label]) => (
                       <button
@@ -783,7 +793,7 @@ export function PartnerDashboard() {
                         onClick={() => updateRequestStatus(selectedRequest, status)}
                         disabled={isUpdatingStatus}
                         className={`rounded-xl px-3 py-3 text-sm text-white disabled:opacity-50 ${
-                          status === "declined"
+                          status === "rejected"
                             ? "bg-red-600 hover:bg-red-700"
                             : "bg-[#4f6f9f] hover:bg-[#3f5f8f]"
                         }`}

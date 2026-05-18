@@ -32,8 +32,16 @@ const fixedServicePathways = ["recycle", "donate", "upcycle"];
 const statusClass = {
   pending: "bg-[#fff8e8] text-[#7a5427] border-[#ead6ae]",
   accepted: "bg-[#edf7ed] text-[#336158] border-[#cfe2cf]",
-  declined: "bg-red-50 text-red-700 border-red-100",
   completed: "bg-[#eef5ff] text-[#3f5f8f] border-[#cfe0f4]",
+  rejected: "bg-red-50 text-red-700 border-red-100",
+};
+
+const normalizeStatus = (status) => {
+  if (status === "declined" || status === "rejected") return "rejected";
+  if (status === "in_progress") return "accepted";
+  if (status === "completed") return "completed";
+  if (status === "accepted") return "accepted";
+  return "pending";
 };
 
 function formatDate(value) {
@@ -818,22 +826,22 @@ export function DssConfirmationPage() {
                       </div>
                       <span
                         className={`rounded-full border px-3 py-1 text-xs ${
-                          statusClass[request.status] || statusClass.pending
+                          statusClass[normalizeStatus(request.status)] || statusClass.pending
                         }`}
                       >
-                        {formatStatusLabel(request.status)}
+                        {formatStatusLabel(normalizeStatus(request.status))}
                       </span>
                     </div>
                     <div className="mt-1 text-sm text-[#5f6f67]">
                       {pathwayLabels[request.type]} · {request.item_type}
                     </div>
-                    {request.status === "accepted" && (
+                    {normalizeStatus(request.status) === "accepted" && (
                       <div className="mt-3 flex items-center gap-2 text-sm text-[#336158]">
                         <CheckCircle className="h-4 w-4" />
                         Partner accepted this request.
                       </div>
                     )}
-                    {request.status === "pending" && (
+                    {normalizeStatus(request.status) === "pending" && (
                       <button
                         onClick={() => handleReminder(request.id)}
                         disabled={remindingId === request.id}

@@ -9,9 +9,29 @@ import { analyzeBurnTest, buildPathwayRecommendations, DSS_ENGINE_VERSION } from
 const statusLabels: Record<string, string> = {
   pending: 'Pending',
   accepted: 'Accepted',
-  declined: 'Declined',
   completed: 'Completed',
+  rejected: 'Rejected',
 };
+
+function normalizeRequestStatus(status?: string | null) {
+  if (status === 'declined' || status === 'rejected') {
+    return 'rejected';
+  }
+
+  if (status === 'in_progress') {
+    return 'accepted';
+  }
+
+  if (status === 'completed') {
+    return 'completed';
+  }
+
+  if (status === 'accepted') {
+    return 'accepted';
+  }
+
+  return 'pending';
+}
 
 function splitText(value?: string | null) {
   return value ? value.split(',').map((item) => item.trim()).filter(Boolean) : [];
@@ -339,7 +359,9 @@ export const getUserDssRequests = async (req: AuthRequest, res: Response) => {
          s.condition,
          s.cleanliness,
          rr.confidence,
-         rr.explanation
+         rr.score,
+         rr.explanation,
+         rr.output_payload
        FROM transactions t
        JOIN partners p ON p.id = t.to_partner_id
        JOIN submissions s ON s.id = t.submission_id
@@ -349,7 +371,16 @@ export const getUserDssRequests = async (req: AuthRequest, res: Response) => {
       [userId]
     );
 
-    res.json({ data: result.rows, count: result.rows.length });
+    const rows = result.rows.map((row) => {
+      const status = normalizeRequestStatus(row.status);
+      return {
+        ...row,
+        status,
+        status_label: statusLabels[status] || status,
+      };
+    });
+
+    res.json({ data: rows, count: rows.length });
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
   }
@@ -412,16 +443,20 @@ export const getPartnerDssRequests = async (req: AuthRequest, res: Response) => 
     );
 
     res.json({
-      data: result.rows.map((row) => ({
+      data: result.rows.map((row) => {
+        const status = normalizeRequestStatus(row.status);
+        return {
         ...row,
-        status_label: statusLabels[row.status] || row.status,
+        status,
+        status_label: statusLabels[status] || status,
         details: {
           ...row.details,
           item_types_list: splitText(row.details?.item_types),
           fabric_types_list: splitText(row.details?.fabric_types),
           fabric_description_list: splitText(row.details?.fabric_description),
         },
-      })),
+      };
+      }),
       count: result.rows.length,
     });
   } catch (error) {
@@ -459,12 +494,13 @@ export const updateDssRequestStatus = async (req: AuthRequest, res: Response) =>
       throw new AppError(403, 'You do not have permission to update this request');
     }
 
+    const status = normalizeRequestStatus(req.body.status);
     const result = await query(
       `UPDATE transactions
        SET status = $1, notes = COALESCE($2, notes), updated_at = NOW()
        WHERE id = $3
        RETURNING *`,
-      [req.body.status, req.body.notes || null, req.params.id]
+      [status, req.body.notes || null, req.params.id]
     );
 
     const userActionUrl = `/dss/${transaction.submission_id}?request=${transaction.id}`;
@@ -478,13 +514,13 @@ export const updateDssRequestStatus = async (req: AuthRequest, res: Response) =>
         uuidv4(),
         userId,
         transaction.from_user_id,
-        `Partner decision: ${statusLabels[req.body.status] || req.body.status}\n${req.body.notes ? `Message to user: ${req.body.notes}` : 'No additional message provided.'}`,
+        `Partner decision: ${statusLabels[status] || status}\n${req.body.notes ? `Message to user: ${req.body.notes}` : 'No additional message provided.'}`,
         transaction.submission_id,
         transaction.id,
         userActionUrl,
         JSON.stringify({
           kind: 'dss_status_update',
-          status: req.body.status,
+          status,
           submission_id: transaction.submission_id,
           transaction_id: transaction.id,
         }),
@@ -493,10 +529,10 @@ export const updateDssRequestStatus = async (req: AuthRequest, res: Response) =>
 
     await enqueueNotification(
       transaction.from_user_id,
-      req.body.status === 'declined' ? 'submission_rejected' : 'submission_approved',
-      `Partner ${req.body.status === 'declined' ? 'declined' : 'accepted'} your request`,
-      `Your ${titleCase(transaction.type)} request is now ${statusLabels[req.body.status] || req.body.status}.`,
-      { submissionId: transaction.submission_id, transactionId: transaction.id, status: req.body.status }
+      status === 'rejected' ? 'submission_rejected' : 'submission_approved',
+      `Partner ${status === 'rejected' ? 'rejected' : 'updated'} your request`,
+      `Your ${titleCase(transaction.type)} request is now ${statusLabels[status] || status}.`,
+      { submissionId: transaction.submission_id, transactionId: transaction.id, status }
     );
 
     res.json({
