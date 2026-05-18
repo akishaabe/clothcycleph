@@ -197,6 +197,25 @@ const requireAuth = async (
   const token = authorizationHeader.replace('Bearer ', '');
   try {
     const payload = await verifyJwt(token, requireWorkerSecret(c, 'JWT_SECRET'));
+    const userId = String(payload.id || '');
+    const user = userId
+      ? await c.env.DB
+          .prepare('SELECT status FROM users WHERE id = ?')
+          .bind(userId)
+          .first<{ status?: string }>()
+      : null;
+
+    if (!user) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    if (String(user.status || 'active').toLowerCase() === 'suspended') {
+      return c.json(
+        { error: 'Your account has been suspended. Please contact support or the administrator.' },
+        403
+      );
+    }
+
     c.set('user', payload as any);
     return await next();
   } catch (error) {
@@ -249,7 +268,7 @@ const getStatusCode = (error: Error) => {
     return 404;
   }
 
-  if (/permission|forbidden|only admins|only admins or partners/i.test(error.message)) {
+  if (/permission|forbidden|only admins|only admins or partners|suspended/i.test(error.message)) {
     return 403;
   }
 

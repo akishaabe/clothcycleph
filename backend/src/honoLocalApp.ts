@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { ZodError, type ZodSchema } from 'zod';
 import { config } from './config/env.js';
+import { query } from './config/database.js';
 import { verifyToken } from './utils/auth.js';
 import { AppError } from './utils/errorHandler.js';
 import type { AuthUser } from './types/http.js';
@@ -266,7 +267,7 @@ app.post('/api/upload', controller(uploadFile, { auth: true, upload: true }));
 // DSS
 app.get('/api/gis/partners', async (c) => {
   try {
-    getAuthenticatedUser(c);
+    await getAuthenticatedUser(c);
     const partners = await listPartnerLocations(getPartnerSearchOptions(c));
     return c.json({ data: partners, count: partners.length });
   } catch (error) {
@@ -362,7 +363,7 @@ function controller(handler: (req: any, res: any) => unknown, options: HandlerOp
 
 async function buildCompatRequest(c: Context<{ Variables: Variables }>, options: HandlerOptions) {
   const headers = Object.fromEntries(c.req.raw.headers.entries());
-  const user = options.auth ? getAuthenticatedUser(c) : undefined;
+  const user = options.auth ? await getAuthenticatedUser(c) : undefined;
   const params = options.paramsSchema ? options.paramsSchema.parse(c.req.param()) : c.req.param();
   const query = Object.fromEntries(new URL(c.req.url).searchParams.entries());
   const body = options.upload ? {} : await readJsonBody(c);
@@ -421,15 +422,30 @@ function createCompatResponse(): CompatResponse {
   return res;
 }
 
-function getAuthenticatedUser(c: Context<{ Variables: Variables }>) {
+async function getAuthenticatedUser(c: Context<{ Variables: Variables }>) {
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
   if (!token) {
     throw new AppError(401, 'Unauthorized');
   }
 
   try {
-    return verifyToken(token) as AuthUser;
-  } catch {
+    const user = verifyToken(token) as AuthUser;
+    const result = await query('SELECT status FROM users WHERE id = $1', [user.id]);
+
+    if (result.rows.length === 0) {
+      throw new AppError(401, 'Unauthorized');
+    }
+
+    if (String(result.rows[0].status || 'active').toLowerCase() === 'suspended') {
+      throw new AppError(403, 'Your account has been suspended. Please contact support or the administrator.');
+    }
+
+    return user;
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+
     throw new AppError(401, 'Unauthorized');
   }
 }

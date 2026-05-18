@@ -133,6 +133,8 @@ export const login = async (req: Request, res: Response) => {
       throw new AppError(401, 'Invalid credentials');
     }
 
+    assertAccountCanAuthenticate(user);
+
     await query(
       `UPDATE users
        SET failed_login_count = 0,
@@ -212,6 +214,7 @@ export const continueWithGoogle = async (req: Request, res: Response) => {
     }
 
     const user = userResult.rows[0];
+    assertAccountCanAuthenticate(user);
 
     await query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
     await recordAuthEvent({
@@ -267,6 +270,7 @@ export const verifyTwoFactor = async (req: Request, res: Response) => {
     }
 
     const user = result.rows[0];
+    assertAccountCanAuthenticate(user);
 
     if (decoded.purpose === 'email_verification' || decoded.method === 'email') {
       if (!user.two_factor_code_hash || !user.two_factor_code_is_valid) {
@@ -727,6 +731,12 @@ function getLoginTwoFactorMethod(user: any): 'email' | 'totp' {
 
 function isTwoFactorLoginRequired(user: any): boolean {
   return true;
+}
+
+function assertAccountCanAuthenticate(user: any) {
+  if (String(user.status || 'active').toLowerCase() === 'suspended') {
+    throw new AppError(403, 'Your account has been suspended. Please contact support or the administrator.');
+  }
 }
 
 function toAuthUser(user: any) {

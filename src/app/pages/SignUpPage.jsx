@@ -9,7 +9,7 @@ import {
   loadGoogleIdentityScript,
 } from "../../services/googleIdentity";
 import "./SignUpPage.css";
-import { isStrongPassword, PasswordChecklist } from "../../utils/passwordPolicy";
+import { isStrongPassword, PasswordChecklist, PasswordMatchHint } from "../../utils/passwordPolicy";
 
 export function SignUpPage() {
   const navigate = useNavigate();
@@ -32,6 +32,7 @@ export function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
+  const [isConfirmPasswordFocused, setIsConfirmPasswordFocused] = useState(false);
   const googleClientId = getGoogleClientId();
 
   useEffect(() => {
@@ -312,10 +313,7 @@ export function SignUpPage() {
                 </button>
               </div>
               {isPasswordFocused ? (
-                <PasswordChecklist
-                  password={formData.password}
-                  confirmPassword={formData.confirmPassword}
-                />
+                <PasswordChecklist password={formData.password} />
               ) : null}
             </div>
 
@@ -327,6 +325,8 @@ export function SignUpPage() {
                   type={showConfirmPassword ? "text" : "password"}
                   value={formData.confirmPassword}
                   onChange={(e) => updateField("confirmPassword", e.target.value)}
+                  onFocus={() => setIsConfirmPasswordFocused(true)}
+                  onBlur={() => setIsConfirmPasswordFocused(false)}
                   className="w-full pl-12 pr-12 py-3 border-2 border-[#e7ebe6] rounded-xl focus:border-[#336158] focus:outline-none transition-colors bg-white"
                   placeholder="••••••••"
                   required
@@ -341,6 +341,12 @@ export function SignUpPage() {
                   {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              {(isConfirmPasswordFocused || formData.confirmPassword) ? (
+                <PasswordMatchHint
+                  password={formData.password}
+                  confirmPassword={formData.confirmPassword}
+                />
+              ) : null}
             </div>
 
             <label className="flex items-start gap-3 text-sm text-[#5f6f67] cursor-pointer">
