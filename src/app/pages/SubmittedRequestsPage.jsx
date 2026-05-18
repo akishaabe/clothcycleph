@@ -1,4 +1,4 @@
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Image as ImageIcon, Recycle, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { dssService, submissionService } from "../../services/api";
@@ -190,10 +190,10 @@ export function SubmittedRequestsPage() {
             <ArrowLeft className="h-4 w-4" />
             Dashboard
           </button>
-          <Link to="/" className="flex items-center gap-2">
+          <div className="flex items-center gap-2" aria-label="ClothCycle PH">
             <Recycle className="h-6 w-6 text-[#336158]" />
             <span className="font-gloock text-xl text-[#19221d]">ClothCycle PH</span>
-          </Link>
+          </div>
         </div>
       </nav>
 

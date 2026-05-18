@@ -109,6 +109,7 @@
 }
 
 .messages-secondary-button,
+.messages-mobile-back,
 .messages-search,
 .messages-composer,
 .messages-count {
@@ -118,6 +119,7 @@
 }
 
 .messages-secondary-button:hover,
+.messages-mobile-back:hover,
 .messages-thread:hover,
 .messages-icon-button:hover {
   background-color: var(--messages-subtle);
@@ -176,6 +178,10 @@
   color: var(--messages-muted);
 }
 
+.messages-mobile-back {
+  display: none;
+}
+
 @media (max-width: 1199px) {
   .messages-shell {
     height: auto !important;
@@ -218,5 +224,109 @@
 
   .messages-bubble {
     max-width: min(88%, 32rem) !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .messages-page nav {
+    padding-inline: 1rem;
+  }
+
+  .messages-page nav > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .messages-secondary-button {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .messages-shell {
+    display: block;
+    min-height: calc(100vh - 150px);
+  }
+
+  .messages-panel-list {
+    border-bottom-width: 0;
+    border-right-width: 0;
+    display: flex;
+    max-height: none;
+    min-height: calc(100vh - 150px);
+  }
+
+  .messages-panel-list.is-hidden-mobile {
+    display: none;
+  }
+
+  .messages-panel-chat {
+    display: none;
+    min-height: calc(100vh - 150px);
+  }
+
+  .messages-panel-chat.is-open-mobile {
+    display: flex;
+  }
+
+  .messages-mobile-back {
+    display: inline-flex;
+  }
+
+  .messages-chat header {
+    padding: 1rem;
+  }
+
+  .messages-chat header .messages-pill {
+    font-size: 0.8125rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .messages-chat header h2 {
+    font-size: 1.375rem;
+    line-height: 1.2;
+  }
+
+  .messages-chat header p {
+    font-size: 0.9375rem;
+  }
+
+  .messages-chat > .min-h-0.flex-1 {
+    padding: 1rem;
+  }
+
+  .messages-bubble {
+    max-width: 92% !important;
+  }
+
+  .messages-composer {
+    border-radius: 1rem;
+    padding: 0.75rem;
+  }
+
+  .messages-composer .messages-icon-button {
+    padding: 0.75rem;
+  }
+
+  .messages-composer input[type="text"] {
+    font-size: 1rem;
+    padding-inline: 0.25rem;
+  }
+
+  .messages-send {
+    gap: 0;
+    min-height: 2.75rem;
+    padding-inline: 0.9rem;
+  }
+
+  .messages-send svg {
+    height: 1.125rem;
+    width: 1.125rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .messages-panel-list,
+  .messages-panel-chat {
+    display: flex !important;
   }
 }

@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
@@ -448,12 +448,12 @@ export function DssConfirmationPage() {
             <ArrowLeft className="h-4 w-4" />
             Dashboard
           </button>
-          <Link to="/" className="flex items-center gap-2">
+          <div className="flex items-center gap-2" aria-label="ClothCycle PH">
             <Recycle className="h-6 w-6 text-[#336158]" />
             <span className="font-gloock text-xl text-[#19221d] dark:text-white">
               ClothCycle PH
             </span>
-          </Link>
+          </div>
         </div>
       </nav>
 
