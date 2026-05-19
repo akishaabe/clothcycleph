@@ -1,100 +1,131 @@
 Project clothcycle_ph {
-  database_type: "PostgreSQL / Neon for current QA; D1 schema is reference only"
-  Note: "Documentation ERD snapshot for the current working ClothCycle PH Neon schema."
+  database_type: "PostgreSQL / Neon current QA schema"
+  Note: "ERD snapshot generated from the live Neon public schema on 2026-05-19. Cloudflare D1 files are reference/migration targets only."
 }
 
 Table users {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   email varchar [unique, not null]
   name varchar [not null]
-  password_hash varchar
-  role varchar [not null, note: "user, partner, admin"]
-  status varchar
+  password_hash varchar [not null]
+  role varchar [default: "user", note: "user, partner, admin"]
+  status varchar [default: "active", note: "active, inactive, suspended"]
   partner_id uuid [ref: > partners.id]
-  avatar_url text
-  profile_photo json
+  avatar_url varchar
+  profile_photo jsonb
   bio text
   phone varchar
   address text
-  failed_login_count int
-  locked_until timestamp
-  two_factor_code_hash text
+  terms_accepted_at timestamp
+  last_login_at timestamp
+  two_factor_enabled boolean [default: true]
+  two_factor_code_hash varchar
   two_factor_code_expires_at timestamp
-  two_factor_enabled boolean [default: true, note: "Always-on for email/password login"]
-  two_factor_method varchar [default: "email", note: "Preferred method: email, totp"]
+  two_factor_method varchar [default: "email", note: "email-only current QA default"]
   two_factor_secret_encrypted text
   two_factor_confirmed_at timestamp
   email_verified_at timestamp
-  terms_accepted_at timestamp
-  last_login_at timestamp
-  created_at timestamp
-  updated_at timestamp
+  failed_login_count int [default: 0]
+  locked_until timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
 }
 
 Table user_preferences {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null, ref: > users.id]
-  email_notifications boolean
-  push_notifications boolean
-  sms_notifications boolean
-  newsletter boolean
-  created_at timestamp
-  updated_at timestamp
+  email_notifications boolean [default: true]
+  push_notifications boolean [default: true]
+  sms_notifications boolean [default: false]
+  newsletter boolean [default: false]
+  updated_at timestamp [default: `now()`]
+}
+
+Table user_recovery_codes {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null, ref: > users.id]
+  code_hash varchar [not null]
+  used_at timestamp
+  created_at timestamp [default: `now()`]
+}
+
+Table password_reset_tokens {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null, ref: > users.id]
+  token_hash varchar [not null]
+  expires_at timestamp [not null]
+  used_at timestamp
+  created_at timestamp [default: `now()`]
+}
+
+Table auth_events {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [ref: > users.id]
+  event_type varchar [not null]
+  ip_address varchar
+  user_agent text
+  metadata jsonb
+  created_at timestamp [default: `now()`]
+}
+
+Table rate_limits {
+  key varchar [pk]
+  count int [not null, default: 0]
+  expires_at timestamp [not null]
+  updated_at timestamp [default: `now()`]
 }
 
 Table partners {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [ref: > users.id]
   name varchar [not null]
   description text
-  logo_url text
-  email varchar
+  logo_url varchar
+  email varchar [unique, not null]
   phone varchar
   address text
-  website text
+  website varchar
   service_types text
   accepted_service_types text
-  accepts_clean_only boolean
+  accepts_clean_only boolean [default: false]
   capacity_notes text
   pickup_areas text
-  rule_change_requires_admin boolean
+  rule_change_requires_admin boolean [default: true]
   contact_person varchar
-  rating decimal
-  verified boolean
-  status varchar
-  latitude decimal
-  longitude decimal
-  created_at timestamp
-  updated_at timestamp
+  status varchar [default: "pending", note: "pending, active, inactive, rejected"]
+  verified boolean [default: false]
+  rating numeric [default: 0]
+  latitude numeric
+  longitude numeric
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
 }
 
 Table submissions {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null, ref: > users.id]
-  submission_name varchar
-  submission_code varchar
   item_type varchar [not null]
-  quantity int
-  condition varchar
-  cleanliness varchar
+  condition varchar [not null]
   fabric varchar
+  cleanliness varchar
   description text
-  photos json
-  service_type varchar
-  action varchar
-  buyback_interest boolean
-  upcycle_request text
-  status varchar
+  photos json [note: "Postgres json[] array of uploaded image payloads"]
+  status varchar [default: "pending", note: "pending, verified, processed, rejected"]
   assigned_partner_id uuid [ref: > partners.id]
+  submission_code varchar [unique]
+  submission_name varchar
+  service_type varchar [note: "recycle, donate, upcycle, buyback"]
+  quantity int [default: 1]
+  buyback_interest boolean [default: false]
+  action varchar
+  upcycle_request text
   scheduled_at timestamp
-  details json
-  burn_test json
-  created_at timestamp
-  updated_at timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
 }
 
 Table submission_details {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   submission_id uuid [unique, not null, ref: > submissions.id]
   item_types text
   other_item_type text
@@ -105,9 +136,9 @@ Table submission_details {
   custom_fabric_text text
   fabric_identification text
   brand text
-  no_brand_visible boolean
+  no_brand_visible boolean [default: false]
   fabric_description text
-  restricted_category text
+  restricted_category text [default: "none"]
   uniform_branding text
   fiber_composition text
   wearability text
@@ -116,197 +147,184 @@ Table submission_details {
   damage_classification text
   repurposing_potential text
   trim_removal text
-  created_at timestamp
-  updated_at timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
 }
 
 Table burn_tests {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   submission_id uuid [not null, ref: > submissions.id]
-  performed boolean
+  performed boolean [default: false]
   page int
-  moment json
-  flames json
-  no_flame json
-  smell varchar
-  ashes json
-  created_at timestamp
-  updated_at timestamp
+  moment text
+  flames text
+  no_flame text
+  smell text
+  ashes text
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
 }
 
 Table submission_images {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   submission_id uuid [not null, ref: > submissions.id]
   url text [not null]
   storage_key text
-  metadata json
-  uploaded_at timestamp
+  metadata jsonb
+  uploaded_at timestamp [default: `now()`]
 }
 
 Table recommendation_runs {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   submission_id uuid [ref: > submissions.id]
   requested_by_user_id uuid [ref: > users.id]
-  engine_name varchar
+  engine_name varchar [default: "dss"]
   engine_version varchar
-  status varchar
-  criteria json
-  input_snapshot json
+  status varchar [default: "completed", note: "pending, running, completed, failed"]
+  criteria jsonb
+  input_snapshot jsonb
+  started_at timestamp [default: `now()`]
   completed_at timestamp
-  created_at timestamp
+  error_message text
+  audit_label text [default: "DSS audit trail"]
+  created_at timestamp [default: `now()`]
 }
 
 Table recommendation_results {
-  id uuid [pk]
-  run_id uuid [ref: > recommendation_runs.id]
+  id uuid [pk, default: `gen_random_uuid()`]
+  run_id uuid [not null, ref: > recommendation_runs.id]
   submission_id uuid [ref: > submissions.id]
   partner_id uuid [ref: > partners.id]
-  recommended_pathway varchar
+  recommended_pathway varchar [not null]
   rank int
-  score decimal
-  confidence decimal
+  score numeric
+  confidence numeric
   explanation text
   details text
-  output_payload json
-  selected boolean
-  generated_at timestamp
+  output_payload jsonb
+  selected boolean [default: false]
+  generated_at timestamp [default: `now()`]
 }
 
 Table recommendation_feedback {
-  id uuid [pk]
-  recommendation_result_id uuid [ref: > recommendation_results.id]
+  id uuid [pk, default: `gen_random_uuid()`]
+  recommendation_result_id uuid [not null, ref: > recommendation_results.id]
   user_id uuid [ref: > users.id]
   rating int
+  accepted boolean
   feedback text
-  created_at timestamp
+  created_at timestamp [default: `now()`]
 }
 
 Table dss_rules {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   rule_key varchar [unique, not null]
   pathway varchar [note: "recycle, donate, upcycle, buyback, rejected"]
   category varchar
   question_key varchar
-  expected_values json
-  weight decimal
-  active boolean
+  expected_values jsonb
+  weight numeric [default: 0]
+  active boolean [default: true]
   description text
   created_by_user_id uuid [ref: > users.id]
   updated_by_user_id uuid [ref: > users.id]
-  created_at timestamp
-  updated_at timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
 }
 
 Table transactions {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   submission_id uuid [not null, ref: > submissions.id]
   from_user_id uuid [not null, ref: > users.id]
   to_partner_id uuid [ref: > partners.id]
-  type varchar [note: "recycle, donate, upcycle, buyback"]
-  status varchar [note: "pending, accepted, completed, rejected"]
-  amount decimal
+  type varchar [not null, note: "recycle, donate, upcycle, buyback"]
+  status varchar [default: "pending", note: "pending, accepted, completed, rejected"]
+  amount numeric
   notes text
-  created_at timestamp
-  updated_at timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table conversations {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null, ref: > users.id]
+  partner_id uuid [ref: > partners.id]
+  conversation_type varchar [default: "general"]
+  subject text
+  status varchar [default: "open", note: "open, closed, archived"]
+  related_submission_id uuid [ref: > submissions.id]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
 }
 
 Table messages {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   from_user_id uuid [not null, ref: > users.id]
   to_user_id uuid [not null, ref: > users.id]
   conversation_id uuid [ref: > conversations.id]
   sender_type varchar
   content text [not null]
-  read boolean
+  read boolean [default: false]
   read_at timestamp
   related_submission_id uuid [ref: > submissions.id]
   related_transaction_id uuid [ref: > transactions.id]
   action_url text
-  metadata json
-  created_at timestamp
-}
-
-Table conversations {
-  id uuid [pk]
-  user_id uuid [not null, ref: > users.id]
-  partner_id uuid [ref: > partners.id]
-  conversation_type varchar
-  subject text
-  status varchar
-  related_submission_id uuid [ref: > submissions.id]
-  created_at timestamp
-  updated_at timestamp
+  metadata jsonb [default: "{}"]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
 }
 
 Table message_attachments {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   message_id uuid [not null, ref: > messages.id]
   filename text
-  url text
-  metadata json
-  uploaded_at timestamp
+  url text [not null]
+  metadata jsonb
+  uploaded_at timestamp [default: `now()`]
 }
 
 Table notifications {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null, ref: > users.id]
   type varchar [not null]
-  title varchar [not null]
+  title varchar
+  message text
   body text
-  data json
-  read boolean
+  related_id uuid
+  data jsonb [default: "{}"]
+  read boolean [default: false]
   read_at timestamp
-  created_at timestamp
-  updated_at timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
 }
 
 Table partner_rule_change_requests {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   partner_id uuid [ref: > partners.id]
   requested_by_user_id uuid [ref: > users.id]
   rule_area varchar [not null]
   requested_change text [not null]
   reason text
-  status varchar [note: "pending, accepted, approved, declined, needs_more_information, implemented"]
+  status varchar [default: "pending", note: "pending, accepted, approved, declined, needs_more_information, implemented"]
   admin_notes text
   reviewed_by_user_id uuid [ref: > users.id]
   reviewed_at timestamp
-  created_at timestamp
-  updated_at timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
 }
 
 Table activity_logs {
-  id uuid [pk]
+  id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [ref: > users.id]
-  action varchar
+  action varchar [not null]
   entity_type varchar
   entity_id uuid
-  details json
-  created_at timestamp
+  details jsonb
+  created_at timestamp [default: `now()`]
 }
 
-Table password_reset_tokens {
-  id uuid [pk]
-  user_id uuid [ref: > users.id]
-  token_hash varchar
-  expires_at timestamp
-  used_at timestamp
-  created_at timestamp
-}
-
-Table auth_events {
-  id uuid [pk]
-  user_id uuid [ref: > users.id]
-  event_type varchar
-  ip_address varchar
-  user_agent text
-  metadata json
-  created_at timestamp
-}
-
-Table rate_limits {
-  key varchar [pk]
-  count int
-  expires_at timestamp
-  updated_at timestamp
+Table schema_migrations {
+  id int [pk, increment]
+  name varchar [not null]
+  applied_at timestamp [default: `now()`]
 }
