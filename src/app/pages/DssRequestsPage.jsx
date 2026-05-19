@@ -31,6 +31,9 @@ const pathwayLabels = {
   buyback: "Buyback",
 };
 
+const getRequestActivityTime = (request) =>
+  new Date(request.updated_at || request.created_at || 0).getTime();
+
 export function DssRequestsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -91,7 +94,7 @@ export function DssRequestsPage() {
           .includes(query);
 
       return statusMatch && queryMatch;
-    });
+    }).sort((first, second) => getRequestActivityTime(second) - getRequestActivityTime(first));
   }, [requests, filter, search]);
 
   const handleReminder = async (requestId) => {

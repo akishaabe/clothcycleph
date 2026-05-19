@@ -387,7 +387,7 @@ export async function getUserDssRequestsD1(db: D1Database, userId: string) {
      JOIN submissions s ON s.id = t.submission_id
      LEFT JOIN recommendation_results rr ON rr.submission_id = s.id AND rr.partner_id = p.id AND rr.selected = 1
      WHERE t.from_user_id = ?
-     ORDER BY t.created_at DESC`,
+     ORDER BY COALESCE(t.updated_at, t.created_at) DESC, t.created_at DESC`,
     [userId]
   );
 
@@ -457,7 +457,7 @@ export async function getPartnerDssRequestsD1(db: D1Database, userId: string, em
      )
      LEFT JOIN recommendation_results rr ON rr.submission_id = s.id AND rr.partner_id = t.to_partner_id AND rr.selected = 1
      ${whereClause}
-     ORDER BY t.created_at DESC`,
+     ORDER BY COALESCE(t.updated_at, t.created_at) DESC, t.created_at DESC`,
     params
   );
 

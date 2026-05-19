@@ -385,7 +385,7 @@ export const getUserDssRequests = async (req: AuthRequest, res: Response) => {
        JOIN submissions s ON s.id = t.submission_id
        LEFT JOIN recommendation_results rr ON rr.submission_id = s.id AND rr.partner_id = p.id AND rr.selected = true
        WHERE t.from_user_id = $1
-       ORDER BY t.created_at DESC`,
+       ORDER BY COALESCE(t.updated_at, t.created_at) DESC, t.created_at DESC`,
       [userId]
     );
 
@@ -457,7 +457,7 @@ export const getPartnerDssRequests = async (req: AuthRequest, res: Response) => 
        ) bt ON true
        LEFT JOIN recommendation_results rr ON rr.submission_id = s.id AND rr.partner_id = t.to_partner_id AND rr.selected = true
        ${whereClause}
-       ORDER BY t.created_at DESC`,
+       ORDER BY COALESCE(t.updated_at, t.created_at) DESC, t.created_at DESC`,
       params
     );
 

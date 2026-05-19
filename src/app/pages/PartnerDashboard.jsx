@@ -58,6 +58,9 @@ const formatDate = (value) =>
 const formatPercent = (value) =>
   value == null ? "Not available" : `${Math.round(Number(value) * 100)}%`;
 
+const getRequestActivityTime = (request) =>
+  new Date(request?.updated_at || request?.created_at || 0).getTime();
+
 const getDssRecommendation = (request) =>
   request?.output_payload?.recommendation || {
     recommended_pathway: request?.type,
@@ -214,7 +217,7 @@ export function PartnerDashboard() {
           .includes(query);
 
       return statusMatch && queryMatch;
-    });
+    }).sort((first, second) => getRequestActivityTime(second) - getRequestActivityTime(first));
   }, [requests, activeFilter, searchQuery]);
 
   const filteredRuleRequests = useMemo(() => {

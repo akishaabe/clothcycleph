@@ -52,6 +52,9 @@ const toPhotoUrl = (photo) => {
   return typeof photo === "string" ? photo : photo.url || "";
 };
 
+const getActivityTime = (value) =>
+  new Date(value?.updated_at || value?.created_at || value?.submittedAt || 0).getTime();
+
 export function SubmittedRequestsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -130,6 +133,7 @@ export function SubmittedRequestsPage() {
         partnerName: latestPartnerRequest?.partner_name || "",
         status,
         submittedAt: submission.created_at,
+        activityAt: latestPartnerRequest?.updated_at || latestPartnerRequest?.created_at || submission.updated_at || submission.created_at,
         confidence: latestPartnerRequest?.confidence ?? recommendation?.confidence ?? null,
         score: recommendation?.score ?? latestPartnerRequest?.score ?? null,
       };
@@ -158,8 +162,8 @@ export function SubmittedRequestsPage() {
     });
 
     return rows.sort((first, second) => {
-      const firstDate = new Date(first.submittedAt || 0).getTime();
-      const secondDate = new Date(second.submittedAt || 0).getTime();
+      const firstDate = getActivityTime(first);
+      const secondDate = getActivityTime(second);
       return sort === "oldest" ? firstDate - secondDate : secondDate - firstDate;
     });
   }, [filter, requests, search, sort]);
