@@ -206,12 +206,35 @@
     min-height: calc(100vh - 128px);
   }
 
-  .messages-sidebar {
-    max-height: 34vh;
-  }
-
   .messages-chat {
     min-height: min(62vh, 680px);
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .messages-shell {
+    grid-template-columns: minmax(360px, 38vw) minmax(0, 1fr) !important;
+  }
+
+  .messages-sidebar {
+    max-height: none;
+  }
+
+  .messages-thread {
+    gap: 0.875rem;
+    padding: 1rem;
+  }
+
+  .messages-thread-meta {
+    align-items: flex-start;
+  }
+
+  .messages-thread-meta span {
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    max-width: 6.5rem;
+    text-align: right;
+    white-space: normal;
   }
 }
 
@@ -224,6 +247,7 @@
   .messages-sidebar {
     border-right-width: 0;
     border-bottom: 1px solid var(--messages-border);
+    max-height: 42vh;
   }
 }
 

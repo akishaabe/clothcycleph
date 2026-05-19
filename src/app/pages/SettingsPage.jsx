@@ -21,7 +21,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useFileUpload } from "../../hooks/useFileUpload";
 import { notificationService } from "../../services/api";
-import { isStrongPassword, PasswordChecklist } from "../../utils/passwordPolicy";
+import { isStrongPassword, PasswordChecklist, PasswordMatchHint } from "../../utils/passwordPolicy";
 import { formatManilaDate } from "../../utils/dateTime";
 import { resolveMediaUrl } from "../../utils/mediaUrl";
 import "./SettingsPage.css";
@@ -1061,9 +1061,15 @@ export function SettingsPage() {
                     {field === "newPassword" && focusedPasswordField === "newPassword" && (
                       <PasswordChecklist
                         password={security.newPassword}
-                        confirmPassword={security.confirmPassword}
                       />
                     )}
+                    {field === "confirmPassword" &&
+                      (focusedPasswordField === "confirmPassword" || security.confirmPassword) && (
+                        <PasswordMatchHint
+                          password={security.newPassword}
+                          confirmPassword={security.confirmPassword}
+                        />
+                      )}
                   </div>
                 ))}
 
