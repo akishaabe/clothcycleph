@@ -580,7 +580,7 @@ export function MessagesPage() {
                 <button
                   key={conversation.other_user_id}
                   onClick={() => openConversation(conversation.other_user_id)}
-                  className={`messages-thread flex w-full gap-3 p-4 text-left transition-colors sm:gap-4 sm:p-5 ${
+                  className={`messages-thread flex w-full items-start gap-3 p-4 text-left transition-colors sm:gap-4 sm:p-5 ${
                     conversation.other_user_id === activeUserId ? "is-active" : ""
                   }`}
                 >
@@ -590,7 +590,7 @@ export function MessagesPage() {
                     className="h-12 w-12 rounded-2xl text-lg sm:h-14 sm:w-14"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                    <div className="messages-thread-meta flex min-w-0 items-start justify-between gap-2">
                       <h2 className="min-w-0 truncate font-sans text-base font-bold messages-heading sm:text-lg">
                         {conversation.other_user_name}
                       </h2>
@@ -623,7 +623,7 @@ export function MessagesPage() {
                       <button
                         key={contact.id}
                         onClick={() => openConversation(contact.id)}
-                        className={`messages-thread flex w-full gap-4 rounded-2xl p-4 text-left transition-colors ${
+                        className={`messages-thread flex w-full items-start gap-4 rounded-2xl p-4 text-left transition-colors ${
                           contact.id === activeUserId ? "is-active" : ""
                         }`}
                       >

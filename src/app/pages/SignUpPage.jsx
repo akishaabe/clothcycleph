@@ -394,9 +394,6 @@ export function SignUpPage() {
                   Creating your Google account...
                 </div>
               ) : null}
-              <p className="text-center text-xs text-[#5f6f67]">
-                Google signup opens Settings first so you can set your ClothCycle password.
-              </p>
             </div>
           ) : null}
 
