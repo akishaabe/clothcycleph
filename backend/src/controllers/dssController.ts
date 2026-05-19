@@ -99,6 +99,16 @@ function buildBrief(submission: any, recommendation: any) {
     lines.push(`Upcycle request: ${submission.upcycle_request}`);
   }
 
+  if (recommendation.recommended_pathway === 'upcycle') {
+    lines.push(
+      `Buyback preference: ${
+        submission.buyback_interest
+          ? 'Yes - user is open to buyback if the partner supports it'
+          : 'No - upcycle service only'
+      }`
+    );
+  }
+
   lines.push(`Recommendation note: ${recommendation.explanation}`);
 
   return lines.join('\n');
@@ -185,6 +195,7 @@ export const sendRecommendationToPartner = async (req: AuthRequest, res: Respons
     }
 
     const { submission_id, partner_id, recommended_pathway, brief } = req.body;
+    const selectedBuybackInterest = recommended_pathway === 'upcycle' && Boolean(req.body.buyback_interest);
     const submission = await getSubmissionForUser(submission_id, userId, req.user?.role);
 
     const partnerResult = await query(
@@ -249,6 +260,7 @@ export const sendRecommendationToPartner = async (req: AuthRequest, res: Respons
           recommendation,
           recommendations,
           brief,
+          buyback_interest: selectedBuybackInterest,
           burn_test_analysis: analyzeBurnTest(submission.burn_test),
           rule_checks: recommendation.checks || [],
         }),
@@ -267,9 +279,12 @@ export const sendRecommendationToPartner = async (req: AuthRequest, res: Respons
 
     await client.query(
       `UPDATE submissions
-       SET assigned_partner_id = $1, service_type = $2, updated_at = NOW()
+       SET assigned_partner_id = $1,
+           service_type = $2,
+           buyback_interest = $4,
+           updated_at = NOW()
        WHERE id = $3`,
-      [partner_id, recommended_pathway, submission_id]
+      [partner_id, recommended_pathway, submission_id, selectedBuybackInterest]
     );
 
     const partnerUserId = partner.resolved_user_id || partner.user_id;
@@ -420,6 +435,7 @@ export const getPartnerDssRequests = async (req: AuthRequest, res: Response) => 
          s.fabric,
          s.description,
          s.upcycle_request,
+         s.buyback_interest,
          s.photos,
          row_to_json(sd) AS details,
          row_to_json(bt) AS burn_test,
@@ -710,7 +726,7 @@ export const createPartnerRuleChangeRequest = async (req: AuthRequest, res: Resp
 
     await Promise.all(
       adminResult.rows.map(async (admin) => {
-        const adminActionUrl = `/admin?panel=rule-requests&request=${request.id}`;
+        const adminActionUrl = `/admin?panel=rule-requests&request=${request.id}&highlight=${request.id}`;
 
         await enqueueNotification(
           admin.id,
@@ -720,6 +736,17 @@ export const createPartnerRuleChangeRequest = async (req: AuthRequest, res: Resp
           { action_url: adminActionUrl, ruleChangeRequestId: request.id }
         );
       })
+    );
+
+    await enqueueNotification(
+      userId,
+      'system',
+      'Rule request submitted',
+      `Your ${req.body.rule_area} request was sent to admins.`,
+      {
+        action_url: `/partner?panel=rule-requests&highlight=${request.id}`,
+        ruleChangeRequestId: request.id,
+      }
     );
 
     res.status(201).json({ message: 'Rule change request submitted for admin review', data: result.rows[0] });
@@ -815,7 +842,9 @@ export const updatePartnerRuleChangeRequestStatus = async (req: AuthRequest, res
        WHERE u.partner_id = $1 OR u.id = $2`,
       [request.partner_id, request.requested_by_user_id]
     );
-    const partnerActionUrl = '/partner#rule-requests';
+    const adminResult = await client.query('SELECT name, email FROM users WHERE id = $1', [req.user.id]);
+    const adminName = adminResult.rows[0]?.name || adminResult.rows[0]?.email || 'Admin';
+    const partnerActionUrl = `/partner?panel=rule-requests&highlight=${request.id}`;
     const statusLabel = status === 'needs_more_information' ? 'needs more information' : status;
 
     for (const partnerUser of partnerUserResult.rows) {
@@ -823,7 +852,7 @@ export const updatePartnerRuleChangeRequestStatus = async (req: AuthRequest, res
         partnerUser.id,
         'system',
         'Rule request updated',
-        `${req.user.email || 'Admin'} marked your partner rule request as ${statusLabel}.`,
+        `${adminName} marked your partner rule request as ${statusLabel}.`,
         { action_url: partnerActionUrl, ruleChangeRequestId: request.id }
       );
     }

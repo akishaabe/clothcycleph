@@ -184,6 +184,7 @@ export function AdminDashboard() {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [searchParams] = useSearchParams();
+  const highlightedRuleRequestId = searchParams.get("highlight") || searchParams.get("request");
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [accounts, setAccounts] = useState(initialAccounts);
@@ -316,6 +317,20 @@ export function AdminDashboard() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("panel") !== "rule-requests") {
+      return;
+    }
+
+    setShowAllRuleRequests(true);
+
+    window.setTimeout(() => {
+      document
+        .getElementById("rule-requests")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+  }, [searchParams, ruleChangeRequests.length]);
 
   const activeConfig = roleConfig[activeRole];
   const roleAccounts = useMemo(
@@ -1310,15 +1325,22 @@ export function AdminDashboard() {
               </div>
             )}
 
-            {sortedRuleChangeRequests.slice(0, showAllRuleRequests ? 30 : 3).map((request, index) => (
+            {sortedRuleChangeRequests.slice(0, showAllRuleRequests ? 30 : 3).map((request, index) => {
+              const isHighlighted = highlightedRuleRequestId === request.id;
+
+              return (
               <motion.details
                 key={request.id}
                 initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.04 }}
+                animate={isHighlighted ? { opacity: 1, y: 0, scale: [1, 1.015, 1] } : { opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.04, duration: isHighlighted ? 0.75 : 0.25 }}
                 whileHover={{ y: -2 }}
-                defaultOpen={searchParams.get("request") === request.id}
-                className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-all hover:border-gray-400 hover:shadow-xl dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/25"
+                defaultOpen={isHighlighted}
+                className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition-all hover:border-gray-400 hover:shadow-xl dark:bg-white/[0.04] dark:hover:border-white/25 ${
+                  isHighlighted
+                    ? "border-gray-950 ring-2 ring-gray-950/15 dark:border-white/40 dark:ring-white/20"
+                    : "border-gray-200 dark:border-white/10"
+                }`}
               >
                 <summary className="flex cursor-pointer list-none flex-col gap-3 bg-gradient-to-r from-gray-50 to-white px-5 py-4 md:flex-row md:items-center md:justify-between dark:from-white/[0.06] dark:to-transparent">
                   <div>
@@ -1393,7 +1415,8 @@ export function AdminDashboard() {
                   </div>
                 </div>
               </motion.details>
-            ))}
+              );
+            })}
           </div>
         </motion.div>
 

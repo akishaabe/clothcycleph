@@ -107,7 +107,7 @@ function formatListValue(value) {
   return "Not specified";
 }
 
-function buildPartnerBrief(submission, pathway, recommendation, recommendations = []) {
+function buildPartnerBrief(submission, pathway, recommendation, recommendations = [], options = {}) {
   if (!submission || !pathway) {
     return "";
   }
@@ -119,6 +119,10 @@ function buildPartnerBrief(submission, pathway, recommendation, recommendations 
   const score = recommendation?.score != null
     ? `${Number(recommendation.score).toFixed(1)} / 100`
     : "Not available";
+  const buybackInterest = Boolean(options.buybackInterest ?? submission.buyback_interest);
+  const buybackLine = pathway === "upcycle"
+    ? `Buyback preference: ${buybackInterest ? "Yes - user is open to buyback if the partner supports it" : "No - upcycle service only"}`
+    : "";
 
   return [
     `Selected pathway: ${pathwayLabels[pathway] || pathway}`,
@@ -134,6 +138,8 @@ function buildPartnerBrief(submission, pathway, recommendation, recommendations 
     `Condition: ${submission.condition || "Not specified"}`,
     `Cleanliness: ${submission.cleanliness || "Not specified"}`,
     `Fabric: ${submission.fabric || formatListValue(details.fabric_types_list || details.fabric_types)}`,
+    buybackLine,
+    submission.upcycle_request ? `Upcycle/buyback request: ${submission.upcycle_request}` : "",
     recommendation ? `Selected pathway reasoning: ${recommendation.explanation}` : "",
     recommendation ? `Matched DSS checks: ${formatCheckList(recommendation.checks, true)}` : "",
     recommendation ? `Needs review: ${formatCheckList(recommendation.checks, false)}` : "",
@@ -177,6 +183,7 @@ export function DssConfirmationPage() {
   const [partners, setPartners] = useState([]);
   const [requests, setRequests] = useState([]);
   const [selectedPathway, setSelectedPathway] = useState("");
+  const [buybackPreference, setBuybackPreference] = useState("no");
   const [selectedPartnerId, setSelectedPartnerId] = useState("");
   const [userLocation, setUserLocation] = useState(null);
   const [locationMessage, setLocationMessage] = useState("");
@@ -243,7 +250,15 @@ export function DssConfirmationPage() {
             : "Location access is off. Partners are ranked by verification and rating.",
         );
         setSelectedPathway(initialPathway || "");
-        setBrief(buildPartnerBrief(nextPreview.submission, initialPathway, initialRecommendation, nextPreview.recommendations));
+        const initialBuybackPreference = nextPreview.submission?.buyback_interest ? "yes" : "no";
+        setBuybackPreference(initialBuybackPreference);
+        setBrief(buildPartnerBrief(
+          nextPreview.submission,
+          initialPathway,
+          initialRecommendation,
+          nextPreview.recommendations,
+          { buybackInterest: initialBuybackPreference === "yes" },
+        ));
       } catch (loadError) {
         if (isMounted) {
           setError(loadError.message || "Unable to load DSS confirmation.");
@@ -300,6 +315,8 @@ export function DssConfirmationPage() {
 
   const hasSelectedService = Boolean(selectedServicePathway);
   const isRejected = preview?.recommendations?.[0]?.recommended_pathway === "rejected";
+  const buybackRequested = buybackPreference === "yes";
+  const upcycleRequest = preview?.submission?.upcycle_request;
 
   const recommendationOptions = useMemo(() => {
     if (!preview?.recommendations) {
@@ -329,7 +346,20 @@ export function DssConfirmationPage() {
     );
 
     setSelectedPathway(pathway);
-    setBrief(buildPartnerBrief(preview?.submission, pathway, recommendation, preview?.recommendations || []));
+    setBrief(buildPartnerBrief(preview?.submission, pathway, recommendation, preview?.recommendations || [], {
+      buybackInterest: buybackPreference === "yes",
+    }));
+  };
+
+  const handleBuybackPreferenceChange = (value) => {
+    const recommendation = preview?.recommendations.find(
+      (item) => item.recommended_pathway === selectedPathway,
+    );
+
+    setBuybackPreference(value);
+    setBrief(buildPartnerBrief(preview?.submission, selectedPathway, recommendation, preview?.recommendations || [], {
+      buybackInterest: value === "yes",
+    }));
   };
 
   const refreshNearbyPartners = async () => {
@@ -380,6 +410,7 @@ export function DssConfirmationPage() {
         submission_id: submissionId,
         partner_id: selectedPartnerId,
         recommended_pathway: selectedPathway,
+        buyback_interest: selectedPathway === "upcycle" && buybackPreference === "yes",
         brief,
       });
 
@@ -588,10 +619,39 @@ export function DssConfirmationPage() {
                           );
                         })}
                     </div>
-                    <p className="mt-3 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
-                      The cards below explain the DSS scoring only. Use the buttons above to choose what gets sent to the partner.
-                    </p>
-                  </div>
+                  <p className="mt-3 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
+                    The cards below explain the DSS scoring only. Use the buttons above to choose what gets sent to the partner.
+                  </p>
+                  {selectedPathway === "upcycle" && (
+                    <div className="mt-4 rounded-2xl border border-[#dce4da] bg-white p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                      <div className="text-sm font-semibold text-[#19221d] dark:text-white">
+                        Buyback preference for this Upcycle request
+                      </div>
+                      <p className="mt-1 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
+                        This is not a DSS score. It only tells the partner whether you are open to buyback.
+                      </p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {[
+                          ["yes", "Yes, open to buyback"],
+                          ["no", "No, upcycle only"],
+                        ].map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => handleBuybackPreferenceChange(value)}
+                            className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
+                              buybackPreference === value
+                                ? "border-[#336158] bg-[#f1f7ef] text-[#19221d] ring-2 ring-[#336158]/15 dark:border-emerald-300 dark:bg-emerald-300/15 dark:text-white"
+                                : "border-[#e1e7df] bg-white text-[#5f6f67] hover:border-[#9bb39c] dark:border-white/10 dark:bg-white/[0.03] dark:text-zinc-300"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
                   <div className="grid gap-3">
                     {recommendationOptions.map((recommendation) => {
                       const isSelected =
@@ -889,6 +949,23 @@ export function DssConfirmationPage() {
               <div className="mt-1">
                 Top DSS option: {pathwayLabels[topRecommendation?.recommended_pathway] || "Not available"} ({Math.round(Number(topRecommendation?.confidence || 0) * 100)}% confidence)
               </div>
+              {selectedPathway === "upcycle" && (
+                <div className="mt-3 rounded-xl border border-[#dce4da] bg-white px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                  <div className="font-semibold text-[#19221d] dark:text-white">
+                    Buyback preference: {buybackRequested ? "Yes" : "No"}
+                  </div>
+                  <div className="mt-1">
+                    {buybackRequested
+                      ? "This will be sent as an Upcycle request with buyback interest noted. The partner still decides whether they can support buyback."
+                      : "This will be sent as Upcycle only, without buyback interest."}
+                  </div>
+                  {upcycleRequest && (
+                    <div className="mt-1">
+                      Request: {upcycleRequest}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button

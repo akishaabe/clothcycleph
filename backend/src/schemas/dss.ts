@@ -3,7 +3,8 @@ import { z } from 'zod';
 export const sendDssRecommendationSchema = z.object({
   submission_id: z.string().uuid(),
   partner_id: z.string().uuid(),
-  recommended_pathway: z.enum(['recycle', 'donate', 'upcycle', 'buyback']),
+  recommended_pathway: z.enum(['recycle', 'donate', 'upcycle']),
+  buyback_interest: z.boolean().optional(),
   brief: z.string().trim().min(1).max(5000),
 });
 

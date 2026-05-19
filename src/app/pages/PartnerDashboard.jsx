@@ -71,6 +71,8 @@ export function PartnerDashboard() {
   const { logout } = useAuth();
   const [searchParams] = useSearchParams();
   const requestsSectionRef = useRef(null);
+  const ruleRequestsSectionRef = useRef(null);
+  const highlightedRuleRequestId = searchParams.get("highlight");
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [requests, setRequests] = useState([]);
@@ -86,6 +88,7 @@ export function PartnerDashboard() {
   const [isLoadingRuleRequests, setIsLoadingRuleRequests] = useState(false);
   const [ruleRequestFilter, setRuleRequestFilter] = useState("all");
   const [ruleRequestSearch, setRuleRequestSearch] = useState("");
+  const [showAllRuleRequests, setShowAllRuleRequests] = useState(false);
   const [ruleRequest, setRuleRequest] = useState({
     rule_area: "Partner preferences",
     requested_change: "",
@@ -156,6 +159,15 @@ export function PartnerDashboard() {
       requestsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [searchParams, requests]);
+
+  useEffect(() => {
+    if (searchParams.get("panel") !== "rule-requests" || !highlightedRuleRequestId) {
+      return;
+    }
+
+    setShowAllRuleRequests(true);
+    ruleRequestsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [searchParams, highlightedRuleRequestId, ruleRequests]);
 
   useEffect(() => {
     if (!selectedRequest) {
@@ -660,10 +672,20 @@ export function PartnerDashboard() {
         </motion.form>
 
         <motion.section
+          id="rule-requests"
+          ref={ruleRequestsSectionRef}
           initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          animate={{
+            opacity: 1,
+            y: 0,
+            scale: searchParams.get("panel") === "rule-requests" ? [1, 1.01, 1] : 1,
+          }}
           transition={{ delay: 0.55 }}
-          className="mt-6 rounded-2xl bg-white p-6 shadow-lg dark:bg-[#111827]"
+          className={`mt-6 rounded-2xl bg-white p-6 shadow-lg dark:bg-[#111827] ${
+            searchParams.get("panel") === "rule-requests"
+              ? "ring-2 ring-[#4f6f9f]/25 dark:ring-[#9fc5f8]/30"
+              : ""
+          }`}
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -724,8 +746,11 @@ export function PartnerDashboard() {
             )}
 
             {!isLoadingRuleRequests &&
-              filteredRuleRequests.slice(0, 6).map((item) => {
+              filteredRuleRequests
+                .slice(0, showAllRuleRequests ? filteredRuleRequests.length : 3)
+                .map((item) => {
                 const status = String(item.status || "pending");
+                const isHighlighted = highlightedRuleRequestId === item.id;
                 const statusClass =
                   status === "accepted" || status === "approved"
                     ? "bg-[#4f6f9f]/20 text-[#10233f]"
@@ -736,9 +761,15 @@ export function PartnerDashboard() {
                         : "bg-[#8aa6c8]/20 text-[#3f5f8f]";
 
                 return (
-                  <article
+                  <motion.article
                     key={item.id}
-                    className="rounded-2xl border border-[#d6e6f8] bg-[#fbfdff] p-5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]"
+                    animate={isHighlighted ? { scale: [1, 1.025, 1] } : { scale: 1 }}
+                    transition={{ duration: 0.7 }}
+                    className={`rounded-2xl border bg-[#fbfdff] p-5 shadow-sm dark:bg-white/[0.04] ${
+                      isHighlighted
+                        ? "border-[#4f6f9f] ring-2 ring-[#4f6f9f]/20 dark:border-[#9fc5f8] dark:ring-[#9fc5f8]/20"
+                        : "border-[#d6e6f8] dark:border-white/10"
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -768,10 +799,19 @@ export function PartnerDashboard() {
                       Submitted {formatDate(item.created_at)}
                       {item.reviewed_at ? ` - Updated ${formatDate(item.reviewed_at)}` : ""}
                     </p>
-                  </article>
+                  </motion.article>
                 );
               })}
           </div>
+          {filteredRuleRequests.length > 3 && (
+            <button
+              type="button"
+              onClick={() => setShowAllRuleRequests((current) => !current)}
+              className="mt-5 w-full rounded-xl border border-[#d6e6f8] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#41668f] transition-colors hover:bg-[#eff6ff] dark:border-white/10 dark:bg-white/[0.04] dark:text-[#9fc5f8] dark:hover:bg-white/10"
+            >
+              {showAllRuleRequests ? "Show less" : `Show all ${filteredRuleRequests.length} updates`}
+            </button>
+          )}
         </motion.section>
       </div>
 
@@ -812,6 +852,7 @@ export function PartnerDashboard() {
                 ["Quantity", selectedRequest.quantity || 1],
                 ["Condition", selectedRequest.condition || "Not specified"],
                 ["Cleanliness", selectedRequest.cleanliness || "Not specified"],
+                ["Buyback interest", selectedRequest.buyback_interest ? "Yes" : "No"],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-xl bg-[#eff6ff] px-4 py-3">
                   <div className="text-xs uppercase tracking-wide text-[#41668f]">
@@ -916,6 +957,14 @@ export function PartnerDashboard() {
                     <p><span className="font-semibold text-[#10233f] dark:text-white">Burn test:</span> {selectedRequest.burn_test?.performed ? "Performed" : "Not performed"}</p>
                     {selectedRequest.upcycle_request && (
                       <p><span className="font-semibold text-[#10233f] dark:text-white">Upcycle request:</span> {selectedRequest.upcycle_request}</p>
+                    )}
+                    {selectedRequest.type === "upcycle" && (
+                      <p>
+                        <span className="font-semibold text-[#10233f] dark:text-white">Partner handoff:</span>{" "}
+                        {selectedRequest.buyback_interest
+                          ? "User sent this as Upcycle and is open to buyback if your organization supports it."
+                          : "User sent this as Upcycle only; no buyback interest was requested."}
+                      </p>
                     )}
                     {selectedRequest.description && (
                       <p><span className="font-semibold text-[#10233f] dark:text-white">User note:</span> {selectedRequest.description}</p>

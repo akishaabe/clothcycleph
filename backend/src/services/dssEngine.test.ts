@@ -42,6 +42,20 @@ describe('dssEngine', () => {
     expect(result.top_fibers[0].fiber).toBe('wool');
   });
 
+  it('does not show 100 confidence for partial wool burn-test matches', () => {
+    const result = analyzeBurnTest({
+      performed: true,
+      moment: ['Curled away', 'No flame', 'Burned slowly'],
+      flames: ['Burns slowly'],
+      no_flame: ['Completely stops burning'],
+      smell: 'Like burning hair',
+      ashes: ['Easy to crush', 'Irregular bead'],
+    });
+
+    expect(result.top_fibers[0].fiber).toBe('wool');
+    expect(result.top_fibers[0].confidence).toBeLessThan(1);
+  });
+
   it('uses DSS engine version and item-detail rules for donation', () => {
     const recommendations = buildPathwayRecommendations({
       condition: 'Good condition (wearable, no major damage)',
@@ -88,6 +102,28 @@ describe('dssEngine', () => {
     });
 
     expect(recommendations[0].recommended_pathway).toBe('upcycle');
+  });
+
+  it('keeps buyback as an upcycle preference instead of a DSS pathway', () => {
+    const recommendations = buildPathwayRecommendations({
+      item_type: 'Top',
+      condition: 'Minor damage (small tears, loose seams, stains)',
+      cleanliness: 'Yes, clean and ready for use',
+      action: 'Upcycle',
+      buyback_interest: true,
+      upcycle_request: 'tote bag',
+      details: {
+        restricted_category: 'none',
+        fiber_composition: 'cotton_natural',
+        repairability: 'minor_repair',
+        repurposing_potential: 'high',
+        trim_removal: 'easy',
+      },
+      burn_test: { performed: false },
+    });
+
+    expect(recommendations.some((recommendation) => recommendation.recommended_pathway === 'buyback')).toBe(false);
+    expect(recommendations.map((recommendation) => recommendation.recommended_pathway)).toContain('upcycle');
   });
 
   it('rejects donation when uniform branding is indicated', () => {

@@ -146,6 +146,16 @@ Donation has a hard eligibility rule before normal scoring: the item must be cle
 | Trim/accessory removal | 10 | No trims or easy-to-remove trims |
 | Quantity/batch | 7 | Similar identifiable batch preferred |
 
-## Buyback Add-On
+## Buyback Preference
 
-Buyback is added as an extra recommendation only when `buyback_interest` is true. It receives a fixed score of 78 and is explained as an upcycle resale interest.
+Buyback is not scored as a DSS pathway and does not appear as a ranked recommendation card. It is a yes/no preference that appears whenever the final pathway being sent is Upcycle, even if the user originally chose Donate or Recycle and later switches to Upcycle on the DSS confirmation page.
+
+| Situation | Buyback behavior |
+|---|---|
+| Final selected pathway is Recycle | No buyback confirmation; partner brief has no buyback preference |
+| Final selected pathway is Donate | No buyback confirmation; partner brief has no buyback preference |
+| Final selected pathway is Upcycle | User confirms Yes or No for buyback before sending |
+| User confirms Yes | Partner brief says the user is open to buyback if the partner supports it |
+| User confirms No | Partner brief says the request is Upcycle only |
+
+The chosen buyback preference is saved with the sent request context and shown on the partner request detail view so partners can decide whether they are accepting upcycle only or upcycle with buyback interest.

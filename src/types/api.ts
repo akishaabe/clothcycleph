@@ -224,7 +224,7 @@ export interface Partner {
 }
 
 export interface DssRecommendation {
-  recommended_pathway: 'recycle' | 'donate' | 'upcycle' | 'buyback' | 'rejected';
+  recommended_pathway: 'recycle' | 'donate' | 'upcycle' | 'rejected';
   rank: number;
   score: number;
   confidence: number;
@@ -310,7 +310,8 @@ export type DssRequestStatus =
 export interface SendDssRecommendationPayload {
   submission_id: string;
   partner_id: string;
-  recommended_pathway: 'recycle' | 'donate' | 'upcycle' | 'buyback';
+  recommended_pathway: 'recycle' | 'donate' | 'upcycle';
+  buyback_interest?: boolean;
   brief: string;
 }
 

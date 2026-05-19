@@ -54,7 +54,8 @@ export async function sendRecommendationToPartnerD1(
   payload: {
     submission_id: string;
     partner_id: string;
-    recommended_pathway: 'recycle' | 'donate' | 'upcycle' | 'buyback';
+    recommended_pathway: 'recycle' | 'donate' | 'upcycle';
+    buyback_interest?: boolean;
     brief: string;
   }
 ) {
@@ -79,6 +80,7 @@ export async function sendRecommendationToPartnerD1(
   const recommendations = buildPathwayRecommendations(submission);
   const recommendation =
     recommendations.find((item) => item.recommended_pathway === payload.recommended_pathway) || recommendations[0];
+  const selectedBuybackInterest = payload.recommended_pathway === 'upcycle' && Boolean(payload.buyback_interest);
 
   const runId = generateD1UUID();
   await executeD1(
@@ -123,6 +125,7 @@ export async function sendRecommendationToPartnerD1(
         recommendation,
         recommendations,
         brief: payload.brief,
+        buyback_interest: selectedBuybackInterest,
         burn_test_analysis: analyzeBurnTest(submission.burn_test),
         rule_checks: recommendation.checks || [],
       }),
@@ -143,9 +146,12 @@ export async function sendRecommendationToPartnerD1(
   await executeD1(
     db,
     `UPDATE submissions
-     SET assigned_partner_id = ?, service_type = ?, updated_at = CURRENT_TIMESTAMP
+     SET assigned_partner_id = ?,
+         service_type = ?,
+         buyback_interest = ?,
+         updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`,
-    [payload.partner_id, payload.recommended_pathway, payload.submission_id]
+    [payload.partner_id, payload.recommended_pathway, selectedBuybackInterest ? 1 : 0, payload.submission_id]
   );
 
   if (partner.user_id) {
@@ -241,7 +247,7 @@ export async function createPartnerRuleChangeRequestD1(
 
   await Promise.all(
     (admins.results || []).map(async (admin: any) => {
-      const adminActionUrl = `/admin?panel=rule-requests&request=${id}`;
+      const adminActionUrl = `/admin?panel=rule-requests&request=${id}&highlight=${id}`;
       await createNotificationD1(db, {
         userId: admin.id,
         type: 'system',
@@ -251,6 +257,17 @@ export async function createPartnerRuleChangeRequestD1(
       });
     })
   );
+
+  await createNotificationD1(db, {
+    userId,
+    type: 'system',
+    title: 'Rule request submitted',
+    body: `Your ${payload.rule_area} request was sent to admins.`,
+    data: {
+      action_url: `/partner?panel=rule-requests&highlight=${id}`,
+      ruleChangeRequestId: id,
+    },
+  });
 
   return request;
 }
@@ -329,7 +346,7 @@ export async function updatePartnerRuleChangeRequestStatusD1(
     [request.requested_by_user_id, request.partner_id || '']
   );
   const admin = await queryD1First(db, 'SELECT name, email FROM users WHERE id = ?', [adminUserId]);
-  const partnerActionUrl = '/partner#rule-requests';
+  const partnerActionUrl = `/partner?panel=rule-requests&highlight=${request.id}`;
   const statusLabel = payload.status === 'needs_more_information' ? 'needs more information' : payload.status;
 
   await Promise.all(
@@ -399,6 +416,7 @@ export async function getPartnerDssRequestsD1(db: D1Database, userId: string, em
        s.cleanliness,
        s.fabric,
        s.description,
+       s.buyback_interest,
        s.photos,
        sd.item_types,
        sd.other_item_type,
@@ -726,6 +744,20 @@ function buildBrief(submission: any, recommendation: any) {
 
   if (submission.description) {
     lines.push(`User note: ${submission.description}`);
+  }
+
+  if (submission.upcycle_request) {
+    lines.push(`Upcycle request: ${submission.upcycle_request}`);
+  }
+
+  if (recommendation.recommended_pathway === 'upcycle') {
+    lines.push(
+      `Buyback preference: ${
+        submission.buyback_interest
+          ? 'Yes - user is open to buyback if the partner supports it'
+          : 'No - upcycle service only'
+      }`
+    );
   }
 
   lines.push(`Recommendation note: ${recommendation.explanation}`);

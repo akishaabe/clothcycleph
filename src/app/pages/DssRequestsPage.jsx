@@ -59,6 +59,18 @@ export function DssRequestsPage() {
     loadRequests();
   }, []);
 
+  useEffect(() => {
+    if (!highlightedRequestId || requests.length === 0) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      document
+        .querySelector(`[data-request-id="${highlightedRequestId}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+  }, [highlightedRequestId, requests.length]);
+
   const visibleRequests = useMemo(() => {
     const query = search.trim().toLowerCase();
 
@@ -184,6 +196,7 @@ export function DssRequestsPage() {
             {visibleRequests.map((request) => (
               <article
                 key={request.id}
+                data-request-id={request.id}
                 className={`rounded-2xl border bg-[#fbfcfa] p-5 ${
                   highlightedRequestId === request.id
                     ? "border-[#336158] ring-2 ring-[#336158]/20"

@@ -684,7 +684,9 @@ export function analyzeBurnTest(burnTest: any) {
       ];
       const matched = checks.reduce((total, check) => total + (check.score || 0), 0);
       const possible = checks.reduce((total, check) => total + (check.total || 1), 0);
-      const confidence = possible > 0 ? matched / possible : 0;
+      const rawConfidence = possible > 0 ? matched / possible : 0;
+      const fullyMatched = checks.every((check) => (check.score || 0) === (check.total || 1));
+      const confidence = fullyMatched ? rawConfidence : Math.min(rawConfidence, 0.92);
 
       return {
         fiber: rule.fiber,
@@ -787,26 +789,6 @@ export function buildPathwayRecommendations(submission: any) {
       eligibility,
     };
   });
-
-  if (submission.buyback_interest) {
-    recommendations.push({
-      recommended_pathway: 'buyback',
-      score: 78,
-      rawScore: 78,
-      confidence: 0.78,
-      explanation:
-        'Buyback is included because the user selected Upcycle and said they are interested in selling the upcycled item.',
-      checks: [
-        {
-          question: 'Buyback interest',
-          matched: true,
-          expected: 'User selected buyback interest',
-          selected: 'Yes',
-        },
-      ],
-      eligibility,
-    });
-  }
 
   return recommendations
     .sort((a, b) => b.rawScore - a.rawScore)
