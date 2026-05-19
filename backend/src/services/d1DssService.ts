@@ -1,7 +1,6 @@
 import { D1Database, executeD1, generateD1UUID, queryD1, queryD1First } from '../config/d1.js';
 import { analyzeBurnTest, buildPathwayRecommendations, DSS_ENGINE_VERSION, evaluateEligibility } from './dssEngine.js';
 import { createNotificationD1 } from './d1NotificationService.js';
-import { createSystemMessageD1 } from './d1MessageService.js';
 import { listPartnerLocationsD1, PartnerSearchOptions } from './d1GisService.js';
 
 const statusLabels: Record<string, string> = {
@@ -150,11 +149,12 @@ export async function sendRecommendationToPartnerD1(
   );
 
   if (partner.user_id) {
+    const sender = await queryD1First(db, 'SELECT name FROM users WHERE id = ?', [userId]);
     await createNotificationD1(db, {
       userId: partner.user_id,
       type: 'partner_update',
       title: 'New textile request',
-      body: `A user sent a ${titleCase(payload.recommended_pathway)} request for your review.`,
+      body: `${sender?.name || 'A user'} sent a ${titleCase(payload.recommended_pathway)} request for your review.`,
       data: { submissionId: payload.submission_id, transactionId },
     });
   }
@@ -236,29 +236,17 @@ export async function createPartnerRuleChangeRequestD1(
   );
 
   const request = result.results?.[0] ?? null;
+  const requester = await queryD1First(db, 'SELECT name FROM users WHERE id = ?', [userId]);
   const admins = await queryD1(db, `SELECT id FROM users WHERE role = 'admin' AND COALESCE(status, 'active') = 'active'`);
 
   await Promise.all(
     (admins.results || []).map(async (admin: any) => {
       const adminActionUrl = `/admin?panel=rule-requests&request=${id}`;
-      const partnerActionUrl = '/partner#rule-requests';
-      await createSystemMessageD1(db, {
-        fromUserId: userId,
-        toUserId: admin.id,
-        content: `Partner rule change request: ${payload.rule_area}\n${payload.requested_change}`,
-        actionUrl: adminActionUrl,
-        metadata: {
-          kind: 'partner_rule_change_request',
-          rule_change_request_id: id,
-          admin_action_url: adminActionUrl,
-          partner_action_url: partnerActionUrl,
-        },
-      });
       await createNotificationD1(db, {
         userId: admin.id,
         type: 'system',
         title: 'Partner rule change request',
-        body: `A partner requested an update for ${payload.rule_area}.`,
+        body: `${requester?.name || 'A partner'} requested an update for ${payload.rule_area}.`,
         data: { action_url: adminActionUrl, ruleChangeRequestId: id },
       });
     })
@@ -267,7 +255,29 @@ export async function createPartnerRuleChangeRequestD1(
   return request;
 }
 
-export async function getPartnerRuleChangeRequestsD1(db: D1Database) {
+export async function getPartnerRuleChangeRequestsD1(
+  db: D1Database,
+  user?: { id?: string; email?: string; role?: string }
+) {
+  if (user?.role === 'partner') {
+    return queryD1(
+      db,
+      `SELECT
+         prcr.*,
+         p.name AS partner_name,
+         u.name AS requested_by_name,
+         u.email AS requested_by_email
+       FROM partner_rule_change_requests prcr
+       LEFT JOIN partners p ON p.id = prcr.partner_id
+       LEFT JOIN users u ON u.id = prcr.requested_by_user_id
+       WHERE prcr.requested_by_user_id = ?
+          OR p.user_id = ?
+          OR lower(p.email) = lower(?)
+       ORDER BY prcr.created_at DESC`,
+      [user.id || '', user.id || '', user.email || '']
+    );
+  }
+
   return queryD1(
     db,
     `SELECT
@@ -318,29 +328,17 @@ export async function updatePartnerRuleChangeRequestStatusD1(
      WHERE u.id = ? OR u.partner_id = ?`,
     [request.requested_by_user_id, request.partner_id || '']
   );
+  const admin = await queryD1First(db, 'SELECT name, email FROM users WHERE id = ?', [adminUserId]);
   const partnerActionUrl = '/partner#rule-requests';
-  const adminActionUrl = `/admin?panel=rule-requests&request=${request.id}`;
   const statusLabel = payload.status === 'needs_more_information' ? 'needs more information' : payload.status;
 
   await Promise.all(
     (partnerUsers.results || []).map(async (partnerUser: any) => {
-      await createSystemMessageD1(db, {
-        fromUserId: adminUserId,
-        toUserId: partnerUser.id,
-        content: `Admin marked your rule request as ${statusLabel}.${payload.admin_note ? `\n${payload.admin_note}` : ''}`,
-        actionUrl: partnerActionUrl,
-        metadata: {
-          kind: 'partner_rule_change_request_status',
-          rule_change_request_id: request.id,
-          admin_action_url: adminActionUrl,
-          partner_action_url: partnerActionUrl,
-        },
-      });
       await createNotificationD1(db, {
         userId: partnerUser.id,
         type: 'system',
         title: 'Rule request updated',
-        body: `Your partner rule request is now ${statusLabel}.`,
+        body: `${admin?.name || admin?.email || 'Admin'} marked your partner rule request as ${statusLabel}.`,
         data: { action_url: partnerActionUrl, ruleChangeRequestId: request.id },
       });
     })
@@ -522,6 +520,8 @@ export async function remindDssRequestD1(
     throw new Error('Only pending requests can receive reminders');
   }
 
+  const sender = await queryD1First(db, 'SELECT name FROM users WHERE id = ?', [userId]);
+
   const result = await executeD1(
     db,
     `UPDATE transactions
@@ -536,7 +536,7 @@ export async function remindDssRequestD1(
       userId: request.partner_user_id,
       type: 'partner_update',
       title: 'Reminder: textile request pending',
-      body: message || `A user is waiting for your response to a ${titleCase(request.type)} request.`,
+      body: message || `${sender?.name || 'The user'} is waiting for your response to a ${titleCase(request.type)} request.`,
       data: { submissionId: request.submission_id, transactionId: request.id },
     });
   }

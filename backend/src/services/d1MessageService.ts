@@ -1,13 +1,6 @@
 import { D1Database, executeD1, queryD1, queryD1First, generateD1UUID } from '../config/d1.js';
 
 export async function getMessageContactsD1(db: D1Database, userId: string, role: string) {
-  const allowedRoles =
-    role === 'user'
-      ? ['partner', 'admin']
-      : role === 'partner'
-      ? ['user', 'admin']
-      : ['user', 'partner', 'admin'];
-
   return queryD1(
     db,
     `SELECT
@@ -17,20 +10,40 @@ export async function getMessageContactsD1(db: D1Database, userId: string, role:
        role,
        COALESCE(avatar_url, json_extract(profile_photo, '$.url')) AS avatar_url
      FROM users
-     WHERE id <> ? AND role IN (${allowedRoles.map(() => '?').join(',')})
+     WHERE id <> ?
+       AND (
+         (? = 'user' AND role = 'partner')
+         OR (
+           ? = 'partner'
+           AND role = 'user'
+           AND EXISTS (
+             SELECT 1
+             FROM messages m
+             WHERE m.from_user_id = users.id
+               AND m.to_user_id = ?
+             LIMIT 1
+           )
+         )
+         OR (? = 'admin' AND role = 'admin')
+       )
      ORDER BY CASE role WHEN 'partner' THEN 1 WHEN 'user' THEN 2 ELSE 3 END, name ASC`,
-    [userId, ...allowedRoles]
+    [userId, role, role, userId, role]
   );
 }
 
 export async function sendMessageD1(db: D1Database, fromUserId: string, toUserId: string, content: string) {
-  const recipient = await queryD1First(db, 'SELECT id FROM users WHERE id = ?', [toUserId]);
+  const sender = await getMessageUserD1(db, fromUserId);
+  const recipient = await getMessageUserD1(db, toUserId);
   if (!recipient) {
     throw new Error('Recipient not found');
   }
 
   if (fromUserId === toUserId) {
     throw new Error('You cannot send a message to yourself');
+  }
+
+  if (!sender || !(await canDirectMessageD1(db, sender, recipient))) {
+    throw new Error(getMessageLimitMessage(sender?.role, recipient.role));
   }
 
   const id = generateD1UUID();
@@ -79,6 +92,17 @@ export async function getMessagesD1(db: D1Database, currentUserId: string, userI
     throw new Error('You cannot open a conversation with yourself');
   }
 
+  const currentUser = await getMessageUserD1(db, currentUserId);
+  const otherUser = await getMessageUserD1(db, userId);
+
+  if (!otherUser) {
+    throw new Error('Conversation user not found');
+  }
+
+  if (!currentUser || !(await canDirectMessageD1(db, currentUser, otherUser))) {
+    throw new Error(getMessageLimitMessage(currentUser?.role, otherUser.role));
+  }
+
   await executeD1(
     db,
     `UPDATE messages
@@ -101,7 +125,7 @@ export async function getMessagesD1(db: D1Database, currentUserId: string, userI
   };
 }
 
-export async function getConversationsD1(db: D1Database, userId: string) {
+export async function getConversationsD1(db: D1Database, userId: string, role: string) {
   return queryD1(
     db,
     `WITH scoped_messages AS (
@@ -144,8 +168,23 @@ export async function getConversationsD1(db: D1Database, userId: string) {
      ) unread ON unread.from_user_id = rm.other_user_id
      WHERE rm.row_number = 1
        AND rm.other_user_id <> ?
+       AND (
+         (? = 'user' AND u.role = 'partner')
+         OR (
+           ? = 'partner'
+           AND u.role = 'user'
+           AND EXISTS (
+             SELECT 1
+             FROM messages starter
+             WHERE starter.from_user_id = u.id
+               AND starter.to_user_id = ?
+             LIMIT 1
+           )
+         )
+         OR (? = 'admin' AND u.role = 'admin')
+       )
      ORDER BY rm.created_at DESC`,
-    [userId, userId, userId, userId]
+    [userId, userId, userId, userId, userId, role, role, userId, role]
   );
 }
 
@@ -189,4 +228,54 @@ function parseJsonObject(value: unknown) {
   } catch {
     return {};
   }
+}
+
+type MessageUser = {
+  id: string;
+  role: string;
+};
+
+async function getMessageUserD1(db: D1Database, userId: string): Promise<MessageUser | null> {
+  const row = await queryD1First(db, 'SELECT id, role FROM users WHERE id = ?', [userId]);
+  return row ? { id: String(row.id), role: String(row.role) } : null;
+}
+
+async function canDirectMessageD1(db: D1Database, sender: MessageUser, recipient: MessageUser) {
+  if (sender.id === recipient.id) {
+    return false;
+  }
+
+  if (sender.role === 'admin' || recipient.role === 'admin') {
+    return sender.role === 'admin' && recipient.role === 'admin';
+  }
+
+  if (sender.role === 'user') {
+    return recipient.role === 'partner';
+  }
+
+  if (sender.role === 'partner' && recipient.role === 'user') {
+    const row = await queryD1First(
+      db,
+      `SELECT 1
+       FROM messages
+       WHERE from_user_id = ? AND to_user_id = ?
+       LIMIT 1`,
+      [recipient.id, sender.id]
+    );
+    return Boolean(row);
+  }
+
+  return false;
+}
+
+function getMessageLimitMessage(senderRole?: string, recipientRole?: string) {
+  if (recipientRole === 'admin' || senderRole === 'admin') {
+    return 'Admins can only use direct messages with other admins. Partner-admin updates are sent through notifications.';
+  }
+
+  if (senderRole === 'partner') {
+    return 'Partners can reply only after a user has started the conversation.';
+  }
+
+  return 'This direct message is not allowed for these account roles.';
 }

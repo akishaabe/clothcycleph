@@ -605,8 +605,12 @@ app.get('/api/dss/audit/export', requireAuth, requireAdmin, async (c) => {
   });
 });
 
-app.get('/api/dss/rule-change-requests', requireAuth, requireAdmin, async (c) => {
-  const result = await getPartnerRuleChangeRequestsD1(c.env.DB);
+app.get('/api/dss/rule-change-requests', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; email?: string; role?: string };
+  if (!['admin', 'partner'].includes(String(user.role))) {
+    return c.json({ error: 'Only partners and admins can view partner rule change requests' }, 403);
+  }
+  const result = await getPartnerRuleChangeRequestsD1(c.env.DB, user);
   return jsonList(c, result.results);
 });
 
@@ -657,16 +661,27 @@ app.get('/api/messages/contacts', requireAuth, async (c) => {
 });
 
 app.get('/api/messages/conversations', requireAuth, async (c) => {
-  const user = (c as any).get('user') as { id?: string };
-  const result = await getConversationsD1(c.env.DB, user.id!);
+  const user = (c as any).get('user') as { id?: string; role?: string };
+  const result = await getConversationsD1(c.env.DB, user.id!, user.role as string);
   return jsonList(c, result.results);
 });
 
 app.get('/api/messages/unread-count', requireAuth, async (c) => {
-  const user = (c as any).get('user') as { id?: string };
+  const user = (c as any).get('user') as { id?: string; role?: string };
   const result = await c.env.DB
-    .prepare('SELECT COUNT(*) AS unread_count FROM messages WHERE to_user_id = ? AND read = 0')
-    .bind(user.id)
+    .prepare(
+      `SELECT COUNT(*) AS unread_count
+       FROM messages m
+       JOIN users sender ON sender.id = m.from_user_id
+       WHERE m.to_user_id = ?
+         AND m.read = 0
+         AND (
+           (? = 'user' AND sender.role = 'partner')
+           OR (? = 'partner' AND sender.role = 'user')
+           OR (? = 'admin' AND sender.role = 'admin')
+         )`
+    )
+    .bind(user.id, user.role, user.role, user.role)
     .first<{ unread_count: number }>();
   return c.json({ unread_count: Number(result?.unread_count || 0) });
 });

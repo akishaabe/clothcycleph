@@ -303,12 +303,15 @@ export const sendRecommendationToPartner = async (req: AuthRequest, res: Respons
     await client.query('COMMIT');
     transactionStarted = false;
 
+    const senderResult = await query('SELECT name FROM users WHERE id = $1', [userId]);
+    const senderName = senderResult.rows[0]?.name || 'A user';
+
     if (partnerUserId) {
       await enqueueNotification(
         partnerUserId,
         'partner_update',
         'New textile request',
-        `A user sent a ${titleCase(recommended_pathway)} request for your review.`,
+        `${senderName} sent a ${titleCase(recommended_pathway)} request for your review.`,
         { submissionId: submission_id, transactionId }
       );
     }
@@ -699,6 +702,8 @@ export const createPartnerRuleChangeRequest = async (req: AuthRequest, res: Resp
     );
 
     const request = result.rows[0];
+    const requesterResult = await query('SELECT name FROM users WHERE id = $1', [userId]);
+    const requesterName = requesterResult.rows[0]?.name || 'A partner';
     const adminResult = await query(
       `SELECT id FROM users WHERE role = 'admin' AND COALESCE(status, 'active') = 'active'`
     );
@@ -706,33 +711,12 @@ export const createPartnerRuleChangeRequest = async (req: AuthRequest, res: Resp
     await Promise.all(
       adminResult.rows.map(async (admin) => {
         const adminActionUrl = `/admin?panel=rule-requests&request=${request.id}`;
-        const partnerActionUrl = '/partner#rule-requests';
-
-        await query(
-          `INSERT INTO messages (
-             id, from_user_id, to_user_id, content, action_url, metadata
-           )
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [
-            uuidv4(),
-            userId,
-            admin.id,
-            `Partner rule change request: ${req.body.rule_area}\n${req.body.requested_change}`,
-            adminActionUrl,
-            JSON.stringify({
-              kind: 'partner_rule_change_request',
-              rule_change_request_id: request.id,
-              admin_action_url: adminActionUrl,
-              partner_action_url: partnerActionUrl,
-            }),
-          ]
-        );
 
         await enqueueNotification(
           admin.id,
           'system',
           'Partner rule change request',
-          `A partner requested an update for ${req.body.rule_area}.`,
+          `${requesterName} requested an update for ${req.body.rule_area}.`,
           { action_url: adminActionUrl, ruleChangeRequestId: request.id }
         );
       })
@@ -746,21 +730,43 @@ export const createPartnerRuleChangeRequest = async (req: AuthRequest, res: Resp
 
 export const getPartnerRuleChangeRequests = async (req: AuthRequest, res: Response) => {
   try {
-    if (req.user?.role !== 'admin') {
-      throw new AppError(403, 'Only admins can view partner rule change requests');
+    if (!req.user?.id) {
+      throw new AppError(401, 'User not authenticated');
     }
 
-    const result = await query(
-      `SELECT
-         prcr.*,
-         p.name AS partner_name,
-         u.name AS requested_by_name,
-         u.email AS requested_by_email
-       FROM partner_rule_change_requests prcr
-       LEFT JOIN partners p ON p.id = prcr.partner_id
-       LEFT JOIN users u ON u.id = prcr.requested_by_user_id
-       ORDER BY prcr.created_at DESC`
-    );
+    let result;
+
+    if (req.user.role === 'admin') {
+      result = await query(
+        `SELECT
+           prcr.*,
+           p.name AS partner_name,
+           u.name AS requested_by_name,
+           u.email AS requested_by_email
+         FROM partner_rule_change_requests prcr
+         LEFT JOIN partners p ON p.id = prcr.partner_id
+         LEFT JOIN users u ON u.id = prcr.requested_by_user_id
+         ORDER BY prcr.created_at DESC`
+      );
+    } else if (req.user.role === 'partner') {
+      result = await query(
+        `SELECT
+           prcr.*,
+           p.name AS partner_name,
+           u.name AS requested_by_name,
+           u.email AS requested_by_email
+         FROM partner_rule_change_requests prcr
+         LEFT JOIN partners p ON p.id = prcr.partner_id
+         LEFT JOIN users u ON u.id = prcr.requested_by_user_id
+         WHERE prcr.requested_by_user_id = $1
+            OR p.user_id = $1
+            OR lower(p.email) = lower($2)
+         ORDER BY prcr.created_at DESC`,
+        [req.user.id, req.user.email || '']
+      );
+    } else {
+      throw new AppError(403, 'Only partners and admins can view partner rule change requests');
+    }
 
     res.json({ data: result.rows, count: result.rows.length });
   } catch (error) {
@@ -804,39 +810,20 @@ export const updatePartnerRuleChangeRequestStatus = async (req: AuthRequest, res
 
     const request = result.rows[0];
     const partnerUserResult = await client.query(
-      `SELECT u.id
+      `SELECT u.id, u.name
        FROM users u
        WHERE u.partner_id = $1 OR u.id = $2`,
       [request.partner_id, request.requested_by_user_id]
     );
     const partnerActionUrl = '/partner#rule-requests';
-    const adminActionUrl = `/admin?panel=rule-requests&request=${request.id}`;
     const statusLabel = status === 'needs_more_information' ? 'needs more information' : status;
 
     for (const partnerUser of partnerUserResult.rows) {
-      await client.query(
-        `INSERT INTO messages (id, from_user_id, to_user_id, content, action_url, metadata)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          uuidv4(),
-          req.user.id,
-          partnerUser.id,
-          `Admin marked your rule request as ${statusLabel}.${adminNote ? `\n${adminNote}` : ''}`,
-          partnerActionUrl,
-          JSON.stringify({
-            kind: 'partner_rule_change_request_status',
-            rule_change_request_id: request.id,
-            admin_action_url: adminActionUrl,
-            partner_action_url: partnerActionUrl,
-          }),
-        ]
-      );
-
       await enqueueNotification(
         partnerUser.id,
         'system',
         'Rule request updated',
-        `Your partner rule request is now ${statusLabel}.`,
+        `${req.user.email || 'Admin'} marked your partner rule request as ${statusLabel}.`,
         { action_url: partnerActionUrl, ruleChangeRequestId: request.id }
       );
     }
@@ -873,6 +860,8 @@ export const remindDssRequest = async (req: AuthRequest, res: Response) => {
     }
 
     const request = requestResult.rows[0];
+    const senderResult = await query('SELECT name FROM users WHERE id = $1', [userId]);
+    const senderName = senderResult.rows[0]?.name || 'The user';
 
     if (request.status !== 'pending') {
       throw new AppError(400, 'Only pending requests can receive reminders');
@@ -891,7 +880,7 @@ export const remindDssRequest = async (req: AuthRequest, res: Response) => {
         request.partner_user_id,
         'partner_update',
         'Reminder: textile request pending',
-        req.body.message || `A user is waiting for your response to a ${titleCase(request.type)} request.`,
+        req.body.message || `${senderName} is waiting for your response to a ${titleCase(request.type)} request.`,
         { submissionId: request.submission_id, transactionId: request.id }
       );
     }

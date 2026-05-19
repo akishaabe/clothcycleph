@@ -211,6 +211,8 @@ export function AdminDashboard() {
     description: "",
   });
   const [ruleRequestSort, setRuleRequestSort] = useState("newest");
+  const [ruleRequestFilter, setRuleRequestFilter] = useState("all");
+  const [ruleRequestSearch, setRuleRequestSearch] = useState("");
   const [showAllRuleRequests, setShowAllRuleRequests] = useState(false);
   const [ruleRequestNotes, setRuleRequestNotes] = useState({});
   const [showAllDssAudit, setShowAllDssAudit] = useState(false);
@@ -420,7 +422,30 @@ export function AdminDashboard() {
   }, [dssAuditRuns]);
 
   const sortedRuleChangeRequests = useMemo(() => {
-    return [...ruleChangeRequests].sort((a, b) => {
+    const query = ruleRequestSearch.trim().toLowerCase();
+    const filtered = ruleChangeRequests.filter((request) => {
+      const status = String(request.status || "pending");
+      const statusMatch = ruleRequestFilter === "all" || status === ruleRequestFilter;
+      const queryMatch =
+        !query ||
+        [
+          request.rule_area,
+          request.partner_name,
+          request.requested_by_name,
+          request.requested_by_email,
+          request.requested_change,
+          request.reason,
+          request.admin_notes,
+          status,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+
+      return statusMatch && queryMatch;
+    });
+
+    return filtered.sort((a, b) => {
       if (ruleRequestSort === "partner") {
         return String(a.partner_name || "").localeCompare(String(b.partner_name || ""));
       }
@@ -431,7 +456,7 @@ export function AdminDashboard() {
 
       return getTimestamp(b.created_at) - getTimestamp(a.created_at);
     });
-  }, [ruleChangeRequests, ruleRequestSort]);
+  }, [ruleChangeRequests, ruleRequestFilter, ruleRequestSearch, ruleRequestSort]);
 
   const systemActivity = useMemo(() => {
     const accountEvents = accounts.slice(0, 4).map((account) => ({
@@ -1239,10 +1264,30 @@ export function AdminDashboard() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <label className="relative block">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+                <input
+                  value={ruleRequestSearch}
+                  onChange={(event) => setRuleRequestSearch(event.target.value)}
+                  className="w-64 rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 outline-none focus:border-gray-500 dark:border-white/10 dark:bg-black/20 dark:text-white"
+                  placeholder="Search requests"
+                />
+              </label>
+              <select
+                value={ruleRequestFilter}
+                onChange={(event) => setRuleRequestFilter(event.target.value)}
+                className="w-fit rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 dark:border-white/10 dark:bg-black/20 dark:text-white"
+              >
+                <option value="all">All statuses</option>
+                <option value="pending">Pending</option>
+                <option value="accepted">Accepted</option>
+                <option value="declined">Declined</option>
+                <option value="needs_more_information">Needs more information</option>
+              </select>
               <select
                 value={ruleRequestSort}
                 onChange={(event) => setRuleRequestSort(event.target.value)}
-                className="w-fit rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+                className="w-fit rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 dark:border-white/10 dark:bg-black/20 dark:text-white"
               >
                 <option value="newest">Newest</option>
                 <option value="partner">Partner</option>
@@ -1393,9 +1438,10 @@ export function AdminDashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
-          className="bg-white p-6 rounded-2xl shadow-lg mb-8"
+          className="mb-8 overflow-hidden rounded-2xl bg-white shadow-lg"
         >
-          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <details open>
+            <summary className="flex cursor-pointer list-none flex-col gap-4 border-b border-gray-200 p-6 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="flex items-center gap-3">
                 <div
@@ -1432,9 +1478,9 @@ export function AdminDashboard() {
                 </button>
               )}
             </div>
-          </div>
+          </summary>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto p-6 pt-5">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200">
@@ -1505,6 +1551,7 @@ export function AdminDashboard() {
               </div>
             )}
           </div>
+          </details>
         </motion.div>
 
         {/* System Logs */}

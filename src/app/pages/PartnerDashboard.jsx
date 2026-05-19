@@ -82,6 +82,10 @@ export function PartnerDashboard() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [badgeCounts, setBadgeCounts] = useState({ messages: 0, notifications: 0 });
+  const [ruleRequests, setRuleRequests] = useState([]);
+  const [isLoadingRuleRequests, setIsLoadingRuleRequests] = useState(false);
+  const [ruleRequestFilter, setRuleRequestFilter] = useState("all");
+  const [ruleRequestSearch, setRuleRequestSearch] = useState("");
   const [ruleRequest, setRuleRequest] = useState({
     rule_area: "Partner preferences",
     requested_change: "",
@@ -105,6 +109,7 @@ export function PartnerDashboard() {
 
   useEffect(() => {
     loadRequests();
+    loadRuleRequests();
   }, []);
 
   useEffect(() => {
@@ -200,6 +205,29 @@ export function PartnerDashboard() {
     });
   }, [requests, activeFilter, searchQuery]);
 
+  const filteredRuleRequests = useMemo(() => {
+    const query = ruleRequestSearch.trim().toLowerCase();
+
+    return ruleRequests.filter((item) => {
+      const status = String(item.status || "pending");
+      const statusMatch = ruleRequestFilter === "all" || status === ruleRequestFilter;
+      const queryMatch =
+        !query ||
+        [
+          item.rule_area,
+          item.requested_change,
+          item.reason,
+          item.admin_notes,
+          status,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+
+      return statusMatch && queryMatch;
+    });
+  }, [ruleRequests, ruleRequestFilter, ruleRequestSearch]);
+
   const platformTrendData = useMemo(() => {
     const grouped = requests.reduce((acc, request) => {
       const date = parseUtcTimestamp(request.created_at) || new Date();
@@ -259,8 +287,22 @@ export function PartnerDashboard() {
       const response = await dssService.requestRuleChange(ruleRequest);
       setRuleRequestMessage(response.message || "Preference request submitted for admin review.");
       setRuleRequest((current) => ({ ...current, requested_change: "", reason: "" }));
+      await loadRuleRequests();
     } catch (error) {
       setRuleRequestMessage(error.message || "Unable to submit preference request.");
+    }
+  };
+
+  const loadRuleRequests = async () => {
+    setIsLoadingRuleRequests(true);
+
+    try {
+      const response = await dssService.getRuleChangeRequests();
+      setRuleRequests(response.data || []);
+    } catch {
+      setRuleRequests([]);
+    } finally {
+      setIsLoadingRuleRequests(false);
     }
   };
 
@@ -413,25 +455,30 @@ export function PartnerDashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="bg-white p-6 rounded-2xl shadow-lg"
+          className="overflow-hidden rounded-2xl bg-white shadow-lg dark:bg-[#111827]"
         >
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="text-xl text-[#10233f]">DSS Partner Requests</h3>
-              <p className="mt-1 text-sm text-[#41668f]">
-                View all user briefs, filter by status, then respond with a clear partner decision.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
+          <details open>
+            <summary className="flex cursor-pointer list-none flex-col gap-3 border-b border-[#d6e6f8] p-6 sm:flex-row sm:items-center sm:justify-between dark:border-white/10">
+              <div>
+                <h3 className="text-xl text-[#10233f] dark:text-white">DSS Partner Requests</h3>
+                <p className="mt-1 text-sm text-[#41668f] dark:text-[#9fc5f8]">
+                  View all user briefs, filter by status, then respond with a clear partner decision.
+                </p>
+              </div>
+              <span className="rounded-full bg-[#eff6ff] px-3 py-1 text-sm font-semibold text-[#41668f] dark:bg-white/10 dark:text-[#9fc5f8]">
+                {filteredRequests.length} shown
+              </span>
+            </summary>
+            <div className="p-6 pt-5">
+            <div className="mb-5 flex justify-end">
               <button
                 onClick={loadRequests}
-                className="flex items-center gap-2 rounded-lg bg-[#eff6ff] px-4 py-2 text-sm text-[#41668f] transition-colors hover:bg-[#dbeafe]"
+                className="flex items-center gap-2 rounded-lg bg-[#eff6ff] px-4 py-2 text-sm text-[#41668f] transition-colors hover:bg-[#dbeafe] dark:bg-white/10 dark:text-[#9fc5f8] dark:hover:bg-white/15"
               >
                 <RefreshCw className="h-4 w-4" />
                 Refresh
               </button>
             </div>
-          </div>
 
           <div className="mb-5 grid gap-3 lg:grid-cols-[1fr_auto]">
             <label className="relative block">
@@ -439,7 +486,7 @@ export function PartnerDashboard() {
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                className="w-full rounded-xl border border-[#d6e6f8] bg-[#fbfdff] py-3 pl-10 pr-4 text-sm text-[#10233f] outline-none focus:border-[#4f6f9f]"
+                className="w-full rounded-xl border border-[#d6e6f8] bg-[#fbfdff] py-3 pl-10 pr-4 text-sm text-[#10233f] outline-none focus:border-[#4f6f9f] dark:border-white/10 dark:bg-black/20 dark:text-white"
                 placeholder="Search requester, item, pathway, or status"
               />
             </label>
@@ -452,7 +499,7 @@ export function PartnerDashboard() {
                     className={`rounded-xl px-4 py-2 text-sm capitalize transition-colors ${
                       activeFilter === status
                         ? "bg-[#4f6f9f] text-white"
-                        : "bg-[#eff6ff] text-[#41668f] hover:bg-[#dbeafe]"
+                        : "bg-[#eff6ff] text-[#41668f] hover:bg-[#dbeafe] dark:bg-white/10 dark:text-[#9fc5f8] dark:hover:bg-white/15"
                     }`}
                   >
                     {formatStatusLabel(status)}
@@ -471,20 +518,20 @@ export function PartnerDashboard() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-[#d6e6f8]">
-                  <th className="text-left py-3 px-4 text-sm text-[#41668f]">ID</th>
-                  <th className="text-left py-3 px-4 text-sm text-[#41668f]">User</th>
-                  <th className="text-left py-3 px-4 text-sm text-[#41668f]">Pathway</th>
-                  <th className="text-left py-3 px-4 text-sm text-[#41668f]">Items</th>
-                  <th className="text-left py-3 px-4 text-sm text-[#41668f]">Status</th>
-                  <th className="text-left py-3 px-4 text-sm text-[#41668f]">Date</th>
-                  <th className="text-left py-3 px-4 text-sm text-[#41668f]">Actions</th>
+                <tr className="border-b border-[#d6e6f8] dark:border-white/10">
+                  <th className="text-left py-3 px-4 text-sm text-[#41668f] dark:text-[#9fc5f8]">ID</th>
+                  <th className="text-left py-3 px-4 text-sm text-[#41668f] dark:text-[#9fc5f8]">User</th>
+                  <th className="text-left py-3 px-4 text-sm text-[#41668f] dark:text-[#9fc5f8]">Pathway</th>
+                  <th className="text-left py-3 px-4 text-sm text-[#41668f] dark:text-[#9fc5f8]">Items</th>
+                  <th className="text-left py-3 px-4 text-sm text-[#41668f] dark:text-[#9fc5f8]">Status</th>
+                  <th className="text-left py-3 px-4 text-sm text-[#41668f] dark:text-[#9fc5f8]">Date</th>
+                  <th className="text-left py-3 px-4 text-sm text-[#41668f] dark:text-[#9fc5f8]">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoadingRequests && (
                   <tr>
-                    <td colSpan={7} className="py-10 text-center text-[#41668f]">
+                    <td colSpan={7} className="py-10 text-center text-[#41668f] dark:text-[#9fc5f8]">
                       <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
                       Loading requests
                     </td>
@@ -493,18 +540,18 @@ export function PartnerDashboard() {
 
                 {!isLoadingRequests && filteredRequests.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-10 text-center text-[#41668f]">
+                    <td colSpan={7} className="py-10 text-center text-[#41668f] dark:text-[#9fc5f8]">
                       No DSS requests match this view.
                     </td>
                   </tr>
                 )}
 
                 {!isLoadingRequests && filteredRequests.map((request) => (
-                  <tr key={request.id} className="border-b border-[#d6e6f8] hover:bg-[#eff6ff] transition-colors">
-                    <td className="py-3 px-4 text-sm text-[#10233f]">{request.id.slice(0, 8)}</td>
-                    <td className="py-3 px-4 text-sm text-[#10233f]">{request.user_name}</td>
-                    <td className="py-3 px-4 text-sm text-[#41668f]">{pathwayLabels[request.type] || request.type}</td>
-                    <td className="py-3 px-4 text-sm text-[#41668f]">
+                  <tr key={request.id} className="border-b border-[#d6e6f8] transition-colors hover:bg-[#eff6ff] dark:border-white/10 dark:hover:bg-white/[0.04]">
+                    <td className="py-3 px-4 text-sm text-[#10233f] dark:text-white">{request.id.slice(0, 8)}</td>
+                    <td className="py-3 px-4 text-sm text-[#10233f] dark:text-white">{request.user_name}</td>
+                    <td className="py-3 px-4 text-sm text-[#41668f] dark:text-[#cfe1ff]">{pathwayLabels[request.type] || request.type}</td>
+                    <td className="py-3 px-4 text-sm text-[#41668f] dark:text-[#cfe1ff]">
                       {request.quantity || 1} · {request.submission_name || request.item_type}
                     </td>
                     <td className="py-3 px-4">
@@ -516,7 +563,7 @@ export function PartnerDashboard() {
                         {request.status_label || formatStatusLabel(normalizeStatus(request.status))}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-sm text-[#41668f]">{formatDate(request.created_at)}</td>
+                    <td className="py-3 px-4 text-sm text-[#41668f] dark:text-[#cfe1ff]">{formatDate(request.created_at)}</td>
                     <td className="py-3 px-4">
                       <div className="flex gap-2">
                         <button
@@ -550,6 +597,8 @@ export function PartnerDashboard() {
               </tbody>
             </table>
           </div>
+            </div>
+          </details>
         </motion.div>
 
         <motion.form
@@ -609,6 +658,121 @@ export function PartnerDashboard() {
             Send to admins
           </button>
         </motion.form>
+
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.55 }}
+          className="mt-6 rounded-2xl bg-white p-6 shadow-lg dark:bg-[#111827]"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-xl text-[#10233f] dark:text-white">Partner rule request updates</h3>
+              <p className="mt-1 text-sm text-[#41668f] dark:text-[#9fc5f8]">
+                Admin replies for preference changes are tracked here and in notifications.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={loadRuleRequests}
+              className="inline-flex w-fit items-center gap-2 rounded-xl bg-[#eff6ff] px-4 py-2 text-sm font-semibold text-[#41668f] hover:bg-[#dbeafe] dark:bg-white/10 dark:text-[#9fc5f8] dark:hover:bg-white/15"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
+          </div>
+
+          <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_auto]">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#41668f] dark:text-[#9fc5f8]" />
+              <input
+                value={ruleRequestSearch}
+                onChange={(event) => setRuleRequestSearch(event.target.value)}
+                className="w-full rounded-xl border border-[#d6e6f8] bg-[#fbfdff] py-3 pl-10 pr-4 text-sm text-[#10233f] outline-none focus:border-[#4f6f9f] dark:border-white/10 dark:bg-black/20 dark:text-white"
+                placeholder="Search area, change, reason, note, or status"
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {["all", "pending", "accepted", "declined", "needs_more_information"].map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => setRuleRequestFilter(status)}
+                  className={`rounded-xl px-4 py-2 text-sm capitalize transition-colors ${
+                    ruleRequestFilter === status
+                      ? "bg-[#4f6f9f] text-white"
+                      : "bg-[#eff6ff] text-[#41668f] hover:bg-[#dbeafe] dark:bg-white/10 dark:text-[#9fc5f8] dark:hover:bg-white/15"
+                  }`}
+                >
+                  {formatStatusLabel(status)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            {isLoadingRuleRequests && (
+              <div className="rounded-2xl border border-[#d6e6f8] bg-[#fbfdff] p-5 text-sm text-[#41668f] dark:border-white/10 dark:bg-black/20 dark:text-[#9fc5f8]">
+                Loading rule requests...
+              </div>
+            )}
+
+            {!isLoadingRuleRequests && filteredRuleRequests.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-[#d6e6f8] bg-[#fbfdff] p-5 text-sm text-[#41668f] lg:col-span-3 dark:border-white/10 dark:bg-black/20 dark:text-[#9fc5f8]">
+                No partner rule or preference requests match this view.
+              </div>
+            )}
+
+            {!isLoadingRuleRequests &&
+              filteredRuleRequests.slice(0, 6).map((item) => {
+                const status = String(item.status || "pending");
+                const statusClass =
+                  status === "accepted" || status === "approved"
+                    ? "bg-[#4f6f9f]/20 text-[#10233f]"
+                    : status === "declined"
+                      ? "bg-red-100 text-red-700"
+                      : status === "needs_more_information"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-[#8aa6c8]/20 text-[#3f5f8f]";
+
+                return (
+                  <article
+                    key={item.id}
+                    className="rounded-2xl border border-[#d6e6f8] bg-[#fbfdff] p-5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#41668f] dark:text-[#9fc5f8]">
+                          {item.rule_area}
+                        </p>
+                        <h4 className="mt-1 line-clamp-2 font-semibold text-[#10233f] dark:text-white">
+                          {item.requested_change}
+                        </h4>
+                      </div>
+                      <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}>
+                        {formatStatusLabel(status)}
+                      </span>
+                    </div>
+                    {item.reason && (
+                      <p className="mt-3 line-clamp-3 text-sm leading-6 text-[#41668f] dark:text-[#cfe1ff]">
+                        {item.reason}
+                      </p>
+                    )}
+                    {item.admin_notes && (
+                      <div className="mt-4 rounded-xl bg-[#eff6ff] p-3 text-sm leading-6 text-[#41668f] dark:bg-black/20 dark:text-[#cfe1ff]">
+                        <span className="font-semibold text-[#10233f] dark:text-white">Admin note: </span>
+                        {item.admin_notes}
+                      </div>
+                    )}
+                    <p className="mt-4 text-xs text-[#6b93b8] dark:text-[#9fc5f8]">
+                      Submitted {formatDate(item.created_at)}
+                      {item.reviewed_at ? ` - Updated ${formatDate(item.reviewed_at)}` : ""}
+                    </p>
+                  </article>
+                );
+              })}
+          </div>
+        </motion.section>
       </div>
 
       {selectedRequest && (

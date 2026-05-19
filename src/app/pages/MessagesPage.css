@@ -251,13 +251,19 @@
   }
 
   .messages-page nav > div {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
   }
 
   .messages-secondary-button {
+    min-height: 2.5rem;
+    padding-inline: 0.75rem;
+  }
+
+  .messages-dashboard-button {
     justify-content: center;
-    width: 100%;
+    width: auto;
   }
 
   .messages-shell {
@@ -291,21 +297,24 @@
   }
 
   .messages-chat header {
-    padding: 1rem;
+    padding: 0.875rem;
   }
 
   .messages-chat header .messages-pill {
-    font-size: 0.8125rem;
-    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    padding: 0.45rem 0.65rem;
+    white-space: normal;
   }
 
   .messages-chat header h2 {
-    font-size: 1.375rem;
+    font-size: 1.125rem;
     line-height: 1.2;
   }
 
   .messages-chat header p {
-    font-size: 0.9375rem;
+    font-size: 0.75rem;
+    line-height: 1.35;
   }
 
   .messages-chat > .min-h-0.flex-1 {

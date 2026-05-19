@@ -525,26 +525,26 @@ export function MessagesPage() {
 
   return (
     <div className={`messages-page messages-theme-${messagesTheme} app-darkable-page min-h-screen`}>
-      <nav className="sticky top-0 z-20 border-b px-6 py-4 backdrop-blur-xl">
+      <nav className="sticky top-0 z-20 border-b px-4 py-3 backdrop-blur-xl sm:px-6 sm:py-4">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-2" aria-label="ClothCycle PH">
-            <Recycle className="h-6 w-6 messages-brand-icon" />
-            <span className="font-gloock text-xl messages-heading">
+            <Recycle className="h-5 w-5 messages-brand-icon sm:h-6 sm:w-6" />
+            <span className="font-gloock text-lg messages-heading sm:text-xl">
               ClothCycle PH
             </span>
           </div>
 
           <button
             onClick={() => navigate(details.backPath)}
-            className="messages-secondary-button inline-flex shrink-0 items-center gap-2 rounded-xl border px-4 py-2 transition-colors"
+            className="messages-secondary-button messages-dashboard-button inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors sm:px-4"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
+            Dashboard
           </button>
         </div>
       </nav>
 
-      <main className="mx-auto max-w-[1650px] p-4 sm:p-6 xl:p-8">
+      <main className="mx-auto max-w-[1650px] p-3 sm:p-6 xl:p-8">
         <section className="messages-shell grid min-h-[620px] overflow-hidden rounded-[28px] border shadow-[0_18px_54px_rgba(25,34,29,0.1)] lg:h-[calc(100vh-150px)] lg:grid-cols-[minmax(320px,430px)_minmax(0,1fr)]">
           <aside
             className={`messages-sidebar messages-panel-list flex min-h-0 flex-col border-r ${
@@ -554,14 +554,14 @@ export function MessagesPage() {
             <div className="border-b p-4 sm:p-6">
               <div className="mb-4 flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h1 className="messages-heading font-sans text-2xl font-bold">
+                  <h1 className="messages-heading font-sans text-xl font-bold sm:text-2xl">
                     {details.label}
                   </h1>
-                  <p className="messages-muted mt-1 break-words text-sm">
+                  <p className="messages-muted mt-1 break-words text-xs sm:text-sm">
                     Signed in as {currentUser?.name} ({roleLabel[currentUser?.role]})
                   </p>
                 </div>
-                <details.icon className="messages-brand-icon h-8 w-8 shrink-0" />
+                <details.icon className="messages-brand-icon h-6 w-6 shrink-0 sm:h-8 sm:w-8" />
               </div>
               <div className="messages-search flex items-center gap-3 rounded-2xl border px-4 py-3 sm:px-6 sm:py-5">
                 <Search className="h-5 w-5 shrink-0 sm:h-6 sm:w-6" />
@@ -663,7 +663,7 @@ export function MessagesPage() {
           >
             {activeParticipant ? (
               <>
-                <header className="flex flex-col gap-3 border-b p-4 sm:p-6 md:flex-row md:items-center md:justify-between">
+                <header className="flex flex-col gap-3 border-b p-3 sm:p-4 md:flex-row md:items-center md:justify-between">
                   <button
                     type="button"
                     onClick={closeMobileChat}
@@ -672,23 +672,23 @@ export function MessagesPage() {
                     <ArrowLeft className="h-4 w-4" />
                     Conversations
                   </button>
-                  <div className="flex min-w-0 items-center gap-4">
+                  <div className="flex min-w-0 items-center gap-3 sm:gap-4">
                     <MessageAvatar
                       name={activeParticipant.name}
                       url={activeParticipant.avatar_url}
-                      className="h-12 w-12 rounded-2xl text-lg sm:h-14 sm:w-14"
+                      className="h-10 w-10 rounded-xl text-base sm:h-12 sm:w-12 sm:rounded-2xl sm:text-lg"
                     />
                     <div className="min-w-0">
-                      <h2 className="break-words font-sans text-2xl font-bold messages-heading sm:text-3xl">
+                      <h2 className="break-words font-sans text-lg font-bold messages-heading sm:text-xl md:text-2xl">
                         {activeParticipant.name}
                       </h2>
-                      <p className="mt-1 break-all text-base messages-muted sm:text-lg">
+                      <p className="mt-0.5 break-all text-xs messages-muted sm:text-sm">
                         {roleLabel[activeParticipant.role]} - {activeParticipant.email}
                       </p>
                     </div>
                   </div>
-                  <span className="messages-pill inline-flex w-fit max-w-full items-center gap-2 rounded-full px-4 py-2 text-sm sm:px-5 sm:py-2.5 sm:text-lg">
-                    <Clock3 className="h-5 w-5 shrink-0" />
+                  <span className="messages-pill inline-flex w-fit max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm">
+                    <Clock3 className="h-4 w-4 shrink-0" />
                     Transaction and inquiry thread
                   </span>
                 </header>

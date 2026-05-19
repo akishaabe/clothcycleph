@@ -48,6 +48,11 @@ const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([
   '.xlsx',
 ]);
 
+type MessageUser = {
+  id: string;
+  role: string;
+};
+
 export const getMessageContacts = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -57,17 +62,25 @@ export const getMessageContacts = async (req: Request, res: Response) => {
       throw new AppError(401, 'User not authenticated');
     }
 
-    const allowedRoles =
-      role === 'user'
-        ? ['partner', 'admin']
-        : role === 'partner'
-          ? ['user', 'admin']
-          : ['user', 'partner', 'admin'];
-
     const result = await query(
       `SELECT id, name, email, role, COALESCE(avatar_url, profile_photo->>'url') AS avatar_url
        FROM users
-       WHERE id <> $1 AND role = ANY($2)
+       WHERE id <> $1
+         AND (
+           ($2 = 'user' AND role = 'partner')
+           OR (
+             $2 = 'partner'
+             AND role = 'user'
+             AND EXISTS (
+               SELECT 1
+               FROM messages m
+               WHERE m.from_user_id = users.id
+                 AND m.to_user_id = $1
+               LIMIT 1
+             )
+           )
+           OR ($2 = 'admin' AND role = 'admin')
+         )
        ORDER BY
          CASE role
            WHEN 'partner' THEN 1
@@ -75,7 +88,7 @@ export const getMessageContacts = async (req: Request, res: Response) => {
            ELSE 3
          END,
          name ASC`,
-      [userId, allowedRoles]
+      [userId, role]
     );
 
     res.json({
@@ -106,13 +119,17 @@ export const sendMessage = async (req: Request, res: Response) => {
       throw new AppError(400, 'You cannot send a message to yourself');
     }
 
-    const recipient = await query(
-      'SELECT id FROM users WHERE id = $1',
-      [to_user_id]
-    );
+    const [sender, recipient] = await Promise.all([
+      getMessageUser(fromUserId),
+      getMessageUser(to_user_id),
+    ]);
 
-    if (recipient.rows.length === 0) {
+    if (!recipient) {
       throw new AppError(404, 'Recipient not found');
+    }
+
+    if (!sender || !(await canDirectMessage(sender, recipient))) {
+      throw new AppError(403, getMessageLimitMessage(sender?.role, recipient.role));
     }
 
     const id = uuidv4();
@@ -245,6 +262,19 @@ export const getMessages = async (req: Request, res: Response) => {
       throw new AppError(400, 'You cannot open a conversation with yourself');
     }
 
+    const [currentUser, otherUser] = await Promise.all([
+      getMessageUser(currentUserId),
+      getMessageUser(userId),
+    ]);
+
+    if (!otherUser) {
+      throw new AppError(404, 'Conversation user not found');
+    }
+
+    if (!currentUser || !(await canDirectMessage(currentUser, otherUser))) {
+      throw new AppError(403, getMessageLimitMessage(currentUser?.role, otherUser.role));
+    }
+
     await query(
       `UPDATE messages
        SET read = true
@@ -343,8 +373,9 @@ function mimeToExtension(mimetype: string) {
 export const getConversations = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
+    const role = req.user?.role;
 
-    if (!userId) {
+    if (!userId || !role) {
       throw new AppError(401, 'User not authenticated');
     }
 
@@ -389,8 +420,23 @@ export const getConversations = async (req: Request, res: Response) => {
        ) unread ON unread.from_user_id = rm.other_user_id
        WHERE rm.row_number = 1
          AND rm.other_user_id <> $1
+         AND (
+           ($2 = 'user' AND u.role = 'partner')
+           OR (
+             $2 = 'partner'
+             AND u.role = 'user'
+             AND EXISTS (
+               SELECT 1
+               FROM messages starter
+               WHERE starter.from_user_id = u.id
+                 AND starter.to_user_id = $1
+               LIMIT 1
+             )
+           )
+           OR ($2 = 'admin' AND u.role = 'admin')
+         )
        ORDER BY rm.created_at DESC`,
-      [userId]
+      [userId, role]
     );
 
     res.json({
@@ -405,14 +451,24 @@ export const getConversations = async (req: Request, res: Response) => {
 export const getUnreadMessageCount = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
+    const role = req.user?.role;
 
-    if (!userId) {
+    if (!userId || !role) {
       throw new AppError(401, 'User not authenticated');
     }
 
     const result = await query(
-      'SELECT COUNT(*)::int AS unread_count FROM messages WHERE to_user_id = $1 AND read = false',
-      [userId]
+      `SELECT COUNT(*)::int AS unread_count
+       FROM messages m
+       JOIN users sender ON sender.id = m.from_user_id
+       WHERE m.to_user_id = $1
+         AND m.read = false
+         AND (
+           ($2 = 'user' AND sender.role = 'partner')
+           OR ($2 = 'partner' AND sender.role = 'user')
+           OR ($2 = 'admin' AND sender.role = 'admin')
+         )`,
+      [userId, role]
     );
 
     res.json({ unread_count: result.rows[0]?.unread_count || 0 });
@@ -420,6 +476,50 @@ export const getUnreadMessageCount = async (req: Request, res: Response) => {
     res.status(400).json({ error: (error as Error).message });
   }
 };
+
+async function getMessageUser(userId: string): Promise<MessageUser | null> {
+  const result = await query('SELECT id, role FROM users WHERE id = $1', [userId]);
+  return result.rows[0] || null;
+}
+
+async function canDirectMessage(sender: MessageUser, recipient: MessageUser) {
+  if (sender.id === recipient.id) {
+    return false;
+  }
+
+  if (sender.role === 'admin' || recipient.role === 'admin') {
+    return sender.role === 'admin' && recipient.role === 'admin';
+  }
+
+  if (sender.role === 'user') {
+    return recipient.role === 'partner';
+  }
+
+  if (sender.role === 'partner' && recipient.role === 'user') {
+    const result = await query(
+      `SELECT 1
+       FROM messages
+       WHERE from_user_id = $1 AND to_user_id = $2
+       LIMIT 1`,
+      [recipient.id, sender.id]
+    );
+    return result.rows.length > 0;
+  }
+
+  return false;
+}
+
+function getMessageLimitMessage(senderRole?: string, recipientRole?: string) {
+  if (recipientRole === 'admin' || senderRole === 'admin') {
+    return 'Admins can only use direct messages with other admins. Partner-admin updates are sent through notifications.';
+  }
+
+  if (senderRole === 'partner') {
+    return 'Partners can reply only after a user has started the conversation.';
+  }
+
+  return 'This direct message is not allowed for these account roles.';
+}
 
 export const markMessageAsRead = async (req: Request, res: Response) => {
   try {
