@@ -40,6 +40,7 @@ import {
   getUnreadMessageCount,
   markMessageAsRead,
   sendMessage,
+  uploadMessageAttachment,
 } from './controllers/messageController.js';
 import {
   deleteNotificationById,
@@ -125,6 +126,7 @@ type HandlerOptions = {
   bodySchema?: ZodSchema;
   paramsSchema?: ZodSchema;
   upload?: boolean;
+  uploadPolicy?: 'image' | 'messageAttachment';
 };
 
 const MAX_UPLOAD_SIZE = 5 * 1024 * 1024;
@@ -135,6 +137,29 @@ const ALLOWED_UPLOAD_MIMETYPES = new Set([
   'image/gif',
   'image/heic',
   'image/heif',
+]);
+const MAX_MESSAGE_ATTACHMENT_SIZE = 50 * 1024 * 1024;
+const ALLOWED_MESSAGE_ATTACHMENT_MIMETYPES = new Set([
+  ...ALLOWED_UPLOAD_MIMETYPES,
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
+const ALLOWED_MESSAGE_ATTACHMENT_EXTENSIONS = new Set([
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+  '.gif',
+  '.heic',
+  '.heif',
+  '.pdf',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
 ]);
 
 type CompatResponse = {
@@ -196,6 +221,24 @@ app.get('/uploads/:filename', async (c) => {
   }
 });
 
+app.get('/uploads/messages/:filename', async (c) => {
+  const filename = path.basename(c.req.param('filename'));
+  const filePath = path.resolve(process.cwd(), 'uploads', 'messages', filename);
+
+  try {
+    const file = await fs.readFile(filePath);
+    return new Response(file, {
+      headers: {
+        'Content-Type': contentTypeFromFilename(filename),
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+      },
+    });
+  } catch {
+    return c.json({ error: 'File not found' }, 404);
+  }
+});
+
 // Auth
 app.post('/api/auth/signup', controller(signup, { bodySchema: signupSchema }));
 app.post('/api/auth/login', controller(login, { bodySchema: loginSchema }));
@@ -230,6 +273,7 @@ app.put(
 
 // Messages
 app.get('/api/messages/contacts', controller(getMessageContacts, { auth: true }));
+app.post('/api/messages/attachments', controller(uploadMessageAttachment, { auth: true, upload: true, uploadPolicy: 'messageAttachment' }));
 app.post('/api/messages', controller(sendMessage, { auth: true, bodySchema: sendMessageSchema }));
 app.get('/api/messages/conversations', controller(getConversations, { auth: true }));
 app.get('/api/messages/unread-count', controller(getUnreadMessageCount, { auth: true }));
@@ -368,7 +412,7 @@ async function buildCompatRequest(c: Context<{ Variables: Variables }>, options:
   const query = Object.fromEntries(new URL(c.req.url).searchParams.entries());
   const body = options.upload ? {} : await readJsonBody(c);
   const parsedBody = options.bodySchema ? options.bodySchema.parse(body) : body;
-  const file = options.upload ? await readUploadFile(c) : undefined;
+  const file = options.upload ? await readUploadFile(c, options.uploadPolicy || 'image') : undefined;
 
   return {
     body: parsedBody,
@@ -467,7 +511,7 @@ async function readJsonBody(c: Context) {
   }
 }
 
-async function readUploadFile(c: Context) {
+async function readUploadFile(c: Context, policy: 'image' | 'messageAttachment' = 'image') {
   const formData = await c.req.formData();
   const file = formData.get('file');
 
@@ -475,19 +519,39 @@ async function readUploadFile(c: Context) {
     return undefined;
   }
 
-  if (!ALLOWED_UPLOAD_MIMETYPES.has(file.type)) {
-    throw new AppError(400, 'Only image files are allowed');
+  const extension = path.extname(file.name).toLowerCase();
+  const isMessageAttachment = policy === 'messageAttachment';
+  const allowedMimetypes = isMessageAttachment
+    ? ALLOWED_MESSAGE_ATTACHMENT_MIMETYPES
+    : ALLOWED_UPLOAD_MIMETYPES;
+  const maxSize = isMessageAttachment ? MAX_MESSAGE_ATTACHMENT_SIZE : MAX_UPLOAD_SIZE;
+  const typeAllowed =
+    allowedMimetypes.has(file.type) ||
+    (isMessageAttachment && ALLOWED_MESSAGE_ATTACHMENT_EXTENSIONS.has(extension));
+
+  if (!typeAllowed) {
+    throw new AppError(
+      400,
+      isMessageAttachment
+        ? 'Only images, PDF, Word, and Excel files are allowed'
+        : 'Only image files are allowed'
+    );
   }
 
-  if (file.size > MAX_UPLOAD_SIZE) {
-    throw new AppError(400, 'File size must be less than 5MB');
+  if (file.size > maxSize) {
+    throw new AppError(
+      400,
+      isMessageAttachment
+        ? 'Message attachments must be 50MB or smaller'
+        : 'File size must be less than 5MB'
+    );
   }
 
   return {
     fieldname: 'file',
     originalname: file.name,
     encoding: '7bit',
-    mimetype: file.type,
+    mimetype: file.type || contentTypeFromFilename(file.name),
     size: file.size,
     buffer: Buffer.from(await file.arrayBuffer()),
   };
@@ -512,6 +576,11 @@ function contentTypeFromFilename(filename: string) {
   if (extension === '.gif') return 'image/gif';
   if (extension === '.heic') return 'image/heic';
   if (extension === '.heif') return 'image/heif';
+  if (extension === '.pdf') return 'application/pdf';
+  if (extension === '.doc') return 'application/msword';
+  if (extension === '.docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (extension === '.xls') return 'application/vnd.ms-excel';
+  if (extension === '.xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   return 'image/jpeg';
 }
 

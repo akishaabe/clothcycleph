@@ -15,7 +15,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string, remember?: boolean) => Promise<LoginResponse>;
-  continueWithGoogle: (credential: string, role?: 'user') => Promise<GoogleAuthResponse>;
+  continueWithGoogle: (credential: string, role?: 'user', mode?: 'login' | 'signup', termsAccepted?: boolean) => Promise<GoogleAuthResponse>;
   verifyTwoFactor: (twoFactorToken: string, code: string, remember?: boolean) => Promise<User>;
   resendTwoFactorCode: (twoFactorToken: string) => Promise<{ message: string; requiresTwoFactor: true; two_factor_token: string; two_factor_method?: 'email' | 'totp'; dev_code?: string }>;
   forgotPassword: (email: string) => Promise<{ message: string; reset_token?: string }>;
@@ -112,8 +112,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const continueWithGoogle = async (credential: string, role: 'user' = 'user') => {
-    const response = await authService.continueWithGoogle({ credential, role });
+  const continueWithGoogle = async (
+    credential: string,
+    role: 'user' = 'user',
+    mode: 'login' | 'signup' = 'login',
+    termsAccepted = false
+  ) => {
+    const response = await authService.continueWithGoogle({
+      credential,
+      role,
+      mode,
+      terms_accepted: termsAccepted,
+    });
     if ('requiresTwoFactor' in response) {
       setToken(null);
       setUser(null);
@@ -143,12 +153,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return response.data;
   };
 
-  const changePassword = (currentPassword: string, newPassword: string, confirmPassword: string) => {
-    return authService.changePassword({
+  const changePassword = async (currentPassword: string, newPassword: string, confirmPassword: string) => {
+    const response = await authService.changePassword({
       current_password: currentPassword,
       new_password: newPassword,
       confirm_password: confirmPassword,
     });
+    if (response.data) {
+      updateUser(response.data);
+    }
+    return { message: response.message };
   };
 
   const getTwoFactorStatus = () => {

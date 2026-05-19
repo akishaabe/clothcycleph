@@ -1,15 +1,21 @@
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { Recycle, Mail, Lock, User, Leaf, ShieldCheck, Eye, EyeOff } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { getDashboardPathForRole } from "../../utils/roleRoutes";
+import {
+  getGoogleClientId,
+  loadGoogleIdentityScript,
+} from "../../services/googleIdentity";
 import "./SignUpPage.css";
 import { isStrongPassword, PasswordChecklist, PasswordMatchHint } from "../../utils/passwordPolicy";
 
 export function SignUpPage() {
   const navigate = useNavigate();
-  const { signup, verifyTwoFactor } = useAuth();
+  const { signup, verifyTwoFactor, continueWithGoogle } = useAuth();
+  const googleButtonRef = useRef(null);
+  const googleClientId = getGoogleClientId();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -23,10 +29,86 @@ export function SignUpPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const [isConfirmPasswordFocused, setIsConfirmPasswordFocused] = useState(false);
+
+  useEffect(() => {
+    if (!googleClientId || !googleButtonRef.current || twoFactorToken) {
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    loadGoogleIdentityScript()
+      .then(() => {
+        if (!isMounted || !window.google || !googleButtonRef.current) {
+          return;
+        }
+
+        googleButtonRef.current.innerHTML = "";
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: async (response) => {
+            try {
+              setError("");
+              setSuccessMessage("");
+
+              if (!formData.terms) {
+                throw new Error("Agree to the Terms and Privacy Policy before signing up with Google.");
+              }
+
+              if (!response?.credential) {
+                throw new Error("Google did not return a sign-up credential. Please try again.");
+              }
+
+              setIsGoogleSubmitting(true);
+              const authResponse = await continueWithGoogle(
+                response.credential,
+                "user",
+                "signup",
+                true
+              );
+
+              if ("requiresTwoFactor" in authResponse) {
+                setTwoFactorToken(authResponse.two_factor_token);
+                setTwoFactorMethod(authResponse.two_factor_method || "email");
+                setSuccessMessage("Check your email for the verification code.");
+                return;
+              }
+
+              navigate(
+                authResponse.user.password_setup_required
+                  ? "/settings?setupPassword=1"
+                  : getDashboardPathForRole(authResponse.user.role),
+                { state: { entry: "google-signup" } }
+              );
+            } catch (googleError) {
+              setError(googleError.message || "Google signup failed");
+            } finally {
+              setIsGoogleSubmitting(false);
+            }
+          },
+        });
+        window.google.accounts.id.renderButton(googleButtonRef.current, {
+          theme: "outline",
+          size: "large",
+          width: 360,
+          text: "signup_with",
+        });
+      })
+      .catch((googleError) => {
+        if (isMounted) {
+          setError(googleError.message);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [continueWithGoogle, formData.terms, googleClientId, navigate, twoFactorToken]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -296,6 +378,27 @@ export function SignUpPage() {
                   : "Create Account"}
             </button>
           </form>
+
+          {!twoFactorToken && googleClientId ? (
+            <div className="mt-5 space-y-4">
+              <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-[#8a9a91]">
+                <div className="h-px flex-1 bg-[#e7ebe6]" />
+                or
+                <div className="h-px flex-1 bg-[#e7ebe6]" />
+              </div>
+              <div className="flex justify-center">
+                <div ref={googleButtonRef} />
+              </div>
+              {isGoogleSubmitting ? (
+                <div className="rounded-xl border border-[#dce4da] bg-[#f8faf6] px-4 py-3 text-sm text-[#5f6f67]">
+                  Creating your Google account...
+                </div>
+              ) : null}
+              <p className="text-center text-xs text-[#5f6f67]">
+                Google signup opens Settings first so you can set your ClothCycle password.
+              </p>
+            </div>
+          ) : null}
 
           <div className="mt-6 text-center text-sm text-[#5f6f67]">
             Already have an account?{" "}

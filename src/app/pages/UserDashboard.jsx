@@ -21,6 +21,7 @@ import {
 import { dssService, messageService, notificationService, submissionService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { formatManilaDate, parseUtcTimestamp } from "../../utils/dateTime";
+import { ImageCarousel } from "../components/ImageCarousel";
 import {
   BarChart,
   Bar,
@@ -886,23 +887,14 @@ export function UserDashboard() {
                 <div className="mt-4">
                   <h4 className="mb-2 text-sm font-semibold text-[#19221d]">Uploaded Images</h4>
                   {selectedRequest.submission.photos?.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      {selectedRequest.submission.photos.slice(0, 6).map((photo, index) => {
-                        const url = toPhotoUrl(photo);
-                        return (
-                          <div
-                            key={`${url}-${index}`}
-                            className="overflow-hidden rounded-xl border border-[#e1e7df] bg-white"
-                          >
-                            <img
-                              src={url}
-                              alt={`Submitted textile ${index + 1}`}
-                              className="h-28 w-full object-cover"
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <ImageCarousel
+                      title="Uploaded Images"
+                      allowDownload
+                      images={selectedRequest.submission.photos.map((photo, index) => ({
+                        url: toPhotoUrl(photo),
+                        label: typeof photo === "object" && photo?.label ? photo.label : `Submitted textile ${index + 1}`,
+                      }))}
+                    />
                   ) : (
                     <div className="flex items-center gap-2 rounded-xl border border-[#e1e7df] bg-white px-4 py-3 text-sm text-[#5f6f67]">
                       <ImageIcon className="h-4 w-4" />

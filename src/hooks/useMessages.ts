@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { messageService } from '../services/api';
-import { Message, Conversation, MessageContact } from '../types/api';
+import { Message, Conversation, MessageAttachment, MessageContact } from '../types/api';
 
 export function useMessages() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -51,12 +51,17 @@ export function useMessages() {
     }
   };
 
-  const sendMessage = async (toUserId: string, content: string) => {
+  const sendMessage = async (
+    toUserId: string,
+    content: string,
+    attachments: MessageAttachment[] = []
+  ) => {
     setError(null);
     try {
       const response = await messageService.sendMessage({
         to_user_id: toUserId,
         content,
+        attachments,
       });
       setMessages((current) => {
         if (current.some((item) => item.id === response.data.id)) {
@@ -66,6 +71,17 @@ export function useMessages() {
         return [...current, response.data];
       });
       return response.data;
+    } catch (err) {
+      setError((err as Error).message);
+      throw err;
+    }
+  };
+
+  const uploadAttachment = async (file: File) => {
+    setError(null);
+    try {
+      const response = await messageService.uploadAttachment(file);
+      return response.attachment;
     } catch (err) {
       setError((err as Error).message);
       throw err;
@@ -95,6 +111,7 @@ export function useMessages() {
     fetchConversations,
     fetchMessages,
     sendMessage,
+    uploadAttachment,
     markAsRead,
   };
 }

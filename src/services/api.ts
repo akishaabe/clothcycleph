@@ -258,7 +258,7 @@ export const authService = {
     current_password: string;
     new_password: string;
     confirm_password: string;
-  }): Promise<{ message: string }> {
+  }): Promise<{ message: string; data?: User }> {
     return fetchWithAuth('/auth/password', {
       method: 'PUT',
       body: JSON.stringify(payload),
@@ -461,6 +461,31 @@ export const messageService = {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+
+  async uploadAttachment(file: File): Promise<{ message: string; attachment: any }> {
+    const token = getAuthToken();
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_URL}/messages/attachments`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorMessage = 'Attachment upload failed';
+      try {
+        const error = await response.json();
+        errorMessage = error.error || error.message || errorMessage;
+      } catch {
+        errorMessage = `${errorMessage} (${response.status})`;
+      }
+      throw new Error(errorMessage);
+    }
+
+    return response.json();
   },
 
   async getConversations(): Promise<{ data: Conversation[]; count: number }> {

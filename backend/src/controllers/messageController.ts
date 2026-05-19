@@ -1,7 +1,52 @@
-import type { HttpRequest as Request, HttpResponse as Response } from '../types/http.js';
+import type { HttpRequest as Request, HttpResponse as Response, UploadedFile } from '../types/http.js';
 import { query } from '../config/database.js';
+import { config } from '../config/env.js';
 import { AppError } from '../utils/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { uploadToR2 } from '../services/r2Service.js';
+
+type MessageAttachmentInput = {
+  filename: string;
+  url: string;
+  key?: string;
+  mimetype?: string;
+  size?: number;
+};
+
+export interface FileRequest extends Request {
+  file?: UploadedFile;
+}
+
+const MAX_MESSAGE_ATTACHMENT_SIZE = 50 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_MIMES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
+const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+  '.gif',
+  '.heic',
+  '.heif',
+  '.pdf',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+]);
 
 export const getMessageContacts = async (req: Request, res: Response) => {
   try {
@@ -44,15 +89,17 @@ export const getMessageContacts = async (req: Request, res: Response) => {
 
 export const sendMessage = async (req: Request, res: Response) => {
   try {
-    const { to_user_id, content } = req.body;
+    const { to_user_id, content, attachments = [] } = req.body;
     const fromUserId = req.user?.id;
+    const normalizedContent = typeof content === 'string' ? content.trim() : '';
+    const normalizedAttachments = normalizeAttachmentInputs(attachments);
 
     if (!fromUserId) {
       throw new AppError(401, 'User not authenticated');
     }
 
-    if (!to_user_id || !content?.trim()) {
-      throw new AppError(400, 'Recipient and message content are required');
+    if (!to_user_id || (!normalizedContent && normalizedAttachments.length === 0)) {
+      throw new AppError(400, 'Recipient and message content or attachment are required');
     }
 
     if (to_user_id === fromUserId) {
@@ -73,14 +120,114 @@ export const sendMessage = async (req: Request, res: Response) => {
       `INSERT INTO messages (id, from_user_id, to_user_id, content)
        VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [id, fromUserId, to_user_id, content.trim()]
+      [
+        id,
+        fromUserId,
+        to_user_id,
+        normalizedContent || `Sent an attachment: ${normalizedAttachments[0]?.filename}`,
+      ]
     );
+
+    for (const attachment of normalizedAttachments) {
+      await query(
+        `INSERT INTO message_attachments (id, message_id, filename, url, metadata)
+         VALUES ($1, $2, $3, $4, $5::jsonb)`,
+        [
+          uuidv4(),
+          id,
+          attachment.filename,
+          attachment.url,
+          JSON.stringify({
+            key: attachment.key || null,
+            mimetype: attachment.mimetype || null,
+            size: attachment.size || null,
+          }),
+        ]
+      );
+    }
 
     res.status(201).json({
       message: 'Message sent successfully',
-      data: result.rows[0],
+      data: {
+        ...result.rows[0],
+        attachments: normalizedAttachments.map((attachment) => ({
+          id: null,
+          filename: attachment.filename,
+          url: attachment.url,
+          metadata: {
+            key: attachment.key || null,
+            mimetype: attachment.mimetype || null,
+            size: attachment.size || null,
+          },
+        })),
+      },
     });
   } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+};
+
+export const uploadMessageAttachment = async (req: FileRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    if (!req.file) {
+      throw new AppError(400, 'No file provided');
+    }
+
+    validateMessageAttachment(req.file);
+
+    let url: string;
+    let key: string;
+
+    try {
+      if (
+        config.server.env === 'development' &&
+        (!config.r2.accountId || !config.r2.accessKeyId || !config.r2.secretAccessKey)
+      ) {
+        throw new Error('R2 is not configured for local development');
+      }
+
+      const uploaded = await uploadToR2(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype
+      );
+      url = uploaded.url;
+      key = uploaded.key;
+    } catch (uploadError) {
+      if (config.server.env !== 'development') {
+        throw uploadError;
+      }
+
+      const extension = path.extname(req.file.originalname) || mimeToExtension(req.file.mimetype);
+      const safeName = `${Date.now()}-${Math.random().toString(36).slice(2)}${extension}`;
+      const uploadDir = path.resolve(process.cwd(), 'uploads', 'messages');
+      await fs.mkdir(uploadDir, { recursive: true });
+      await fs.writeFile(path.join(uploadDir, safeName), req.file.buffer);
+      key = `local/messages/${safeName}`;
+      url = `${req.protocol || 'http'}://${req.get?.('host') || 'localhost:5000'}/uploads/messages/${safeName}`;
+    }
+
+    res.status(201).json({
+      message: 'Attachment uploaded successfully',
+      attachment: {
+        filename: req.file.originalname,
+        url,
+        key,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+      },
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+
     res.status(400).json({ error: (error as Error).message });
   }
 };
@@ -106,10 +253,26 @@ export const getMessages = async (req: Request, res: Response) => {
     );
 
     const result = await query(
-      `SELECT * FROM messages 
+      `SELECT m.*,
+              COALESCE(attachments.items, '[]'::json) AS attachments
+       FROM messages m
+       LEFT JOIN LATERAL (
+         SELECT json_agg(
+           json_build_object(
+             'id', ma.id,
+             'filename', ma.filename,
+             'url', ma.url,
+             'metadata', ma.metadata,
+             'uploaded_at', ma.uploaded_at
+           )
+           ORDER BY ma.uploaded_at ASC
+         ) AS items
+         FROM message_attachments ma
+         WHERE ma.message_id = m.id
+       ) attachments ON true
        WHERE (from_user_id = $1 AND to_user_id = $2) 
           OR (from_user_id = $2 AND to_user_id = $1)
-       ORDER BY created_at ASC`,
+       ORDER BY m.created_at ASC`,
       [currentUserId, userId]
     );
 
@@ -121,6 +284,61 @@ export const getMessages = async (req: Request, res: Response) => {
     res.status(400).json({ error: (error as Error).message });
   }
 };
+
+function normalizeAttachmentInputs(value: unknown): MessageAttachmentInput[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .slice(0, 5)
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return null;
+      }
+
+      const attachment = item as Partial<MessageAttachmentInput>;
+      if (!attachment.filename || !attachment.url) {
+        return null;
+      }
+
+      return {
+        filename: String(attachment.filename),
+        url: String(attachment.url),
+        key: attachment.key ? String(attachment.key) : undefined,
+        mimetype: attachment.mimetype ? String(attachment.mimetype) : undefined,
+        size: Number.isFinite(Number(attachment.size)) ? Number(attachment.size) : undefined,
+      };
+    })
+    .filter(Boolean) as MessageAttachmentInput[];
+}
+
+function validateMessageAttachment(file: UploadedFile) {
+  const extension = path.extname(file.originalname).toLowerCase();
+  const allowed = ALLOWED_ATTACHMENT_MIMES.has(file.mimetype) || ALLOWED_ATTACHMENT_EXTENSIONS.has(extension);
+
+  if (!allowed) {
+    throw new AppError(400, 'Only images, PDF, Word, and Excel files are allowed');
+  }
+
+  if (file.size > MAX_MESSAGE_ATTACHMENT_SIZE) {
+    throw new AppError(400, 'Message attachments must be 50MB or smaller');
+  }
+}
+
+function mimeToExtension(mimetype: string) {
+  if (mimetype === 'image/png') return '.png';
+  if (mimetype === 'image/webp') return '.webp';
+  if (mimetype === 'image/gif') return '.gif';
+  if (mimetype === 'image/heic') return '.heic';
+  if (mimetype === 'image/heif') return '.heif';
+  if (mimetype === 'application/pdf') return '.pdf';
+  if (mimetype === 'application/msword') return '.doc';
+  if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return '.docx';
+  if (mimetype === 'application/vnd.ms-excel') return '.xls';
+  if (mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return '.xlsx';
+  return '.jpg';
+}
 
 export const getConversations = async (req: Request, res: Response) => {
   try {

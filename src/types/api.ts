@@ -15,6 +15,7 @@ export interface User {
   address?: string;
   created_at?: string;
   updated_at?: string;
+  password_setup_required?: boolean;
 }
 
 export interface AuthResponse {
@@ -92,6 +93,8 @@ export interface VerifyResetCodePayload {
 export interface GoogleAuthPayload {
   credential: string;
   role?: 'user';
+  mode?: 'login' | 'signup';
+  terms_accepted?: boolean;
 }
 
 export interface UpdateProfilePayload {
@@ -337,6 +340,18 @@ export interface DssAuditRun {
 }
 
 // Message types
+export interface MessageAttachment {
+  id?: string | null;
+  filename: string;
+  url: string;
+  uploaded_at?: string;
+  metadata?: {
+    key?: string | null;
+    mimetype?: string | null;
+    size?: number | null;
+  };
+}
+
 export interface Message {
   id: string;
   from_user_id: string;
@@ -347,12 +362,14 @@ export interface Message {
   related_transaction_id?: string;
   action_url?: string;
   metadata?: Record<string, unknown>;
+  attachments?: MessageAttachment[];
   created_at: string;
 }
 
 export interface SendMessagePayload {
   to_user_id: string;
-  content: string;
+  content?: string;
+  attachments?: MessageAttachment[];
 }
 
 export interface MessageContact {

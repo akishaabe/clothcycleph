@@ -22,6 +22,16 @@ export function ProtectedRoute({ children, roles }) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
+  if (user.password_setup_required && location.pathname !== "/settings") {
+    return (
+      <Navigate
+        to="/settings?setupPassword=1"
+        replace
+        state={{ from: location.pathname }}
+      />
+    );
+  }
+
   if (allowedRoles.length && !allowedRoles.includes(userRole)) {
     return <Navigate to={getDashboardPathForRole(userRole)} replace />;
   }

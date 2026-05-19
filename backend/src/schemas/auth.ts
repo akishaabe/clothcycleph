@@ -74,6 +74,8 @@ export const verifyResetCodeSchema = z.object({
 export const googleAuthSchema = z.object({
   credential: z.string().min(1),
   role: z.literal('user').default('user'),
+  mode: z.enum(['login', 'signup']).default('login'),
+  terms_accepted: z.boolean().optional().default(false),
 });
 
 export const updateProfileSchema = z.object({
@@ -87,7 +89,7 @@ export const updateProfileSchema = z.object({
 });
 
 export const changePasswordSchema = z.object({
-  current_password: z.string().min(1).max(128),
+  current_password: z.string().max(128).optional().default(''),
   new_password: strongPasswordSchema,
   confirm_password: strongPasswordSchema,
 }).refine((data) => data.new_password === data.confirm_password, {

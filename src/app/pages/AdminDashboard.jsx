@@ -77,6 +77,60 @@ const emptyForm = {
   password: "",
 };
 
+const dssRuleCategoryOptions = [
+  { value: "", label: "Select category" },
+  { value: "eligibility", label: "Eligibility / restrictions" },
+  { value: "burn_test", label: "Burn test" },
+  { value: "item_details", label: "Item details" },
+  { value: "condition", label: "Condition and damage" },
+  { value: "cleanliness", label: "Cleanliness / contamination" },
+  { value: "fabric", label: "Fabric signal" },
+  { value: "recovery", label: "Recovery pathway fit" },
+  { value: "partner_handoff", label: "Partner handoff" },
+  { value: "audit", label: "Audit / explanation" },
+];
+
+const dssRuleQuestionOptions = [
+  { value: "", label: "Select DSS field" },
+  { value: "restricted_category", label: "Restricted category" },
+  { value: "uniform_branding", label: "Uniform branding" },
+  { value: "item_types", label: "Item types" },
+  { value: "condition", label: "Condition" },
+  { value: "cleanliness", label: "Cleanliness" },
+  { value: "knows_fabric_type", label: "Knows fabric type" },
+  { value: "fabric_types", label: "Fabric types" },
+  { value: "custom_fabric_text", label: "User-defined fabric text" },
+  { value: "fabric_identification", label: "Fabric identification signals" },
+  { value: "fiber_composition", label: "Fiber composition" },
+  { value: "wearability", label: "Wearability" },
+  { value: "repairability", label: "Repairability" },
+  { value: "contamination_level", label: "Contamination level" },
+  { value: "damage_classification", label: "Damage classification" },
+  { value: "repurposing_potential", label: "Repurposing potential" },
+  { value: "trim_removal", label: "Trim/accessory removal" },
+  { value: "buyback_interest", label: "Buyback interest" },
+  { value: "burn_test.moment", label: "Burn test: flame touched textile" },
+  { value: "burn_test.flames", label: "Burn test: flame behavior" },
+  { value: "burn_test.no_flame", label: "Burn test: no-flame behavior" },
+  { value: "burn_test.smell", label: "Burn test: smell" },
+  { value: "burn_test.ashes", label: "Burn test: ashes" },
+];
+
+const dssRulePathwayOptions = [
+  { value: "", label: "General / all pathways" },
+  { value: "recycle", label: "Recycle" },
+  { value: "donate", label: "Donate" },
+  { value: "upcycle", label: "Upcycle" },
+  { value: "buyback", label: "Buyback" },
+  { value: "rejected", label: "Rejected" },
+];
+
+const buildDssRuleKey = ({ pathway, category, question_key }) =>
+  [pathway || "general", category || "rule", question_key || "field"]
+    .join("_")
+    .replace(/[^a-zA-Z0-9_]+/g, "_")
+    .toLowerCase();
+
 const getStatusClass = (status) => {
   if (status === "active") {
     return "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300";
@@ -152,6 +206,7 @@ export function AdminDashboard() {
     pathway: "",
     category: "",
     question_key: "",
+    expected_values_text: "",
     weight: 0,
     description: "",
   });
@@ -288,6 +343,24 @@ export function AdminDashboard() {
       }, {}),
     [accounts]
   );
+
+  const roleTrends = useMemo(() => {
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+
+    return Object.keys(roleConfig).reduce((trends, role) => {
+      const recentCount = accounts.filter((account) => {
+        if (account.role !== role || !account.joined) {
+          return false;
+        }
+
+        const joinedAt = new Date(account.joined).getTime();
+        return Number.isFinite(joinedAt) && joinedAt >= thirtyDaysAgo;
+      }).length;
+
+      trends[role] = recentCount > 0 ? `+${recentCount}` : "0";
+      return trends;
+    }, {});
+  }, [accounts]);
 
   const systemGrowthData = useMemo(() => {
     const today = new Date();
@@ -577,8 +650,12 @@ export function AdminDashboard() {
     try {
       const response = await adminService.createDssRule({
         ...dssRuleForm,
+        rule_key: dssRuleForm.rule_key || buildDssRuleKey(dssRuleForm),
         pathway: dssRuleForm.pathway || null,
-        expected_values: [],
+        expected_values: dssRuleForm.expected_values_text
+          .split(/[\n,]/)
+          .map((value) => value.trim())
+          .filter(Boolean),
         active: true,
       });
       setDssRules((current) => [response.data, ...current]);
@@ -587,6 +664,7 @@ export function AdminDashboard() {
         pathway: "",
         category: "",
         question_key: "",
+        expected_values_text: "",
         weight: 0,
         description: "",
       });
@@ -688,9 +766,9 @@ export function AdminDashboard() {
         {/* System Metrics */}
         <div className="grid md:grid-cols-4 gap-6 mb-8">
           {[
-            { icon: Users, label: "Users", value: roleCounts.User, trend: "+120", color: "#111827" },
-            { icon: Shield, label: "Admins", value: roleCounts.Admin, trend: "+3", color: "#374151" },
-            { icon: Building2, label: "Partners", value: roleCounts.Partner, trend: "+8", color: "#4b5563" },
+            { icon: Users, label: "Users", value: roleCounts.User, trend: roleTrends.User, color: "#111827" },
+            { icon: Shield, label: "Admins", value: roleCounts.Admin, trend: roleTrends.Admin, color: "#374151" },
+            { icon: Building2, label: "Partners", value: roleCounts.Partner, trend: roleTrends.Partner, color: "#4b5563" },
             { icon: Activity, label: "System Health", value: systemHealth.value, trend: systemHealth.trend, color: "#6b7280" }
           ].map((metric, index) => (
             <motion.div
@@ -982,7 +1060,7 @@ export function AdminDashboard() {
               <div>
                 <h3 className="text-xl text-gray-950 dark:text-white">Editable DSS Rules</h3>
                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                  Admin-maintained rule records for documentation and future engine tuning.
+                  Save admin DSS rule records for audit and future rule publishing.
                 </p>
               </div>
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 dark:bg-white/10 dark:text-gray-200">
@@ -990,50 +1068,113 @@ export function AdminDashboard() {
               </span>
             </div>
             <div className="space-y-3">
-              <form onSubmit={createDssRule} className="grid gap-2 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-3 dark:border-white/10 dark:bg-black/20">
-                <div className="grid gap-2 md:grid-cols-2">
-                  <input
-                    value={dssRuleForm.rule_key}
-                    onChange={(event) => setDssRuleForm((current) => ({ ...current, rule_key: event.target.value }))}
-                    required
-                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-black/20 dark:text-white"
-                    placeholder="rule key"
-                  />
-                  <select
-                    value={dssRuleForm.pathway}
-                    onChange={(event) => setDssRuleForm((current) => ({ ...current, pathway: event.target.value }))}
-                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-black/20 dark:text-white"
-                  >
-                    <option value="">General</option>
-                    <option value="recycle">Recycle</option>
-                    <option value="donate">Donate</option>
-                    <option value="upcycle">Upcycle</option>
-                    <option value="buyback">Buyback</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
+              <form onSubmit={createDssRule} className="grid gap-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 dark:border-white/10 dark:bg-black/20">
+                <div className="grid gap-2 lg:grid-cols-2">
+                  <label className="grid gap-1 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                    Rule name / ID
+                    <input
+                      value={dssRuleForm.rule_key}
+                      onChange={(event) => setDssRuleForm((current) => ({ ...current, rule_key: event.target.value }))}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal dark:border-white/10 dark:bg-black/20 dark:text-white"
+                      placeholder={buildDssRuleKey(dssRuleForm)}
+                    />
+                    <span className="text-xs font-normal text-gray-500 dark:text-gray-400">
+                      Optional. Auto-generated if blank.
+                    </span>
+                  </label>
+                  <label className="grid gap-1 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                    Recommendation affected
+                    <select
+                      value={dssRuleForm.pathway}
+                      onChange={(event) => setDssRuleForm((current) => ({ ...current, pathway: event.target.value }))}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal dark:border-white/10 dark:bg-black/20 dark:text-white"
+                    >
+                      {dssRulePathwayOptions.map((option) => (
+                        <option key={option.value || "general"} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-xs font-normal text-gray-500 dark:text-gray-400">
+                      Which score this affects.
+                    </span>
+                  </label>
                 </div>
-                <div className="grid gap-2 md:grid-cols-[1fr_100px]">
-                  <input
-                    value={dssRuleForm.question_key}
-                    onChange={(event) => setDssRuleForm((current) => ({ ...current, question_key: event.target.value }))}
-                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-black/20 dark:text-white"
-                    placeholder="question key"
-                  />
-                  <input
-                    type="number"
-                    value={dssRuleForm.weight}
-                    onChange={(event) => setDssRuleForm((current) => ({ ...current, weight: Number(event.target.value) }))}
-                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-black/20 dark:text-white"
-                    placeholder="weight"
-                  />
+                <div className="grid gap-2 lg:grid-cols-2">
+                  <label className="grid gap-1 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                    Rule group
+                    <select
+                      value={dssRuleForm.category}
+                      onChange={(event) => setDssRuleForm((current) => ({ ...current, category: event.target.value }))}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal dark:border-white/10 dark:bg-black/20 dark:text-white"
+                    >
+                      {dssRuleCategoryOptions.map((option) => (
+                        <option key={option.value || "empty"} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-xs font-normal text-gray-500 dark:text-gray-400">
+                      Rule section.
+                    </span>
+                  </label>
+                  <label className="grid gap-1 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                    Form answer checked
+                    <select
+                      value={dssRuleForm.question_key}
+                      onChange={(event) => setDssRuleForm((current) => ({ ...current, question_key: event.target.value }))}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal dark:border-white/10 dark:bg-black/20 dark:text-white"
+                    >
+                      {dssRuleQuestionOptions.map((option) => (
+                        <option key={option.value || "empty"} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-xs font-normal text-gray-500 dark:text-gray-400">
+                      Field to check.
+                    </span>
+                  </label>
                 </div>
-                <textarea
-                  value={dssRuleForm.description}
-                  onChange={(event) => setDssRuleForm((current) => ({ ...current, description: event.target.value }))}
-                  rows={2}
-                  className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-black/20 dark:text-white"
-                  placeholder="rule description"
-                />
+                <div className="grid min-w-0 gap-2 xl:grid-cols-[minmax(0,1fr)_7rem]">
+                  <label className="grid min-w-0 gap-1 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                    Answer values that match this rule
+                    <input
+                      value={dssRuleForm.expected_values_text}
+                      onChange={(event) => setDssRuleForm((current) => ({ ...current, expected_values_text: event.target.value }))}
+                      className="box-border w-full min-w-0 max-w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal dark:border-white/10 dark:bg-black/20 dark:text-white"
+                      placeholder="Clean, Washed, Ready to wear"
+                    />
+                    <span className="text-xs font-normal text-gray-500 dark:text-gray-400">
+                      Comma-separated.
+                    </span>
+                  </label>
+                  <label className="grid min-w-0 max-w-full gap-1 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                    Points
+                    <input
+                      type="number"
+                      step="0.1"
+                      inputMode="decimal"
+                      value={dssRuleForm.weight}
+                      onChange={(event) => setDssRuleForm((current) => ({ ...current, weight: Number(event.target.value) }))}
+                      className="box-border w-full min-w-0 max-w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal dark:border-white/10 dark:bg-black/20 dark:text-white"
+                      placeholder="2"
+                    />
+                    <span className="break-words text-xs font-normal text-gray-500 dark:text-gray-400">
+                      Score weight.
+                    </span>
+                  </label>
+                </div>
+                <label className="grid gap-1 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                  Admin note / rule explanation
+                  <textarea
+                    value={dssRuleForm.description}
+                    onChange={(event) => setDssRuleForm((current) => ({ ...current, description: event.target.value }))}
+                    rows={2}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal dark:border-white/10 dark:bg-black/20 dark:text-white"
+                    placeholder="Why should this answer affect the recommendation?"
+                  />
+                </label>
                 <button type="submit" className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">
                   Add DSS rule record
                 </button>

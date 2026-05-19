@@ -14,6 +14,8 @@ import {
   Download,
   AlertTriangle,
   CheckCircle2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
@@ -46,6 +48,7 @@ export function SettingsPage() {
   const settingsTheme = ["partner", "admin"].includes(searchParams.get("theme"))
     ? searchParams.get("theme")
     : inferredTheme;
+  const isPasswordSetupRequired = Boolean(user?.password_setup_required);
   const backPath =
     settingsTheme === "partner"
       ? "/partner"
@@ -76,6 +79,7 @@ export function SettingsPage() {
     newPassword: "",
     confirmPassword: "",
   });
+  const [visiblePasswordFields, setVisiblePasswordFields] = useState({});
   const [focusedPasswordField, setFocusedPasswordField] = useState("");
   const [twoFactorStatus, setTwoFactorStatus] = useState({
     enabled: false,
@@ -154,6 +158,12 @@ export function SettingsPage() {
   }, []);
 
   useEffect(() => {
+    if (searchParams.get("setupPassword") === "1" || isPasswordSetupRequired) {
+      setActiveTab("security");
+    }
+  }, [searchParams, isPasswordSetupRequired]);
+
+  useEffect(() => {
     const nextProfile = {
       name: user?.name || "",
       email: user?.email || "",
@@ -225,14 +235,12 @@ export function SettingsPage() {
   };
 
   const handleSecuritySave = async () => {
-    if (
-      !security.currentPassword ||
-      !security.newPassword ||
-      !security.confirmPassword
-    ) {
+    if ((!isPasswordSetupRequired && !security.currentPassword) || !security.newPassword || !security.confirmPassword) {
       showSaveMessage(
         "error",
-        "Changes were not saved. Please complete all password fields."
+        isPasswordSetupRequired
+          ? "Set a new password and confirm it to finish your account setup."
+          : "Changes were not saved. Please complete all password fields."
       );
       return;
     }
@@ -257,7 +265,12 @@ export function SettingsPage() {
         security.confirmPassword
       );
       setSecurity({ currentPassword: "", newPassword: "", confirmPassword: "" });
-      showSaveMessage("success", "Password was changed successfully.");
+      showSaveMessage(
+        "success",
+        isPasswordSetupRequired
+          ? "Password was set successfully. Your full account is now unlocked."
+          : "Password was changed successfully."
+      );
     } catch (error) {
       showSaveMessage("error", error.message || "Password update failed.");
     }
@@ -769,9 +782,18 @@ export function SettingsPage() {
               <div className="flex w-full flex-col">
                 <h2 className="mb-2 text-2xl text-[#19221d]">Security Settings</h2>
                 <p className="mb-5 text-[#5f6f67]">
-                  Change your password to keep your account protected.
+                  {isPasswordSetupRequired
+                    ? "Set a password before continuing to the rest of your ClothCycle account."
+                    : "Change your password to keep your account protected."}
                 </p>
                 <div className="flex flex-1 flex-col justify-between gap-5">
+                  {isPasswordSetupRequired ? (
+                    <div className="rounded-2xl border border-[#9fd8b2] bg-[#effaf2] p-4 text-sm text-[#245245] dark:border-emerald-300/25 dark:bg-emerald-300/10 dark:text-emerald-50">
+                      You signed up with Google. Create a ClothCycle password now so settings,
+                      sensitive profile edits, and account recovery can verify you safely.
+                    </div>
+                  ) : null}
+
                   <div className="space-y-4 rounded-xl border border-[#e7ebe6] bg-[#f8faf6] p-4">
                     <div className="flex items-center justify-between gap-4">
                       <div>
@@ -1004,7 +1026,7 @@ export function SettingsPage() {
                       <div className="relative">
                         <Lock className={iconClass} />
                         <input
-                          type="password"
+                          type={visiblePasswordFields[field] ? "text" : "password"}
                           placeholder="Enter password"
                           value={security[field]}
                           onFocus={() => setFocusedPasswordField(field)}
@@ -1015,8 +1037,26 @@ export function SettingsPage() {
                               [field]: event.target.value,
                             })
                           }
-                          className={inputClass}
-                      />
+                          className="w-full pl-12 pr-12 py-3 border-2 border-[#e7ebe6] rounded-xl focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/15 transition-colors bg-white text-[#19221d]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setVisiblePasswordFields((current) => ({
+                              ...current,
+                              [field]: !current[field],
+                            }))
+                          }
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-[#5f6f67] transition-colors hover:text-[#336158]"
+                          aria-label={visiblePasswordFields[field] ? "Hide password" : "Show password"}
+                          title={visiblePasswordFields[field] ? "Hide password" : "Show password"}
+                        >
+                          {visiblePasswordFields[field] ? (
+                            <EyeOff className="h-5 w-5" />
+                          ) : (
+                            <Eye className="h-5 w-5" />
+                          )}
+                        </button>
                     </div>
                     {field === "newPassword" && focusedPasswordField === "newPassword" && (
                       <PasswordChecklist
@@ -1027,31 +1067,33 @@ export function SettingsPage() {
                   </div>
                 ))}
 
-                  <div className="rounded-2xl border-2 border-[#d6c8a5] bg-[#fffaf0] p-4 shadow-sm dark:border-amber-300/25 dark:bg-amber-300/10">
-                    <label className="mb-1 block text-sm font-semibold text-[#19221d] dark:text-amber-100">
-                      Current password required
-                    </label>
-                    <p className="mb-3 text-sm text-[#6f6242] dark:text-amber-100/80">
-                      Confirm your current password before updating your account password.
-                    </p>
-                    <div className="relative">
-                      <Lock className={iconClass} />
-                      <input
-                        type="password"
-                        placeholder="Current password"
-                        value={security.currentPassword}
-                        onFocus={() => setFocusedPasswordField("currentPassword")}
-                        onBlur={() => setFocusedPasswordField("")}
-                        onChange={(event) =>
-                          setSecurity({
-                            ...security,
-                            currentPassword: event.target.value,
-                          })
-                        }
-                        className={inputClass}
-                      />
+                  {!isPasswordSetupRequired ? (
+                    <div className="rounded-2xl border-2 border-[#d6c8a5] bg-[#fffaf0] p-4 shadow-sm dark:border-amber-300/25 dark:bg-amber-300/10">
+                      <label className="mb-1 block text-sm font-semibold text-[#19221d] dark:text-amber-100">
+                        Current password required
+                      </label>
+                      <p className="mb-3 text-sm text-[#6f6242] dark:text-amber-100/80">
+                        Confirm your current password before updating your account password.
+                      </p>
+                      <div className="relative">
+                        <Lock className={iconClass} />
+                        <input
+                          type="password"
+                          placeholder="Current password"
+                          value={security.currentPassword}
+                          onFocus={() => setFocusedPasswordField("currentPassword")}
+                          onBlur={() => setFocusedPasswordField("")}
+                          onChange={(event) =>
+                            setSecurity({
+                              ...security,
+                              currentPassword: event.target.value,
+                            })
+                          }
+                          className={inputClass}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
 
                   <button
                     onClick={handleSecuritySave}

@@ -4,7 +4,11 @@ import {
   ArrowLeft,
   Building2,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
+  Download,
+  FileText,
   Paperclip,
   Recycle,
   Search,
@@ -121,6 +125,34 @@ const formatMessageTime = (value) => {
 };
 
 const normalizeEmail = (email) => email?.trim().toLowerCase() ?? "";
+const MESSAGE_ATTACHMENT_LIMIT = 50 * 1024 * 1024;
+const MESSAGE_ATTACHMENT_ACCEPT = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/heic",
+  "image/heif",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+].join(",");
+const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "gif",
+  "heic",
+  "heif",
+  "pdf",
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+]);
 
 export function MessagesPage() {
   const navigate = useNavigate();
@@ -145,12 +177,13 @@ export function MessagesPage() {
     fetchConversations,
     fetchMessages,
     sendMessage,
+    uploadAttachment,
   } = useMessages();
   const [activeUserId, setActiveUserId] = useState(null);
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedAttachments, setSelectedAttachments] = useState([]);
   const [sendError, setSendError] = useState("");
   const [previewThreadMessages, setPreviewThreadMessages] = useState(
     previewInitialMessages
@@ -233,10 +266,6 @@ export function MessagesPage() {
       .includes(normalizedSearch)
   );
 
-  const selectedFileSize = selectedFile
-    ? `${Math.max(selectedFile.size / 1024, 1).toFixed(0)} KB`
-    : "";
-
   const isMessageFromCurrentUser = (message) =>
     Boolean(currentUser?.id && message.from_user_id === currentUser.id);
 
@@ -303,7 +332,7 @@ export function MessagesPage() {
     event.preventDefault();
     const content = draft.trim();
 
-    if (!activeUserId || !content) {
+    if (!activeUserId || (!content && selectedAttachments.length === 0)) {
       return;
     }
 
@@ -334,13 +363,31 @@ export function MessagesPage() {
         [activeUserId]: [...(current[activeUserId] || []), nextMessage],
       }));
       setDraft("");
+      setSelectedAttachments([]);
       return;
     }
 
     try {
-      await sendMessage(recipientId, content);
+      let attachments = [];
+      if (selectedAttachments.length > 0) {
+        attachments = await Promise.all(
+          selectedAttachments.map(async (item) => {
+            const uploadedAttachment = await uploadAttachment(item.file);
+            return {
+              ...uploadedAttachment,
+              filename: (item.displayName.trim() || uploadedAttachment.filename).slice(0, 255),
+            };
+          })
+        );
+      }
+
+      await sendMessage(
+        recipientId,
+        content || `Sent ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`,
+        attachments
+      );
       setDraft("");
-      setSelectedFile(null);
+      setSelectedAttachments([]);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -348,6 +395,61 @@ export function MessagesPage() {
     } catch (err) {
       setSendError(err.message || "Failed to send message");
     }
+  };
+
+  const handleFileChange = (event) => {
+    const files = Array.from(event.target.files || []);
+    setSendError("");
+
+    if (files.length === 0) {
+      return;
+    }
+
+    const nextFiles = [];
+
+    for (const file of files) {
+      const extension = file.name.split(".").pop()?.toLowerCase() || "";
+      const isAllowedType =
+        MESSAGE_ATTACHMENT_ACCEPT.split(",").includes(file.type) ||
+        ALLOWED_ATTACHMENT_EXTENSIONS.has(extension);
+
+      if (!isAllowedType) {
+        event.target.value = "";
+        setSendError("Only images, PDF, Word, and Excel files can be attached.");
+        return;
+      }
+
+      if (file.size > MESSAGE_ATTACHMENT_LIMIT) {
+        event.target.value = "";
+        setSendError("Message attachments must be 50MB or smaller.");
+        return;
+      }
+
+      nextFiles.push({
+        id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`,
+        file,
+        displayName: file.name,
+      });
+    }
+
+    setSelectedAttachments((current) => {
+      const combined = [...current, ...nextFiles].slice(0, 5);
+      if (current.length + nextFiles.length > 5) {
+        setSendError("You can attach up to 5 files per message.");
+      }
+      return combined;
+    });
+    event.target.value = "";
+  };
+
+  const updateAttachmentName = (id, displayName) => {
+    setSelectedAttachments((current) =>
+      current.map((item) => (item.id === id ? { ...item, displayName } : item))
+    );
+  };
+
+  const removeAttachment = (id) => {
+    setSelectedAttachments((current) => current.filter((item) => item.id !== id));
   };
 
   const openMessageAction = (message) => {
@@ -620,6 +722,7 @@ export function MessagesPage() {
                           }`}
                         >
                           <p className="text-sm leading-6 md:text-base">{message.content}</p>
+                          <MessageAttachmentGallery attachments={message.attachments} />
                           {hasMessageAction(message) && (
                             <button
                               type="button"
@@ -642,37 +745,44 @@ export function MessagesPage() {
 
                 <form onSubmit={handleSend} className="border-t p-4 sm:p-6">
                   <div className="messages-composer rounded-2xl border p-3 sm:p-4">
-                    {selectedFile && (
-                      <div className="messages-attachment mb-2 flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm">
-                        <div className="min-w-0">
-                          <span className="block truncate font-semibold">
-                            {selectedFile.name}
-                          </span>
-                          <span className="text-xs opacity-75">{selectedFileSize}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedFile(null);
-                            if (fileInputRef.current) {
-                              fileInputRef.current.value = "";
-                            }
-                          }}
-                          className="messages-icon-button rounded-lg p-2"
-                          aria-label="Remove attachment"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
+                    {selectedAttachments.length > 0 && (
+                      <div className="mb-3 grid gap-2">
+                        {selectedAttachments.map((attachment) => (
+                          <div
+                            key={attachment.id}
+                            className="messages-attachment grid gap-2 rounded-xl px-3 py-2 text-sm sm:grid-cols-[1fr_auto]"
+                          >
+                            <div className="min-w-0">
+                              <input
+                                value={attachment.displayName}
+                                onChange={(event) => updateAttachmentName(attachment.id, event.target.value)}
+                                className="w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold outline-none"
+                                aria-label="Attachment display name"
+                              />
+                              <span className="mt-1 block truncate text-xs opacity-75">
+                                {attachment.file.name} - {formatFileSize(attachment.file.size)}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeAttachment(attachment.id)}
+                              className="messages-icon-button h-10 rounded-lg p-2"
+                              aria-label="Remove attachment"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     )}
                     <div className="flex items-center gap-2 sm:gap-3">
                       <input
                         ref={fileInputRef}
                         type="file"
+                        multiple
+                        accept={MESSAGE_ATTACHMENT_ACCEPT}
                         className="hidden"
-                        onChange={(event) =>
-                          setSelectedFile(event.target.files?.[0] ?? null)
-                        }
+                        onChange={handleFileChange}
                       />
                       <button
                         type="button"
@@ -692,7 +802,7 @@ export function MessagesPage() {
                       />
                       <button
                         type="submit"
-                        disabled={!draft.trim()}
+                        disabled={!draft.trim() && selectedAttachments.length === 0}
                         className="messages-send inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-3 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:py-4 sm:text-lg"
                       >
                         <Send className="h-5 w-5" />
@@ -720,6 +830,173 @@ export function MessagesPage() {
       </main>
     </div>
   );
+}
+
+function MessageAttachmentGallery({ attachments }) {
+  const items = Array.isArray(attachments)
+    ? attachments.filter((attachment) => attachment?.url)
+    : [];
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [isOpen, setIsOpen] = useState(false);
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  const activeAttachment = items[Math.min(activeIndex, items.length - 1)];
+  const activeUrl = resolveMediaUrl(activeAttachment.url);
+  const activeIsImage = isImageAttachment(activeAttachment);
+  const move = (direction) => {
+    setActiveIndex((current) => (current + direction + items.length) % items.length);
+  };
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => {
+          setActiveIndex(0);
+          setIsOpen(true);
+        }}
+        className="block w-full rounded-xl border border-white/20 bg-white/10 p-2 text-left text-sm transition-colors hover:bg-white/20"
+      >
+        <div className="grid grid-cols-2 gap-2">
+          {items.slice(0, 4).map((attachment, index) => {
+            const url = resolveMediaUrl(attachment.url);
+            const isImage = isImageAttachment(attachment);
+
+            return (
+              <div key={attachment.id || `${attachment.url}-${index}`} className="overflow-hidden rounded-lg bg-black/10">
+                {isImage ? (
+                  <img
+                    src={url}
+                    alt={attachment.filename || "Message attachment"}
+                    className="aspect-video w-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="flex aspect-video items-center justify-center gap-2 px-2">
+                    <FileText className="h-5 w-5 shrink-0" />
+                    <span className="truncate text-xs font-semibold">
+                      {attachment.filename || "Document"}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="truncate font-semibold">
+            {items.length} attachment{items.length === 1 ? "" : "s"}
+          </span>
+          <span className="text-xs opacity-75">Open gallery</span>
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-5xl overflow-hidden rounded-2xl bg-white text-[#19221d] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#dce4da] p-4">
+              <div className="min-w-0">
+                <div className="truncate font-semibold">
+                  {activeAttachment.filename || "Attachment"}
+                </div>
+                <div className="text-sm text-[#5f6f67]">
+                  {activeIndex + 1} of {items.length}
+                  {activeAttachment.metadata?.size
+                    ? ` - ${formatFileSize(Number(activeAttachment.metadata.size))}`
+                    : ""}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={activeUrl}
+                  download={activeAttachment.filename || true}
+                  className="rounded-xl bg-[#f3f5f2] p-2 text-[#336158] hover:bg-[#e7ebe6]"
+                  aria-label="Download attachment"
+                  title="Download attachment"
+                >
+                  <Download className="h-5 w-5" />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  className="rounded-xl bg-[#f3f5f2] p-2 text-[#5f6f67] hover:bg-[#e7ebe6]"
+                  aria-label="Close attachment viewer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="relative flex min-h-[420px] items-center justify-center bg-black">
+              {activeIsImage ? (
+                <img
+                  src={activeUrl}
+                  alt={activeAttachment.filename || "Message attachment"}
+                  className="max-h-[72vh] w-full object-contain"
+                />
+              ) : (
+                <div className="m-6 flex min-h-72 w-full max-w-md flex-col items-center justify-center rounded-2xl bg-white p-8 text-center">
+                  <FileText className="mb-4 h-12 w-12 text-[#336158]" />
+                  <div className="max-w-full truncate text-lg font-semibold">
+                    {activeAttachment.filename || "Document attachment"}
+                  </div>
+                  <a
+                    href={activeUrl}
+                    download={activeAttachment.filename || true}
+                    className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#336158] px-4 py-3 text-sm font-semibold text-white"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download file
+                  </a>
+                </div>
+              )}
+
+              {items.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => move(-1)}
+                    className="absolute left-4 top-1/2 rounded-full bg-white/90 p-3 text-[#19221d] shadow-lg"
+                    aria-label="Previous attachment"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => move(1)}
+                    className="absolute right-4 top-1/2 rounded-full bg-white/90 p-3 text-[#19221d] shadow-lg"
+                    aria-label="Next attachment"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function isImageAttachment(attachment) {
+  const mimetype = attachment?.metadata?.mimetype || "";
+  return mimetype.startsWith("image/") || /\.(jpg|jpeg|png|webp|gif|heic|heif)$/i.test(attachment?.filename || "");
+}
+
+function formatFileSize(size) {
+  if (!Number.isFinite(size)) {
+    return "";
+  }
+
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return `${Math.max(size / 1024, 1).toFixed(0)} KB`;
 }
 
 function MessageEmptyIcon() {

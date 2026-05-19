@@ -187,13 +187,46 @@ export const login = async (req: Request, res: Response) => {
 
 export const continueWithGoogle = async (req: Request, res: Response) => {
   try {
-    const { credential } = req.body;
+    const { credential, mode = 'login', terms_accepted = false } = req.body;
     const googleUser = await verifyGoogleCredential(credential);
 
     let userResult = await query('SELECT * FROM users WHERE email = $1', [googleUser.email]);
 
     if (userResult.rows.length === 0) {
-      throw new AppError(404, 'No account found for this Google email. Please sign up first before logging in.');
+      if (mode !== 'signup') {
+        throw new AppError(404, 'No account found for this Google email. Please sign up first before logging in.');
+      }
+
+      if (!terms_accepted) {
+        throw new AppError(400, 'Terms acceptance is required to sign up with Google');
+      }
+
+      const userId = uuidv4();
+      const temporaryPasswordHash = await hashPassword(`${uuidv4()}-${Date.now()}-google-signup`);
+      userResult = await query(
+        `INSERT INTO users (
+           id,
+           email,
+           name,
+           password_hash,
+           role,
+           avatar_url,
+           two_factor_enabled,
+           email_verified_at,
+           terms_accepted_at,
+           password_setup_required
+         )
+         VALUES ($1, $2, $3, $4, 'user', $5, true, NOW(), NOW(), true)
+         RETURNING *`,
+        [userId, googleUser.email, googleUser.name, temporaryPasswordHash, googleUser.picture]
+      );
+
+      await recordAuthEvent({
+        userId,
+        eventType: 'google_signup_created',
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
     }
 
     if (!userResult.rows[0].email_verified_at) {
@@ -212,7 +245,7 @@ export const continueWithGoogle = async (req: Request, res: Response) => {
     await query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
     await recordAuthEvent({
       userId: user.id,
-      eventType: 'google_login_success',
+      eventType: mode === 'signup' ? 'google_signup_login_success' : 'google_login_success',
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -224,7 +257,9 @@ export const continueWithGoogle = async (req: Request, res: Response) => {
     });
 
     res.json({
-      message: 'Login successful',
+      message: user.password_setup_required
+        ? 'Google signup successful. Set a password to finish account setup.'
+        : 'Login successful',
       user: toAuthUser(user),
       token,
     });
@@ -750,6 +785,7 @@ function toAuthUser(user: any) {
     address: user.address,
     two_factor_enabled: isTwoFactorLoginRequired(user),
     two_factor_method: user.two_factor_method,
+    password_setup_required: Boolean(user.password_setup_required),
     email_verified_at: user.email_verified_at,
     created_at: user.created_at,
     updated_at: user.updated_at,
@@ -1019,23 +1055,36 @@ export const changePassword = async (req: Request, res: Response) => {
       throw new AppError(401, 'User not authenticated');
     }
 
-    const result = await query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+    const result = await query('SELECT * FROM users WHERE id = $1', [userId]);
     if (result.rows.length === 0) {
       throw new AppError(404, 'User not found');
     }
 
-    const isValidPassword = await comparePassword(current_password, result.rows[0].password_hash);
-    if (!isValidPassword) {
-      throw new AppError(401, 'Invalid current password');
+    const currentUser = result.rows[0];
+    if (!currentUser.password_setup_required) {
+      if (!current_password) {
+        throw new AppError(400, 'Current password is required');
+      }
+
+      const isValidPassword = await comparePassword(current_password, currentUser.password_hash);
+      if (!isValidPassword) {
+        throw new AppError(401, 'Invalid current password');
+      }
     }
 
     const passwordHash = await hashPassword(new_password);
-    await query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [
-      passwordHash,
-      userId,
-    ]);
+    const updated = await query(
+      `UPDATE users
+       SET password_hash = $1,
+           password_setup_required = false,
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, email, name, role, avatar_url, profile_photo, bio, phone, address, two_factor_enabled,
+                 two_factor_method, email_verified_at, password_setup_required, created_at, updated_at`,
+      [passwordHash, userId]
+    );
 
-    res.json({ message: 'Password changed successfully' });
+    res.json({ message: 'Password changed successfully', data: toAuthUser(updated.rows[0]) });
   } catch (error) {
     sendAuthError(res, error);
   }

@@ -8,6 +8,7 @@ Table users {
   email varchar [unique, not null]
   name varchar [not null]
   password_hash varchar [not null]
+  password_setup_required boolean [default: false, note: "True only for Google-created accounts until the user sets a local password"]
   role varchar [default: "user", note: "user, partner, admin"]
   status varchar [default: "active", note: "active, inactive, suspended"]
   partner_id uuid [ref: > partners.id]

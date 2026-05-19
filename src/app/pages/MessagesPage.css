@@ -133,6 +133,24 @@
   color: var(--messages-primary-text);
 }
 
+.dark .messages-bubble.is-mine {
+  background-color: #24564d;
+  border: 1px solid rgba(139, 195, 184, 0.28);
+  color: #f7fffb;
+}
+
+.dark .messages-theme-partner .messages-bubble.is-mine {
+  background-color: #284f82;
+  border-color: rgba(159, 197, 248, 0.32);
+  color: #f6fbff;
+}
+
+.dark .messages-theme-admin .messages-bubble.is-mine {
+  background-color: #2f3137;
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #f8fafc;
+}
+
 .messages-send:hover {
   background-color: var(--messages-primary-hover);
 }

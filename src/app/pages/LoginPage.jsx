@@ -158,7 +158,11 @@ export function LoginPage() {
                 return;
               }
 
-              navigate(getDashboardPathForRole(authResponse.user.role));
+              navigate(
+                authResponse.user.password_setup_required
+                  ? "/settings?setupPassword=1"
+                  : getDashboardPathForRole(authResponse.user.role)
+              );
             } catch (googleError) {
               console.error("Google sign-in callback failed", googleError);
               setError(googleError.message || "Google login failed");

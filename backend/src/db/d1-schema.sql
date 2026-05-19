@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
+  password_setup_required INTEGER DEFAULT 0,
   role TEXT DEFAULT 'user' CHECK (role IN ('user', 'partner', 'admin')),
   status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'suspended')),
   partner_id TEXT REFERENCES partners(id) ON DELETE SET NULL,
