@@ -17,14 +17,12 @@ import { useFileUpload } from "../../hooks/useFileUpload";
 import "./SubmissionFormPage.css";
 
 const itemTypes = [
-  "Top",
-  "Pants / Jeans",
-  "Dress",
-  "Jacket / Outerwear",
-  "Household textile (curtains, bedsheets)",
-  "Fabric scraps",
-  "Other",
+  "Scraps",
+  "Big fabric panels (curtains, bedsheets)",
+  "Clothes (top, outerwear, bottoms)",
 ];
+
+const donationItemTypes = ["Top", "Bottoms", "Outerwear"];
 
 const conditionOptions = [
   "Good condition (wearable, no major damage)",

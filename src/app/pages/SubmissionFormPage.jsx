@@ -19,14 +19,14 @@ import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
 import "./SubmissionFormPage.css";
 
 const itemTypes = [
-  "Top",
-  "Pants / Jeans",
-  "Dress",
-  "Jacket / Outerwear",
-  "Household textile (curtains, bedsheets)",
-  "Fabric scraps",
-  "Other",
+  "Scraps",
+  "Big fabric panels (curtains, bedsheets)",
+  "Clothes (top, outerwear, bottoms)",
 ];
+
+const SCRAPS_ITEM_TYPE = "Scraps";
+
+const donationItemTypes = ["Top", "Bottoms", "Outerwear"];
 
 const HEAVILY_DAMAGED_CONDITION =
   "Heavily damaged (large tears, unusable as clothing)";
@@ -414,9 +414,12 @@ export function SubmissionFormPage() {
   };
 
   const updateAction = (action) => {
+    const allowedItemTypes = action === "Donate" ? donationItemTypes : itemTypes;
+
     setFormData((prev) => ({
       ...prev,
       action,
+      itemTypes: prev.itemTypes.filter((type) => allowedItemTypes.includes(type)),
       uniformBranding: action === "Donate" ? prev.uniformBranding : "",
       buybackInterest: action === "Upcycle" ? prev.buybackInterest : "",
       upcycleRequest: action === "Upcycle" ? prev.upcycleRequest : "",
@@ -430,7 +433,7 @@ export function SubmissionFormPage() {
   useEffect(() => {
     if (
       formData.itemTypes.length === 1 &&
-      formData.itemTypes[0] === "Fabric scraps" &&
+      formData.itemTypes[0] === SCRAPS_ITEM_TYPE &&
       (formData.wearability || formData.repairability)
     ) {
       setFormData((prev) => ({
@@ -476,13 +479,7 @@ export function SubmissionFormPage() {
   };
 
   const toSubmissionItemType = () => {
-    return formData.itemTypes
-      .map((type) =>
-        type === "Other" && formData.otherItemType.trim()
-          ? formData.otherItemType.trim()
-          : type,
-      )
-      .join(", ");
+    return formData.itemTypes.join(", ");
   };
 
   const toServiceType = () => {
@@ -674,13 +671,10 @@ export function SubmissionFormPage() {
   }
 
   const hasItemTypes =
-    formData.itemTypes.length > 0 &&
-    (!formData.itemTypes.includes("Other") || formData.otherItemType.trim());
+    formData.itemTypes.length > 0;
 
   const isDonation = formData.action === "Donate";
-  const itemTypeOptions = isDonation
-    ? itemTypes.filter((type) => type !== "Fabric scraps")
-    : itemTypes;
+  const itemTypeOptions = isDonation ? donationItemTypes : itemTypes;
   const hasDonationBlockedCondition =
     isDonation && formData.condition === HEAVILY_DAMAGED_CONDITION;
   const hasDonationBlockedCleanliness =
@@ -692,7 +686,7 @@ export function SubmissionFormPage() {
     hasDonationBlockedCleanliness ||
     hasDonationBlockedUniform;
   const isFabricScrapsOnly =
-    formData.itemTypes.length === 1 && formData.itemTypes[0] === "Fabric scraps";
+    formData.itemTypes.length === 1 && formData.itemTypes[0] === SCRAPS_ITEM_TYPE;
   const stepFlow = isDonation
     ? [
         { number: 1, label: "Screening" },
@@ -1257,17 +1251,6 @@ export function SubmissionFormPage() {
                   ))}
                 </div>
 
-                {formData.itemTypes.includes("Other") && (
-                  <input
-                    type="text"
-                    value={formData.otherItemType}
-                    onChange={(event) =>
-                      updateField("otherItemType", event.target.value)
-                    }
-                    className="mt-3 w-full px-4 py-3 border-2 border-[#d4d8d0] rounded-xl focus:border-[#6b8e6b] bg-white"
-                    placeholder="Please specify the item type"
-                  />
-                )}
               </QuestionBlock>
 
               <QuestionBlock label="Q2: What is the overall condition of the item?">
@@ -1502,7 +1485,7 @@ export function SubmissionFormPage() {
               <QuestionBlock label="Q6: Is the item still wearable or usable in its original form?">
                 {isFabricScrapsOnly && (
                   <p className="mb-4 text-sm text-[#5a6f5a]/80">
-                    Not applicable for fabric scraps-only submissions.
+                    Not applicable for scraps-only submissions.
                   </p>
                 )}
                 <div className="grid gap-3 md:grid-cols-2">
@@ -1536,7 +1519,7 @@ export function SubmissionFormPage() {
               <QuestionBlock label="Q8: Is the item repairable?">
                 {isFabricScrapsOnly && (
                   <p className="mb-4 text-sm text-[#5a6f5a]/80">
-                    Not applicable for fabric scraps-only submissions.
+                    Not applicable for scraps-only submissions.
                   </p>
                 )}
                 <div className="grid gap-3 md:grid-cols-2">

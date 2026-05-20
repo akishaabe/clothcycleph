@@ -181,7 +181,7 @@ $db = @(
 $qaHeaders = @("ID", "QA / UAT Task", "Module", "Precondition", "Expected Evidence", "Priority", "Status", "Artifact / File", "Notes")
 $qa = @(
   $qaHeaders,
-  @("QA-001", "Run existing backend DSS unit tests.", "DSS", "backend deps installed", "Cotton/polyester/wool, donation, restricted category, upcycle, fabric scraps tests pass.", "Critical", "To Run", "backend/src/services/dssEngine.test.ts", ""),
+  @("QA-001", "Run existing backend DSS unit tests.", "DSS", "backend deps installed", "Cotton/polyester/wool, donation, restricted category, upcycle, scraps tests pass.", "Critical", "To Run", "backend/src/services/dssEngine.test.ts", ""),
   @("QA-002", "Execute generated DSS QA workbook.", "DSS", "App running with test accounts", "Actual Result and Pass/Fail columns completed.", "Critical", "To Do", "ClothCycle_DSS_QA_Test_Cases.xlsx", ""),
   @("QA-003", "Submit textile with images.", "Submission", "Backend local uploads/R2 path configured", "Images upload, labels persist, partner/user view carousel works.", "High", "To Test", "src/app/components/ImageCarousel.jsx", ""),
   @("QA-004", "Route guard direct URL test after logout.", "Auth/RBAC", "Logged out state", "/dashboard, /partner, /admin redirect to login.", "Critical", "To Test", "src/app/components/ProtectedRoute.jsx", ""),

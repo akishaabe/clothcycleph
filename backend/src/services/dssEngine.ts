@@ -144,13 +144,13 @@ const pathwayRules: Record<
       'Heavily damaged (large tears, unusable as clothing)',
     ],
     cleanliness: ['Needs cleaning', 'Heavily soiled or contaminated'],
-    itemHints: ['Fabric scraps', 'Household textile (curtains, bedsheets)'],
+    itemHints: ['Scraps', 'Big fabric panels (curtains, bedsheets)'],
     fabricHints: ['polyester', 'poly fleece', 'nylon', 'acrylic', 'spandex', 'acetate'],
   },
   donate: {
     conditions: ['Good condition (wearable, no major damage)'],
     cleanliness: ['Yes, clean and ready for use'],
-    itemHints: ['Top', 'Pants / Jeans', 'Dress', 'Jacket / Outerwear'],
+    itemHints: ['Top', 'Bottoms', 'Outerwear'],
     fabricHints: ['cotton', 'linen', 'rayon', 'tencel'],
   },
   upcycle: {
@@ -162,7 +162,14 @@ const pathwayRules: Record<
       'Yes, clean and ready for use',
       'Needs cleaning',
     ],
-    itemHints: ['Fabric scraps', 'Top', 'Pants / Jeans', 'Dress', 'Jacket / Outerwear', 'Household textile (curtains, bedsheets)'],
+    itemHints: [
+      'Scraps',
+      'Big fabric panels (curtains, bedsheets)',
+      'Clothes (top, outerwear, bottoms)',
+      'Top',
+      'Bottoms',
+      'Outerwear',
+    ],
     fabricHints: ['cotton', 'linen', 'denim', 'wool', 'silk'],
   },
 };
@@ -184,6 +191,15 @@ function normalizeList(values?: string[] | string | null) {
   }
 
   return [];
+}
+
+function normalizeItemCategoryText(value: string) {
+  return normalize(value)
+    .replace(/\bfabric scraps?\b/g, 'scraps')
+    .replace(/\bhousehold textile(?:s)?(?: \(curtains, bedsheets\))?\b/g, 'big fabric panels (curtains, bedsheets)')
+    .replace(/\bclothes \(top, outerwear, bottoms\)\b/g, 'clothes top outerwear bottoms')
+    .replace(/\bpants \/ jeans\b|\bpants\b|\bjeans\b/g, 'bottoms')
+    .replace(/\bjacket \/ outerwear\b|\bjacket\b/g, 'outerwear');
 }
 
 function parseExpected(expression: string) {
@@ -225,18 +241,19 @@ function includesAnyText(value: unknown, hints: string[]) {
     : typeof value === 'string'
       ? value
       : '';
+  const normalizedHaystack = normalizeItemCategoryText(haystack);
 
-  return hints.some((hint) => normalize(haystack).includes(normalize(hint)));
+  return hints.some((hint) => normalizedHaystack.includes(normalizeItemCategoryText(hint)));
 }
 
 function isFabricScrapsOnly(submission: any) {
-  const itemTypes = normalizeList(submission.details?.item_types);
+  const itemTypes = normalizeList(submission.details?.item_types).map(normalizeItemCategoryText);
   if (itemTypes.length > 0) {
-    return itemTypes.length === 1 && itemTypes[0] === 'fabric scraps';
+    return itemTypes.length === 1 && itemTypes[0] === 'scraps';
   }
 
-  const itemType = normalize(submission.item_type);
-  return itemType === 'fabric scraps';
+  const itemType = normalizeItemCategoryText(submission.item_type);
+  return itemType === 'scraps';
 }
 
 function hasUniformBranding(submission: any) {
@@ -410,9 +427,11 @@ function inferRepurposingPotential(submission: any) {
     return explicit;
   }
 
-  const itemSignal = normalizeList([submission.item_type, submission.details?.item_types, submission.details?.other_item_type].filter(Boolean).flat() as any).join(' ');
+  const itemSignal = normalizeItemCategoryText(
+    normalizeList([submission.item_type, submission.details?.item_types, submission.details?.other_item_type].filter(Boolean).flat() as any).join(' '),
+  );
   const damage = normalize(inferDamage(submission));
-  if (/curtains|bedsheets|denim|pants|jeans|dress|fabric scraps|household textile/.test(itemSignal)) {
+  if (/curtains|bedsheets|denim|scraps|big fabric panels|clothes|outerwear|bottoms/.test(itemSignal)) {
     return damage.includes('fabric_degradation') ? 'medium' : 'high';
   }
   if (/small|minor|large/.test(damage)) {
@@ -538,7 +557,7 @@ function pathwayRuleScore(pathway: Exclude<Pathway, 'buyback' | 'rejected'>, sub
             ? wearability !== 'not_usable'
             : wearability !== 'wearable_as_is',
       expected: scrapsOnly
-        ? 'Not applicable for fabric scraps-only submissions'
+        ? 'Not applicable for scraps-only submissions'
         : pathway === 'donate'
           ? 'Wearable as-is or after minor repair'
           : pathway === 'upcycle'
@@ -557,7 +576,7 @@ function pathwayRuleScore(pathway: Exclude<Pathway, 'buyback' | 'rejected'>, sub
             ? ['minor_repair', 'moderate_repair', 'not_practical'].includes(repairability)
             : ['moderate_repair', 'not_practical'].includes(repairability),
       expected: scrapsOnly
-        ? 'Not applicable for fabric scraps-only submissions'
+        ? 'Not applicable for scraps-only submissions'
         : pathway === 'donate'
           ? 'No repair or minor repair'
           : pathway === 'upcycle'

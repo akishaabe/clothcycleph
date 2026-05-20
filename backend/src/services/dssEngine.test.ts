@@ -85,7 +85,7 @@ describe('dssEngine', () => {
 
   it('prioritizes upcycling for clean, non-wearable textiles with usable panels', () => {
     const recommendations = buildPathwayRecommendations({
-      item_type: 'Household textile (curtains, bedsheets)',
+      item_type: 'Big fabric panels (curtains, bedsheets)',
       condition: 'Heavily damaged (large tears, unusable as clothing)',
       cleanliness: 'Yes, clean and ready for use',
       details: {
@@ -106,7 +106,7 @@ describe('dssEngine', () => {
 
   it('keeps buyback as an upcycle preference instead of a DSS pathway', () => {
     const recommendations = buildPathwayRecommendations({
-      item_type: 'Top',
+      item_type: 'Outerwear',
       condition: 'Minor damage (small tears, loose seams, stains)',
       cleanliness: 'Yes, clean and ready for use',
       action: 'Upcycle',
@@ -144,15 +144,15 @@ describe('dssEngine', () => {
     expect(recommendations[0].eligibility?.category).toBe('donation_uniform_branding');
   });
 
-  it('skips wearability and repairability scoring for fabric scraps-only submissions', () => {
+  it('skips wearability and repairability scoring for scraps-only submissions', () => {
     const recommendations = buildPathwayRecommendations({
-      item_type: 'Fabric scraps',
+      item_type: 'Scraps',
       condition: 'Minor damage (small tears, loose seams, stains)',
       cleanliness: 'Yes, clean and ready for use',
       action: 'Upcycle',
       details: {
         restricted_category: 'none',
-        item_types: ['Fabric scraps'],
+        item_types: ['Scraps'],
         fiber_composition: 'cotton_natural',
         damage_classification: 'small_hole_tear',
         contamination_level: 'clean',
