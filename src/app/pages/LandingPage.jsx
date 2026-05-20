@@ -615,7 +615,6 @@ export function LandingPage() {
                   clothcycleph@gmail.com
                 </a>
 
-                <div>+63 912 345 6789</div>
                 <div>Makati City, Metro Manila, Philippines</div>
               </div>
             </div>
