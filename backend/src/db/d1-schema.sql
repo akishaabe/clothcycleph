@@ -399,3 +399,10 @@ CREATE TABLE IF NOT EXISTS message_attachments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_message_attachments_message_id ON message_attachments(message_id);
+
+-- Schema migrations table
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  applied_at TEXT DEFAULT CURRENT_TIMESTAMP
+);

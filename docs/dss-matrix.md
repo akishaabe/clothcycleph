@@ -2,7 +2,18 @@
 
 Engine version: `dssEngine-v2-textile-recovery`
 
+Last updated: 2026-05-22
+
 This matrix documents the current DSS behavior implemented in `backend/src/services/dssEngine.ts` and the current submission questions in `src/app/pages/SubmissionFormPage.jsx`.
+
+## Current DSS Pathways
+
+| Output type | Values | Notes |
+|---|---|---|
+| Ranked DSS recommendations | `recycle`, `donate`, `upcycle` | These are the only selectable pathways that can be sent to partners from the DSS confirmation page. |
+| Hard-stop result | `rejected` | Returned when restricted-category, unsafe contamination, or donation-specific blocking rules apply. It is not sent as a partner request. |
+| Buyback | Yes/No preference only | Buyback is not scored and is not a DSS recommendation card. It is collected only when the final selected pathway is Upcycle. |
+| Admin editable DSS rules | Includes `buyback` as a record option | These records are for documentation/audit/future rule publishing. The live engine still uses the coded rule matrix. |
 
 ## Intake Fields
 
@@ -11,7 +22,7 @@ This matrix documents the current DSS behavior implemented in `backend/src/servi
 | Screening | `details.restricted_category` | Does the item belong to any restricted category? | Hospital/medical uniform; PPE or contaminated workwear; Used undergarments; Mold- or chemical-contaminated textile; None of the above |
 | Screening | `details.uniform_branding` | Donation only: Is the item a uniform or does it have identifiable company, school, or institutional branding? | Yes; No. Yes blocks Donation and recommends Upcycle or Recycle |
 | Submission label | `submission_name` | Name this submission | Free text |
-| Item | `details.item_types`, `item_type` | What type of item/s are you submitting? | Donation: Top; Bottoms; Outerwear. Recycle/Upcycle/Not Sure: Scraps; Big fabric panels (curtains, bedsheets); Clothes (top, outerwear, bottoms) |
+| Item | `details.item_types`, `item_type` | What type of item/s are you submitting? | Donation: Top; Bottoms; Outerwear. Recycle/Upcycle/general textile flow: Scraps; Big fabric panels (curtains, bedsheets); Clothes (top, outerwear, bottoms) |
 | Item | `details.other_item_type` | Legacy other item type | Free text from older submissions only |
 | Condition | `condition`, `details.condition` | What is the overall condition of the item? | Good condition; Minor damage; Heavily damaged |
 | Cleanliness | `cleanliness`, `details.cleanliness` | Is/are the item/s clean? | Yes, clean and ready for use; Needs cleaning; Heavily soiled or contaminated |
@@ -29,14 +40,16 @@ This matrix documents the current DSS behavior implemented in `backend/src/servi
 | Recovery | `details.contamination_level` | What is the contamination level? | Appears only when condition is Minor damage or Heavily damaged. Choices: Clean; Washable dirt/odor; Permanent stain; Oil/paint/biological contamination; Chemical/mold contamination |
 | Recovery | `details.repurposing_potential` | What is the repurposing potential? | High; Medium; Low |
 | Recovery | `details.trim_removal` | Are trims/accessories easy to remove? | None; Easy to remove; Difficult to remove; Many mixed components |
-| Pathway | `service_type`, `action` | Intended pathway | Donate; Recycle; Upcycle |
-| Buyback | `buyback_interest` | Interested in buyback? | Yes; No |
-| Buyback | `upcycle_request` | What would you like this item to become? | Free text |
+| Pathway | `service_type`, `action` | Intended pathway | Donate; Recycle; Upcycle. The submission form receives the starting pathway from the selected service; DSS confirmation can later switch among the three scored pathways |
+| Buyback | `buyback_interest` | Interested in buyback? | Yes; No. Only applies when the final pathway is Upcycle |
+| Buyback | `upcycle_request` | What would you like this item to become? | Free text shown when the user says Yes to buyback during the submission form |
 | Media | `photos[]` | Uploaded images | URL plus optional user label |
 
 ## Burn Test Fabric Matrix
 
-Scoring rule: each answer group is split by `OR`, then comma/`&`. The best group receives partial credit. Example: wool flame behavior has 3 expected tokens, so selecting all three scores 3/3.
+Backend scoring rule: each answer group is split by `OR`, then comma/`&`. The best group receives partial credit. Example: wool flame behavior has 3 expected tokens, so selecting all three scores 3/3.
+
+Confidence rule: the backend only allows 100% burn-test confidence when every burn-test group is fully matched. Partial matches are capped at 92%, even when the highest fiber is clearly ranked first. The first fabric hint shown inside the form uses a lighter local preview based on five matched answer groups; the DSS confirmation uses the backend scoring below.
 
 | Fiber | Moment flame touched textile | While in flames | After flame removed | Smell | Ash / residue |
 |---|---|---|---|---|---|
@@ -62,14 +75,16 @@ Scoring rule: each answer group is split by `OR`, then comma/`&`. The best group
 | Contamination includes chemical or mold | Return `rejected` with 100% confidence and stop normal pathway ranking |
 | Otherwise | Continue to donation/recycle/upcycle scoring |
 
+Note: donation-specific blocking rules only run when the user's preferred pathway is Donation. If the user chooses Upcycle or Recycle, the same item can still be scored against those recovery routes unless it fails the restricted-category or chemical/mold gate.
+
 ## Current User Form Flow
 
 1. Safety screening: restricted textile categories. Donation also asks whether the item is a uniform or has identifiable company, school, or institutional branding; a Yes answer blocks progression/submission.
 2. Burn test optional flow: result appears before item details.
-3. Item details: submission name, item type, condition, cleanliness, quantity. Donation uses Top, Bottoms, and Outerwear only; Recycle/Upcycle/Not Sure keep the broader textile categories. Donation blocks Heavily damaged or Heavily soiled/contaminated answers.
+3. Item details: submission name, item type, condition, cleanliness, quantity. Donation uses Top, Bottoms, and Outerwear only; Recycle/Upcycle/general textile flow keeps the broader textile categories. Donation blocks Heavily damaged or Heavily soiled/contaminated answers.
 4. Fabric details: ask whether the user knows the fabric type, then ask fabric type or fabric description, identification method, brand, and finally fiber composition.
 5. Recovery criteria: wearability, damage classification, repairability, conditional contamination level, repurposing potential, trim/accessory removal. Donation skips this section. Recycle/Upcycle disable wearability and repairability when Scraps is the only selected item type; disabled answers are cleared, not required, and not scored.
-6. Intended pathway, buyback request, description, image upload and labels.
+6. Intended pathway, buyback request, description, image upload and labels. The initial intended pathway is normally supplied by the service card the user clicked before opening the form.
 7. Review and submit.
 
 ## DSS Output Surfaces
@@ -80,9 +95,20 @@ Scoring rule: each answer group is split by `OR`, then comma/`&`. The best group
 | DSS confirmation | `DSS Recommendations` read-only list with all ranked pathways | Includes rank, confidence, score, explanation, matched checks, missed checks, and a why-this-was-recommended accordion |
 | DSS pathway selector | Separate `Send this request as` control | User can keep the initial pathway or switch; the DSS score cards themselves are no longer the selector |
 | DSS confirmation selected pathway | User-selected pathway remains visible with full DSS confidence details | If an initial intent exists, the page asks for confirmation before sending and states whether the selected pathway matches the top DSS recommendation |
-| Partner request brief | Partner-facing summary of the chosen pathway and DSS result | Includes selected pathway, confidence, rank, score, all pathway scores, item details, DSS reasoning, matched checks, and review flags |
+| Partner request brief | Partner-facing summary of the chosen pathway and DSS result | Includes selected pathway, confidence, rank, score, all pathway scores, item details, DSS reasoning, matched checks, review flags, and buyback preference when the sent pathway is Upcycle |
 | Partner request modal | Detailed partner review panel | Shows brief, DSS engine result, score, matched/missed checks, item details, burn-test details, and uploaded images |
 | Admin audit panel | DSS explanation audit | Uses `recommendation_runs` and `recommendation_results` with `engine_version`, `input_snapshot`, `rule_checks`, and selected partner context |
+| Admin editable rules | Manual DSS rule records | Saved in `dss_rules` for documentation/audit/future tuning; these records do not currently override the coded engine |
+
+## DSS API Behavior
+
+| API behavior | Current implementation |
+|---|---|
+| Preview DSS recommendations | Backend evaluates the submission and returns burn-test analysis plus ranked `recycle`, `donate`, and `upcycle` recommendations unless a `rejected` hard-stop applies |
+| Send DSS request to partner | `recommended_pathway` must be `recycle`, `donate`, or `upcycle`; `buyback_interest` is accepted only as optional metadata |
+| Sent Upcycle request | Saves `buyback_interest` as true only when `recommended_pathway` is `upcycle` and the user confirms Yes |
+| Sent Recycle/Donate request | Forces buyback interest to false for the request context |
+| Audit trail | Creates a `recommendation_runs` row and selected `recommendation_results` row with `engine_version`, selected pathway, selected partner, score, confidence, checks, and output payload |
 
 ## Pathway Scoring
 

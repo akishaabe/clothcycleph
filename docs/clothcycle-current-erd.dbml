@@ -1,6 +1,6 @@
 Project clothcycle_ph {
   database_type: "PostgreSQL / Neon current QA schema"
-  Note: "ERD snapshot generated from the live Neon public schema on 2026-05-19. Cloudflare D1 files are reference/migration targets only."
+  Note: "ERD snapshot for the current Neon QA schema, checked against the D1 reference schema on 2026-05-22. Cloudflare D1 files are reference/migration targets only."
 }
 
 Table users {
@@ -9,9 +9,9 @@ Table users {
   name varchar [not null]
   password_hash varchar [not null]
   password_setup_required boolean [default: false, note: "True only for Google-created accounts until the user sets a local password"]
-  role varchar [default: "user", note: "user, partner, admin"]
-  status varchar [default: "active", note: "active, inactive, suspended"]
-  partner_id uuid [ref: > partners.id]
+  role varchar [note: "Default: user. Values: user, partner, admin"]
+  status varchar [note: "Default: active. Values: active, inactive, suspended"]
+  partner_id uuid [note: "Current partner pointer. Relationship shown through partners.user_id to avoid circular ERD dependency."]
   avatar_url varchar
   profile_photo jsonb
   bio text
@@ -22,7 +22,7 @@ Table users {
   two_factor_enabled boolean [default: true]
   two_factor_code_hash varchar
   two_factor_code_expires_at timestamp
-  two_factor_method varchar [default: "email", note: "email-only current QA default"]
+  two_factor_method varchar [note: "Default: email. Email-only current QA default"]
   two_factor_secret_encrypted text
   two_factor_confirmed_at timestamp
   email_verified_at timestamp
@@ -34,7 +34,7 @@ Table users {
 
 Table user_preferences {
   id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [not null, ref: > users.id]
+  user_id uuid [not null, note: "References users.id"]
   email_notifications boolean [default: true]
   push_notifications boolean [default: true]
   sms_notifications boolean [default: false]
@@ -44,7 +44,7 @@ Table user_preferences {
 
 Table user_recovery_codes {
   id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [not null, ref: > users.id]
+  user_id uuid [not null, note: "References users.id"]
   code_hash varchar [not null]
   used_at timestamp
   created_at timestamp [default: `now()`]
@@ -52,7 +52,7 @@ Table user_recovery_codes {
 
 Table password_reset_tokens {
   id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [not null, ref: > users.id]
+  user_id uuid [not null, note: "References users.id"]
   token_hash varchar [not null]
   expires_at timestamp [not null]
   used_at timestamp
@@ -61,7 +61,7 @@ Table password_reset_tokens {
 
 Table auth_events {
   id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [ref: > users.id]
+  user_id uuid [note: "References users.id"]
   event_type varchar [not null]
   ip_address varchar
   user_agent text
@@ -78,7 +78,7 @@ Table rate_limits {
 
 Table partners {
   id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [ref: > users.id]
+  user_id uuid [note: "References users.id"]
   name varchar [not null]
   description text
   logo_url varchar
@@ -93,7 +93,7 @@ Table partners {
   pickup_areas text
   rule_change_requires_admin boolean [default: true]
   contact_person varchar
-  status varchar [default: "pending", note: "pending, active, inactive, rejected"]
+  status varchar [note: "Default: pending. Values: pending, active, inactive, rejected"]
   verified boolean [default: false]
   rating numeric [default: 0]
   latitude numeric
@@ -104,14 +104,14 @@ Table partners {
 
 Table submissions {
   id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [not null, ref: > users.id]
+  user_id uuid [not null, note: "References users.id"]
   item_type varchar [not null]
   condition varchar [not null]
   fabric varchar
   cleanliness varchar
   description text
   photos json [note: "Postgres json[] array of uploaded image payloads"]
-  status varchar [default: "pending", note: "pending, verified, processed, rejected"]
+  status varchar [note: "Default: pending. Values: pending, verified, processed, rejected"]
   assigned_partner_id uuid [ref: > partners.id]
   submission_code varchar [unique]
   submission_name varchar
@@ -139,7 +139,7 @@ Table submission_details {
   brand text
   no_brand_visible boolean [default: false]
   fabric_description text
-  restricted_category text [default: "none"]
+  restricted_category text [note: "Default: none"]
   uniform_branding text
   fiber_composition text
   wearability text
@@ -178,16 +178,16 @@ Table submission_images {
 Table recommendation_runs {
   id uuid [pk, default: `gen_random_uuid()`]
   submission_id uuid [ref: > submissions.id]
-  requested_by_user_id uuid [ref: > users.id]
-  engine_name varchar [default: "dss"]
+  requested_by_user_id uuid [note: "References users.id"]
+  engine_name varchar [note: "Default: dss"]
   engine_version varchar
-  status varchar [default: "completed", note: "pending, running, completed, failed"]
+  status varchar [note: "Default: completed. Values: pending, running, completed, failed"]
   criteria jsonb
   input_snapshot jsonb
   started_at timestamp [default: `now()`]
   completed_at timestamp
   error_message text
-  audit_label text [default: "DSS audit trail"]
+  audit_label text [note: "Default: DSS audit trail"]
   created_at timestamp [default: `now()`]
 }
 
@@ -210,7 +210,7 @@ Table recommendation_results {
 Table recommendation_feedback {
   id uuid [pk, default: `gen_random_uuid()`]
   recommendation_result_id uuid [not null, ref: > recommendation_results.id]
-  user_id uuid [ref: > users.id]
+  user_id uuid [note: "References users.id"]
   rating int
   accepted boolean
   feedback text
@@ -227,8 +227,8 @@ Table dss_rules {
   weight numeric [default: 0]
   active boolean [default: true]
   description text
-  created_by_user_id uuid [ref: > users.id]
-  updated_by_user_id uuid [ref: > users.id]
+  created_by_user_id uuid [note: "References users.id"]
+  updated_by_user_id uuid [note: "References users.id"]
   created_at timestamp [default: `now()`]
   updated_at timestamp [default: `now()`]
 }
@@ -236,10 +236,10 @@ Table dss_rules {
 Table transactions {
   id uuid [pk, default: `gen_random_uuid()`]
   submission_id uuid [not null, ref: > submissions.id]
-  from_user_id uuid [not null, ref: > users.id]
+  from_user_id uuid [not null, note: "References users.id"]
   to_partner_id uuid [ref: > partners.id]
   type varchar [not null, note: "recycle, donate, upcycle, buyback"]
-  status varchar [default: "pending", note: "pending, accepted, completed, rejected"]
+  status varchar [note: "Default: pending. Values: pending, accepted, completed, rejected"]
   amount numeric
   notes text
   created_at timestamp [default: `now()`]
@@ -248,11 +248,11 @@ Table transactions {
 
 Table conversations {
   id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [not null, ref: > users.id]
+  user_id uuid [not null, note: "References users.id"]
   partner_id uuid [ref: > partners.id]
-  conversation_type varchar [default: "general"]
+  conversation_type varchar [note: "Default: general"]
   subject text
-  status varchar [default: "open", note: "open, closed, archived"]
+  status varchar [note: "Default: open. Values: open, closed, archived"]
   related_submission_id uuid [ref: > submissions.id]
   created_at timestamp [default: `now()`]
   updated_at timestamp [default: `now()`]
@@ -260,8 +260,8 @@ Table conversations {
 
 Table messages {
   id uuid [pk, default: `gen_random_uuid()`]
-  from_user_id uuid [not null, ref: > users.id]
-  to_user_id uuid [not null, ref: > users.id]
+  from_user_id uuid [not null]
+  to_user_id uuid [not null]
   conversation_id uuid [ref: > conversations.id]
   sender_type varchar
   content text [not null]
@@ -270,7 +270,7 @@ Table messages {
   related_submission_id uuid [ref: > submissions.id]
   related_transaction_id uuid [ref: > transactions.id]
   action_url text
-  metadata jsonb [default: "{}"]
+  metadata jsonb [default: `'{}'`]
   created_at timestamp [default: `now()`]
   updated_at timestamp [default: `now()`]
 }
@@ -286,13 +286,13 @@ Table message_attachments {
 
 Table notifications {
   id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [not null, ref: > users.id]
+  user_id uuid [not null, note: "References users.id"]
   type varchar [not null]
   title varchar
   message text
   body text
   related_id uuid
-  data jsonb [default: "{}"]
+  data jsonb [default: `'{}'`]
   read boolean [default: false]
   read_at timestamp
   created_at timestamp [default: `now()`]
@@ -302,13 +302,13 @@ Table notifications {
 Table partner_rule_change_requests {
   id uuid [pk, default: `gen_random_uuid()`]
   partner_id uuid [ref: > partners.id]
-  requested_by_user_id uuid [ref: > users.id]
+  requested_by_user_id uuid [note: "References users.id"]
   rule_area varchar [not null]
   requested_change text [not null]
   reason text
-  status varchar [default: "pending", note: "pending, accepted, approved, declined, needs_more_information, implemented"]
+  status varchar [note: "Default: pending. Values: pending, accepted, approved, declined, needs_more_information, implemented"]
   admin_notes text
-  reviewed_by_user_id uuid [ref: > users.id]
+  reviewed_by_user_id uuid [note: "References users.id"]
   reviewed_at timestamp
   created_at timestamp [default: `now()`]
   updated_at timestamp [default: `now()`]
@@ -316,7 +316,7 @@ Table partner_rule_change_requests {
 
 Table activity_logs {
   id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [ref: > users.id]
+  user_id uuid [note: "References users.id"]
   action varchar [not null]
   entity_type varchar
   entity_id uuid
