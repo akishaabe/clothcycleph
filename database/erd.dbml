@@ -79,6 +79,8 @@ Table submission_details {
   brand text
   no_brand_visible boolean
   fabric_description text
+  weight_value decimal
+  weight_unit varchar
   created_at timestamp
   updated_at timestamp
 }
@@ -113,8 +115,24 @@ Table transactions {
   to_partner_id uuid
   type varchar [not null]
   notes text
+  bag_color varchar
+  estimated_distance_km decimal
+  estimated_carbon_kg decimal
+  outcome_title text
+  outcome_description text
+  outcome_photos jsonb
+  outcome_reported_at timestamp
   created_at timestamp
   updated_at timestamp
+}
+
+Table deleted_records {
+  id uuid [pk]
+  entity_type varchar [not null]
+  entity_id uuid [not null]
+  snapshot jsonb
+  deleted_by_user_id uuid
+  deleted_at timestamp
 }
 
 Table recommendation_runs {
@@ -237,3 +255,4 @@ Ref: messages.from_user_id > users.id
 Ref: messages.to_user_id > users.id
 Ref: messages.conversation_id > conversations.id
 Ref: message_attachments.message_id > messages.id
+Ref: deleted_records.deleted_by_user_id > users.id

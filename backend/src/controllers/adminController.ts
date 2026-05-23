@@ -143,12 +143,40 @@ export const deleteAdminUser = async (req: Request, res: Response) => {
       throw new AppError(400, 'You cannot delete your own account');
     }
 
+    const existing = await query('SELECT * FROM users WHERE id = $1', [req.params.id]);
+    if (existing.rows.length === 0) {
+      throw new AppError(404, 'User not found');
+    }
+
+    await query(
+      `INSERT INTO deleted_records (entity_type, entity_id, snapshot, deleted_by_user_id)
+       VALUES ('user', $1, $2, $3)`,
+      [req.params.id, JSON.stringify(existing.rows[0]), req.user?.id || null]
+    );
+
     const result = await query('DELETE FROM users WHERE id = $1 RETURNING id', [req.params.id]);
     if (result.rows.length === 0) {
       throw new AppError(404, 'User not found');
     }
 
     res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};
+
+export const getDeletedRecords = async (req: Request, res: Response) => {
+  try {
+    requireAdmin(req);
+    const result = await query(
+      `SELECT dr.*, u.name AS deleted_by_name, u.email AS deleted_by_email
+       FROM deleted_records dr
+       LEFT JOIN users u ON u.id = dr.deleted_by_user_id
+       ORDER BY dr.deleted_at DESC
+       LIMIT 200`
+    );
+
+    res.json({ data: result.rows, count: result.rows.length });
   } catch (error) {
     res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
   }

@@ -375,6 +375,7 @@ export const dssService = {
   async updateRequestStatus(
     requestId: string,
     payload: { status: 'pending' | 'accepted' | 'completed' | 'rejected'; notes?: string }
+      & { outcome_title?: string; outcome_description?: string; outcome_photos?: string[] }
   ): Promise<{ message: string; data: DssRequest }> {
     return fetchWithAuth(`/dss/requests/${requestId}/status`, {
       method: 'PUT',
@@ -599,6 +600,10 @@ export const adminService = {
     return fetchWithAuth(`/admin/users/${id}`, {
       method: 'DELETE',
     });
+  },
+
+  async getDeletedRecords(): Promise<{ data: any[]; count: number }> {
+    return fetchWithAuth('/admin/deleted-records', { method: 'GET' });
   },
 
   async getSubmissions(): Promise<{ data: Submission[]; count: number }> {

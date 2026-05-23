@@ -159,6 +159,8 @@ export interface SubmissionDetails {
   damage_classification?: string | null;
   repurposing_potential?: string | null;
   trim_removal?: string | null;
+  weight_value?: number | null;
+  weight_unit?: 'kg' | 'g' | null;
 }
 
 export interface BurnTestDetails {
@@ -276,6 +278,8 @@ export interface DssRequest {
   submission_name?: string;
   item_type?: string;
   quantity?: number;
+  weight_value?: number | null;
+  weight_unit?: 'kg' | 'g' | null;
   condition?: string;
   cleanliness?: string;
   fabric?: string;
@@ -297,6 +301,13 @@ export interface DssRequest {
       selected?: string;
     }>;
   };
+  bag_color?: string;
+  estimated_distance_km?: number | null;
+  estimated_carbon_kg?: number | null;
+  outcome_title?: string | null;
+  outcome_description?: string | null;
+  outcome_photos?: SubmissionPhotoValue[];
+  outcome_reported_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -312,6 +323,8 @@ export interface SendDssRecommendationPayload {
   partner_id: string;
   recommended_pathway: 'recycle' | 'donate' | 'upcycle';
   buyback_interest?: boolean;
+  estimated_distance_km?: number | null;
+  estimated_carbon_kg?: number | null;
   brief: string;
 }
 

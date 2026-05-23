@@ -609,6 +609,16 @@ export async function updateUserD1(
 }
 
 export async function deleteUserD1(db: D1Database, userId: string) {
+  const user = await queryD1First(db, 'SELECT * FROM users WHERE id = ?', [userId]);
+  if (!user) {
+    throw new Error('User not found');
+  }
+  await executeD1(
+    db,
+    `INSERT INTO deleted_records (id, entity_type, entity_id, snapshot)
+     VALUES (?, 'user', ?, ?)`,
+    [generateD1UUID(), userId, JSON.stringify(user)]
+  );
   const result = await executeD1(db, 'DELETE FROM users WHERE id = ?', [userId]);
   if (!result) {
     throw new Error('User not found');

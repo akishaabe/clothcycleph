@@ -177,6 +177,8 @@ CREATE TABLE IF NOT EXISTS submission_details (
   damage_classification TEXT,
   repurposing_potential TEXT,
   trim_removal TEXT,
+  weight_value REAL,
+  weight_unit TEXT DEFAULT 'kg',
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -220,6 +222,13 @@ CREATE TABLE IF NOT EXISTS transactions (
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'completed', 'rejected')),
   amount REAL,
   notes TEXT,
+  bag_color TEXT,
+  estimated_distance_km REAL,
+  estimated_carbon_kg REAL,
+  outcome_title TEXT,
+  outcome_description TEXT,
+  outcome_photos TEXT DEFAULT '[]',
+  outcome_reported_at TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -228,6 +237,18 @@ CREATE INDEX IF NOT EXISTS idx_transactions_submission_id ON transactions(submis
 CREATE INDEX IF NOT EXISTS idx_transactions_from_user_id ON transactions(from_user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_to_partner_id ON transactions(to_partner_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
+
+CREATE TABLE IF NOT EXISTS deleted_records (
+  id TEXT PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  snapshot TEXT,
+  deleted_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  deleted_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_deleted_records_entity ON deleted_records(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_deleted_records_deleted_at ON deleted_records(deleted_at DESC);
 
 -- Recommendations engine tables
 CREATE TABLE IF NOT EXISTS recommendation_runs (

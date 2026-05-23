@@ -31,6 +31,12 @@ const pathwayLabels = {
   buyback: "Buyback",
 };
 
+const bagGuidance = {
+  recycle: "White bag",
+  upcycle: "Black bag",
+  donate: "Green bag",
+};
+
 const getRequestActivityTime = (request) =>
   new Date(request.updated_at || request.created_at || 0).getTime();
 
@@ -52,7 +58,7 @@ export function DssRequestsPage() {
       const response = await dssService.getUserRequests();
       setRequests(response.data);
     } catch (loadError) {
-      setError(loadError.message || "Unable to load DSS requests.");
+      setError(loadError.message || "Unable to load partner requests.");
     } finally {
       setIsLoading(false);
     }
@@ -116,7 +122,7 @@ export function DssRequestsPage() {
   if (isLoading) {
     return (
       <BrandLoadingScreen
-        title="Loading sent DSS requests"
+        title="Loading sent partner requests"
         message="We are gathering partner replies and pending briefs."
         detail="Accepted, rejected, completed, and pending requests will appear here."
       />
@@ -143,7 +149,7 @@ export function DssRequestsPage() {
 
       <main className="mx-auto max-w-6xl px-6 py-8">
         <section className="mb-6 rounded-[28px] border border-[#dce4da] bg-white/85 p-8 shadow-[0_24px_80px_rgba(25,34,29,0.1)]">
-          <h1 className="font-gloock text-4xl text-[#19221d]">Sent DSS Requests</h1>
+          <h1 className="font-gloock text-4xl text-[#19221d]">Sent Partner Requests</h1>
           <p className="mt-2 max-w-2xl text-[#5f6f67]">
             View every brief you sent to partners, follow decisions, and remind partners when a request is still pending.
           </p>
@@ -214,10 +220,31 @@ export function DssRequestsPage() {
                     <div className="mt-1 text-sm text-[#5f6f67]">
                       {pathwayLabels[request.type] || request.type} request sent to {request.partner_name || "partner"}
                     </div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-[#5f6f67]">
+                      <span className="rounded-full bg-white px-3 py-1">
+                        {bagGuidance[request.type] || "Bag color pending"}
+                      </span>
+                      {request.weight_value && (
+                        <span className="rounded-full bg-white px-3 py-1">
+                          {request.weight_value} {request.weight_unit || "kg"}
+                        </span>
+                      )}
+                      {request.estimated_carbon_kg != null && (
+                        <span className="rounded-full bg-[#edf7ed] px-3 py-1 text-[#336158]">
+                          {Number(request.estimated_carbon_kg).toFixed(1)} kg CO2e estimate
+                        </span>
+                      )}
+                    </div>
                     {request.notes && (
                       <p className="mt-3 max-w-2xl rounded-xl bg-white px-4 py-3 text-sm leading-6 text-[#5f6f67]">
                         {request.notes}
                       </p>
+                    )}
+                    {request.outcome_title && (
+                      <div className="mt-3 max-w-2xl rounded-xl border border-[#cfe2cf] bg-[#edf7ed] px-4 py-3 text-sm leading-6 text-[#336158]">
+                        <span className="font-semibold">{request.outcome_title}:</span>{" "}
+                        {request.outcome_description || "The partner reported what happened to your textile."}
+                      </div>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -234,7 +261,7 @@ export function DssRequestsPage() {
                     onClick={() => navigate(`/dss/${request.submission_id}?request=${request.id}`)}
                     className="rounded-xl border border-[#dce4da] px-3 py-2 text-sm text-[#5f6f67] hover:bg-[#f3f5f2]"
                   >
-                    View submission DSS
+                    View recommendation
                   </button>
                   {normalizeStatus(request.status) === "pending" && (
                     <button

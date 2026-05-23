@@ -79,6 +79,7 @@ import {
   deleteDssRule,
   getAdminSubmissions,
   getAdminUsers,
+  getDeletedRecords,
   getDssRules,
   updateAdminSubmissionStatus,
   updateAdminUser,
@@ -355,6 +356,7 @@ app.get('/api/admin/users', controller(getAdminUsers, { auth: true }));
 app.post('/api/admin/users', controller(createAdminUser, { auth: true }));
 app.put('/api/admin/users/:id', controller(updateAdminUser, { auth: true, paramsSchema: uuidParamSchema }));
 app.delete('/api/admin/users/:id', controller(deleteAdminUser, { auth: true, paramsSchema: uuidParamSchema }));
+app.get('/api/admin/deleted-records', controller(getDeletedRecords, { auth: true }));
 app.get('/api/admin/submissions', controller(getAdminSubmissions, { auth: true }));
 app.put('/api/admin/submissions/:id/status', controller(updateAdminSubmissionStatus, { auth: true, paramsSchema: uuidParamSchema }));
 app.get('/api/admin/dss-rules', controller(getDssRules, { auth: true }));

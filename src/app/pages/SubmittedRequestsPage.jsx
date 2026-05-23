@@ -3,6 +3,7 @@ import { ArrowLeft, Image as ImageIcon, Recycle, Search, X } from "lucide-react"
 import { useEffect, useMemo, useState } from "react";
 import { dssService, submissionService } from "../../services/api";
 import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
+import { ImageCarousel } from "../components/ImageCarousel";
 import { formatManilaDate } from "../../utils/dateTime";
 
 const statusClass = {
@@ -51,6 +52,14 @@ const toPhotoUrl = (photo) => {
   if (!photo) return "";
   return typeof photo === "string" ? photo : photo.url || "";
 };
+
+const normalizeOutcomePhotos = (photos = []) =>
+  photos
+    .map((photo, index) => ({
+      url: toPhotoUrl(photo),
+      label: typeof photo === "object" && photo?.label ? photo.label : `Outcome photo ${index + 1}`,
+    }))
+    .filter((photo) => photo.url);
 
 const getActivityTime = (value) =>
   new Date(value?.updated_at || value?.created_at || value?.submittedAt || 0).getTime();
@@ -119,6 +128,8 @@ export function SubmittedRequestsPage() {
       const selectedPathway =
         latestPartnerRequest?.type || submission.service_type || submission.action || "not_sure";
       const status = statusFromSubmission(submission, latestPartnerRequest);
+      const latestOutcomeRequest =
+        relatedRequests.find((request) => request.outcome_title || request.outcome_photos?.length > 0) || null;
 
       return {
         id: submission.id,
@@ -136,6 +147,9 @@ export function SubmittedRequestsPage() {
         activityAt: latestPartnerRequest?.updated_at || latestPartnerRequest?.created_at || submission.updated_at || submission.created_at,
         confidence: latestPartnerRequest?.confidence ?? recommendation?.confidence ?? null,
         score: recommendation?.score ?? latestPartnerRequest?.score ?? null,
+        outcomeTitle: latestOutcomeRequest?.outcome_title || "",
+        outcomeDescription: latestOutcomeRequest?.outcome_description || "",
+        outcomePhotos: normalizeOutcomePhotos(latestOutcomeRequest?.outcome_photos || []),
       };
     });
   }, [partnerRequests, submissions]);
@@ -178,7 +192,7 @@ export function SubmittedRequestsPage() {
       <BrandLoadingScreen
         title="Loading submitted requests"
         message="We are gathering your saved textile submissions."
-        detail="Statuses, partner routing, and DSS details will appear here."
+        detail="Statuses, partner routing, and recommendation details will appear here."
       />
     );
   }
@@ -205,7 +219,7 @@ export function SubmittedRequestsPage() {
         <section className="mb-6 rounded-[28px] border border-[#dce4da] bg-white/85 p-8 shadow-[0_24px_80px_rgba(25,34,29,0.1)]">
           <h1 className="font-gloock text-4xl text-[#19221d]">My Requests</h1>
           <p className="mt-2 max-w-2xl text-[#5f6f67]">
-            View your submitted textile requests, DSS outcomes, partner routing, and request status in one place.
+            View your submitted textile requests, recommendation outcomes, partner routing, and request status in one place.
           </p>
         </section>
 
@@ -270,7 +284,7 @@ export function SubmittedRequestsPage() {
                     </div>
                     <div className="mt-3 grid gap-2 text-sm text-[#5f6f67] sm:grid-cols-2 lg:grid-cols-3">
                       <div className="rounded-xl border border-[#e1e7df] bg-white/70 px-3 py-2">
-                        Recommended: {pathwayLabels[request.recommendedPathway] || "DSS pending"}
+                        Recommended: {pathwayLabels[request.recommendedPathway] || "Recommendation pending"}
                       </div>
                       <div className="rounded-xl border border-[#e1e7df] bg-white/70 px-3 py-2">
                         Confidence: {formatConfidence(request.confidence)}
@@ -279,6 +293,22 @@ export function SubmittedRequestsPage() {
                         Score: {request.score == null ? "N/A" : `${Number(request.score).toFixed(1)} / 100`}
                       </div>
                     </div>
+                    {request.outcomeTitle && (
+                      <div className="mt-3 rounded-2xl border border-[#cfe2cf] bg-[#edf7ed] px-4 py-3 text-sm text-[#336158]">
+                        <div className="font-semibold text-[#19221d]">
+                          Congratulations! Your {request.title} was turned into {request.outcomeTitle}!
+                        </div>
+                        {request.outcomePhotos.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedRequest(request)}
+                            className="mt-2 rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-[#336158] hover:bg-[#f7faf5]"
+                          >
+                            View photos
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     <span className={`rounded-full border px-3 py-1 text-xs ${statusClass[request.status] || statusClass.pending}`}>
@@ -296,7 +326,7 @@ export function SubmittedRequestsPage() {
                       }
                       className="rounded-xl bg-[#336158] px-3 py-2 text-sm font-semibold text-white hover:bg-[#2a4c48]"
                     >
-                      Open DSS
+                      Open recommendation
                     </button>
                   </div>
                 </div>
@@ -391,9 +421,9 @@ function RequestDetailsModal({ request, onClose, onOpenDss, onOpenMessages }) {
 
           <section className="space-y-4">
             <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4">
-              <h3 className="mb-3 font-semibold text-[#19221d]">DSS Recommendation</h3>
+              <h3 className="mb-3 font-semibold text-[#19221d]">Recommendation</h3>
               <div className="grid gap-3 text-sm text-[#5f6f67]">
-                <DetailItem label="Recommended pathway" value={pathwayLabels[request.recommendedPathway] || "DSS pending"} />
+                <DetailItem label="Recommended pathway" value={pathwayLabels[request.recommendedPathway] || "Recommendation pending"} />
                 <DetailItem label="Confidence" value={formatConfidence(request.confidence)} />
                 <DetailItem label="Score" value={request.score == null ? "N/A" : `${Number(request.score).toFixed(1)} / 100`} />
               </div>
@@ -403,6 +433,22 @@ function RequestDetailsModal({ request, onClose, onOpenDss, onOpenMessages }) {
                 </p>
               )}
             </div>
+
+            {request.outcomeTitle && (
+              <div className="rounded-2xl border border-[#cfe2cf] bg-[#edf7ed] p-4 text-[#336158]">
+                <div className="font-semibold text-[#19221d]">
+                  Congratulations! Your {request.title} was turned into {request.outcomeTitle}!
+                </div>
+                <p className="mt-2 text-sm leading-6">
+                  {request.outcomeDescription || "The partner shared a happy update for your textile."}
+                </p>
+                {request.outcomePhotos.length > 0 && (
+                  <div className="mt-3">
+                    <ImageCarousel title="Outcome photos" allowDownload images={request.outcomePhotos} />
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4">
               <h3 className="mb-3 font-semibold text-[#19221d]">Partner Brief</h3>

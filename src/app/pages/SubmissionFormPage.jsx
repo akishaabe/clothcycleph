@@ -54,7 +54,7 @@ const restrictedCategoryOptions = [
 
 const restrictedCategoryMessages = {
   hospital_medical_uniform:
-    "This item is not eligible for DSS assessment because medical textiles may carry safety and contamination risks.",
+    "This item is not eligible for textile routing because medical textiles may carry safety and contamination risks.",
   ppe_contaminated_workwear:
     "This item is rejected because PPE or contaminated workwear may contain hazardous residues or biological exposure risks.",
   used_undergarments:
@@ -149,6 +149,24 @@ const pathwayOptions = [
   { value: "Recycle", icon: Recycle },
   { value: "Upcycle", icon: RefreshCcw },
 ];
+
+const bagReminderByAction = {
+  Recycle: {
+    label: "White bag",
+    detail: "Use a white bag so partner staff can identify this as a recycling request.",
+    swatch: "bg-white border-[#d4d8d0]",
+  },
+  Upcycle: {
+    label: "Black bag",
+    detail: "Use a black bag so the item is routed for upcycling or repair review.",
+    swatch: "bg-[#19221d] border-[#19221d]",
+  },
+  Donate: {
+    label: "Green bag",
+    detail: "Use a green bag so clean donation items are kept separate for handoff.",
+    swatch: "bg-[#4f8f58] border-[#4f8f58]",
+  },
+};
 
 const burnTestMomentOptions = [
   "Burned fast",
@@ -368,6 +386,8 @@ export function SubmissionFormPage() {
     condition: "",
     cleanliness: "",
     quantity: "",
+    weightValue: "",
+    weightUnit: "kg",
     knowsFabricType: "",
     fiberComposition: "",
     fabricTypes: [],
@@ -627,6 +647,8 @@ export function SubmissionFormPage() {
           damage_classification: toValueKey(formData.damageClassification) || null,
           repurposing_potential: toValueKey(formData.repurposingPotential) || null,
           trim_removal: toValueKey(formData.trimRemoval) || null,
+          weight_value: formData.weightValue ? Number(formData.weightValue) : null,
+          weight_unit: formData.weightUnit,
         },
         burn_test: {
           performed: formData.burnTestChoice === "Yes",
@@ -722,6 +744,7 @@ export function SubmissionFormPage() {
     formData.condition &&
     formData.cleanliness &&
     formData.quantity &&
+    formData.weightValue &&
     !hasDonationBlockingAnswer;
 
   const isStepThreeComplete =
@@ -759,6 +782,7 @@ export function SubmissionFormPage() {
     isStepFourComplete;
 
   const burnTestResult = analyzeBurnTestAnswers(formData);
+  const bagReminder = bagReminderByAction[formData.action] || null;
 
   const reviewRows = [
     {
@@ -780,6 +804,7 @@ export function SubmissionFormPage() {
     { label: "Condition", value: formData.condition, step: 2 },
     { label: "Cleanliness", value: formData.cleanliness, step: 2 },
     { label: "Quantity", value: `${formData.quantity} items`, step: 2 },
+    { label: "Weight", value: `${formData.weightValue} ${formData.weightUnit}`, step: 2 },
     { label: "Fabric Type Known", value: formData.knowsFabricType, step: 3 },
     {
       label: "Material/Fiber Composition",
@@ -811,7 +836,7 @@ export function SubmissionFormPage() {
     return (
       <BrandLoadingScreen
         title="Generating your path..."
-        message="Hang tight, the DSS engine is generating its recommendations."
+        message="Hang tight, we are generating your recommendations."
         detail="We are preparing your fabric clues, item details, and partner-ready brief."
       />
     );
@@ -909,7 +934,7 @@ export function SubmissionFormPage() {
 >
           {step === 1 && (
             <div className="space-y-7">
-              <h7 className="text-2xl text-[#2d4a2d]">Eligibility Screening</h7>
+              <h2 className="text-2xl text-[#2d4a2d]">Eligibility Screening</h2>
 
               <QuestionBlock label="Q0: Does the item belong to any restricted category?">
                 <div className="grid gap-3">
@@ -929,7 +954,7 @@ export function SubmissionFormPage() {
                 <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-4 text-sm leading-6 text-red-700">
                   {restrictedCategoryMessages[formData.restrictedCategory]}
                   <div className="mt-2 font-semibold">
-                    DSS evaluation stopped. This item will not be treated as donation, recycling, or upcycling material.
+                    Evaluation stopped. This item will not be treated as donation, recycling, or upcycling material.
                   </div>
                 </div>
               )}
@@ -966,7 +991,7 @@ export function SubmissionFormPage() {
 
               {formData.restrictedCategory === "none" &&
                 (!isDonation || formData.uniformBranding === "No") && (
-                <h7 className="text-2xl text-[#2d4a2d]">Burn Test</h7>
+                <h2 className="text-2xl text-[#2d4a2d]">Burn Test</h2>
               )}
 
               {formData.restrictedCategory === "none" &&
@@ -975,7 +1000,7 @@ export function SubmissionFormPage() {
                 <QuestionBlock label="Burn test fabric result">
                   <div className="rounded-2xl border border-[#d4d8d0] bg-[#f5f5f0] p-5">
                     <p className="mb-4 text-[#5a6f5a]">
-                      Your fabric might be one of these based on DSS burn-test
+                      Your fabric might be one of these based on burn-test
                       rules.
                     </p>
 
@@ -1224,7 +1249,7 @@ export function SubmissionFormPage() {
 
           {step === 2 && (
             <div className="space-y-7">
-              <h7 className="text-2xl text-[#2d4a2d]">Item Details</h7>
+              <h2 className="text-2xl text-[#2d4a2d]">Item Details</h2>
 
               <QuestionBlock label="Name this submission (Optional)">
                 <input
@@ -1317,6 +1342,30 @@ export function SubmissionFormPage() {
                 />
               </QuestionBlock>
 
+              <QuestionBlock label="Estimated weight">
+                <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
+                  <input
+                    type="number"
+                    value={formData.weightValue}
+                    onChange={(event) =>
+                      updateField("weightValue", event.target.value)
+                    }
+                    className="w-full px-4 py-3 border-2 border-[#d4d8d0] rounded-xl focus:border-[#6b8e6b] bg-white"
+                    placeholder="Enter textile weight"
+                    min="0.01"
+                    step="0.01"
+                  />
+                  <select
+                    value={formData.weightUnit}
+                    onChange={(event) => updateField("weightUnit", event.target.value)}
+                    className="w-full px-4 py-3 border-2 border-[#d4d8d0] rounded-xl focus:border-[#6b8e6b] bg-white text-[#2d4a2d]"
+                  >
+                    <option value="kg">kg</option>
+                    <option value="g">g</option>
+                  </select>
+                </div>
+              </QuestionBlock>
+
               <div className="flex gap-3">
                 <button
                   onClick={() => setStep(1)}
@@ -1338,7 +1387,7 @@ export function SubmissionFormPage() {
 
           {step === 3 && (
             <div className="space-y-7">
-              <h7 className="text-2xl text-[#2d4a2d]">Fabric Details</h7>
+              <h2 className="text-2xl text-[#2d4a2d]">Fabric Details</h2>
 
               <QuestionBlock label="Do you know the fabric type of the item/s?">
                 <div className="grid sm:grid-cols-2 gap-3">
@@ -1480,7 +1529,7 @@ export function SubmissionFormPage() {
 
           {step === 4 && (
             <div className="space-y-7">
-              <h7 className="text-2xl text-[#2d4a2d]">Recovery Criteria</h7>
+              <h2 className="text-2xl text-[#2d4a2d]">Recovery Criteria</h2>
 
               <QuestionBlock label="Q6: Is the item still wearable or usable in its original form?">
                 {isFabricScrapsOnly && (
@@ -1603,7 +1652,7 @@ export function SubmissionFormPage() {
             <div className="space-y-7">
               {shouldShowPathwaySelection && (
                 <>
-                  <h7 className="text-2xl text-[#2d4a2d]">Intended Pathway</h7>
+                  <h2 className="text-2xl text-[#2d4a2d]">Intended Pathway</h2>
 
                   <QuestionBlock label="What would you prefer to do with this item?">
                     <div className="grid w-full grid-cols-1 gap-3">
@@ -1775,46 +1824,76 @@ export function SubmissionFormPage() {
                 Review Your Submission
               </h2>
 
-              <div className="space-y-4">
-                {reviewRows.map(({ label, value, step: rowStep, burnPage }) => (
-                  <div
-                    key={label}
-                    className="flex items-start justify-between gap-4 rounded-xl bg-[#f5f5f0] p-4"
-                  >
-                    <div>
-                      <div className="text-sm text-[#5a6f5a] mb-1">{label}</div>
-                      <div className="text-[#2d4a2d]">{value}</div>
-                    </div>
-                    <button
-                      onClick={() => {
-                        if (rowStep === 1) {
-                          setShowBurnTestResult(false);
-                          if (burnPage) {
-                            updateField("burnTestChoice", "Yes");
-                            updateField("burnTestPage", burnPage);
-                          }
-                        }
-
-                        setIsReviewEditing(true);
-                        setStep(rowStep);
-                      }}
-                      className="shrink-0 rounded-lg border border-[#d4d8d0] bg-white px-3 py-1.5 text-sm text-[#5a6f5a] hover:border-[#6b8e6b]"
+              <div className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
+                <div className="space-y-4">
+                  {reviewRows.map(({ label, value, step: rowStep, burnPage }) => (
+                    <div
+                      key={label}
+                      className="flex items-start justify-between gap-4 rounded-xl bg-[#f5f5f0] p-4"
                     >
-                      Edit
-                    </button>
-                  </div>
-                ))}
+                      <div>
+                        <div className="text-sm text-[#5a6f5a] mb-1">{label}</div>
+                        <div className="text-[#2d4a2d]">{value}</div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (rowStep === 1) {
+                            setShowBurnTestResult(false);
+                            if (burnPage) {
+                              updateField("burnTestChoice", "Yes");
+                              updateField("burnTestPage", burnPage);
+                            }
+                          }
 
-                {formData.description && (
-                  <div className="p-4 bg-[#f5f5f0] rounded-xl">
-                    <div className="text-sm text-[#5a6f5a] mb-1">
-                      Description
+                          setIsReviewEditing(true);
+                          setStep(rowStep);
+                        }}
+                        className="shrink-0 rounded-lg border border-[#d4d8d0] bg-white px-3 py-1.5 text-sm text-[#5a6f5a] hover:border-[#6b8e6b]"
+                      >
+                        Edit
+                      </button>
                     </div>
-                    <div className="text-[#2d4a2d]">
-                      {formData.description}
+                  ))}
+
+                  {formData.description && (
+                    <div className="p-4 bg-[#f5f5f0] rounded-xl">
+                      <div className="text-sm text-[#5a6f5a] mb-1">
+                        Description
+                      </div>
+                      <div className="text-[#2d4a2d]">
+                        {formData.description}
+                      </div>
                     </div>
+                  )}
+                </div>
+
+                <aside className="h-fit rounded-2xl border border-[#dce4da] bg-[#fbfcfa] p-5">
+                  <div className="text-sm font-semibold uppercase tracking-wide text-[#5a6f5a]">
+                    Shipping reminder
                   </div>
-                )}
+                  {bagReminder ? (
+                    <div className="mt-4 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <span className={`h-10 w-10 rounded-full border-2 ${bagReminder.swatch}`} />
+                        <div>
+                          <div className="text-lg font-semibold text-[#2d4a2d]">
+                            {bagReminder.label}
+                          </div>
+                          <div className="text-sm text-[#5a6f5a]">
+                            {formData.action} pathway
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-sm leading-6 text-[#5a6f5a]">
+                        {bagReminder.detail}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-sm leading-6 text-[#5a6f5a]">
+                      Choose a pathway before sending so the correct bag color can be shown.
+                    </p>
+                  )}
+                </aside>
               </div>
 
               <div className="flex gap-3">
@@ -1851,9 +1930,9 @@ export function SubmissionFormPage() {
                 </div>
               </motion.div>
 
-              <h7 className="text-3xl mb-4 text-[#2d4a2d]">
+              <h2 className="text-3xl mb-4 text-[#2d4a2d]">
                 Submission Successful!
-              </h7>
+              </h2>
 
               <p className="text-lg text-[#5a6f5a] mb-2">
                 Thank you for contributing to a sustainable future.

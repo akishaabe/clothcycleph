@@ -17,6 +17,9 @@ import {
   Search,
   X,
   Image as ImageIcon,
+  Leaf,
+  Camera,
+  Sparkles,
 } from "lucide-react";
 import { dssService, messageService, notificationService, submissionService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
@@ -85,6 +88,12 @@ const pathwayLabels = {
   buyback: "Buyback",
 };
 
+const bagGuidance = {
+  recycle: "White bag",
+  upcycle: "Black bag",
+  donate: "Green bag",
+};
+
 const formatStatusLabel = (status) =>
   String(status || "")
     .replace(/_/g, " ")
@@ -130,6 +139,14 @@ const formatConfidence = (value) => {
   return `${Math.round(Number(value) * 100)}%`;
 };
 
+const normalizeOutcomePhotos = (photos = []) =>
+  photos
+    .map((photo, index) => ({
+      url: toPhotoUrl(photo),
+      label: typeof photo === "object" && photo?.label ? photo.label : `Outcome photo ${index + 1}`,
+    }))
+    .filter((photo) => photo.url);
+
 export function UserDashboard() {
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -169,7 +186,7 @@ export function UserDashboard() {
         }
       } catch (error) {
         if (isMounted) {
-          setRequestError(error.message || "Unable to load DSS requests.");
+          setRequestError(error.message || "Unable to load partner requests.");
         }
       }
     }
@@ -208,6 +225,12 @@ export function UserDashboard() {
         submission.action ||
         "not_sure";
       const status = dashboardStatusFromSubmission(submission, latestPartnerRequest);
+      const estimatedCarbonKg =
+        latestPartnerRequest?.estimated_carbon_kg ??
+        latestPartnerRequest?.output_payload?.estimated_carbon_kg ??
+        null;
+      const latestOutcomeRequest =
+        relatedRequests.find((request) => request.outcome_title || request.outcome_photos?.length > 0) || null;
 
       return {
         id: submission.id,
@@ -225,13 +248,17 @@ export function UserDashboard() {
         confidence:
           latestPartnerRequest?.confidence ?? recommendation?.confidence ?? null,
         score: recommendation?.score ?? null,
+        estimatedCarbonKg,
+        outcomeTitle: latestOutcomeRequest?.outcome_title || "",
+        outcomeDescription: latestOutcomeRequest?.outcome_description || "",
+        outcomePhotos: normalizeOutcomePhotos(latestOutcomeRequest?.outcome_photos || []),
       };
     });
   }, [requests, submissions]);
 
   const dashboardStats = useMemo(() => {
     const pending = submittedRequests.filter((request) => request.status === "pending").length;
-    const accepted = submittedRequests.filter((request) => request.status === "accepted").length;
+    const completedStories = submittedRequests.filter((request) => request.outcomeTitle).length;
 
     return [
       {
@@ -247,13 +274,26 @@ export function UserDashboard() {
         color: "#d4a574",
       },
       {
-        icon: TrendingUp,
-        label: "Accepted Requests",
-        value: String(accepted),
-        color: "#336158",
+        icon: Sparkles,
+        label: "Textile Stories",
+        value: String(completedStories),
+        color: "#9a7738",
+      },
+      {
+        icon: Leaf,
+        label: "Routing Footprint",
+        value: `${submittedRequests
+          .reduce((total, request) => total + Number(request.estimatedCarbonKg || 0), 0)
+          .toFixed(1)} kg CO2e`,
+        color: "#55735d",
       },
     ];
   }, [submittedRequests]);
+
+  const completedOutcomes = useMemo(
+    () => submittedRequests.filter((request) => request.outcomeTitle).slice(0, 3),
+    [submittedRequests],
+  );
 
   const monthlyData = useMemo(() => {
     const grouped = submissions.reduce((acc, submission) => {
@@ -455,7 +495,7 @@ export function UserDashboard() {
           </div>
         </motion.section>
 
-        <section className="grid md:grid-cols-3 gap-6 mb-8">
+        <section className="grid gap-6 mb-8 md:grid-cols-4">
           {dashboardStats.map((widget, index) => (
             <motion.button
               key={widget.label}
@@ -465,8 +505,8 @@ export function UserDashboard() {
               onClick={() => {
                 const nextFilter = widget.label.includes("Pending")
                   ? "pending"
-                  : widget.label.includes("Accepted")
-                    ? "accepted"
+                  : widget.label.includes("Stories")
+                    ? "completed"
                     : "all";
                 navigate(`/my-requests${nextFilter === "all" ? "" : `?status=${nextFilter}`}`);
               }}
@@ -489,6 +529,77 @@ export function UserDashboard() {
           ))}
         </section>
 
+        {completedOutcomes.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="mb-8 overflow-hidden rounded-[28px] border border-[#d9e8cf] bg-[linear-gradient(135deg,#f7fbef,#edf7ed,#fff8e8)] p-6 shadow-[0_18px_48px_rgba(51,97,88,0.13)] md:p-8"
+          >
+            <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+              <div>
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-sm font-semibold text-[#336158]">
+                  <Sparkles className="h-4 w-4" />
+                  Textile wins
+                </div>
+                <h2 className="font-gloock text-3xl text-[#19221d]">
+                  Your textiles are becoming something new
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate("/my-requests?status=completed")}
+                className="rounded-xl border border-[#cfe2cf] bg-white/80 px-4 py-2 text-sm font-semibold text-[#336158] hover:bg-white"
+              >
+                View completed
+              </button>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-3">
+              {completedOutcomes.map((request) => (
+                <article key={request.id} className="rounded-2xl border border-white/80 bg-white/85 p-5 shadow-[0_10px_28px_rgba(25,34,29,0.08)]">
+                  <div className="mb-3 flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#edf7ed] text-[#336158]">
+                      <Sparkles className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-[#336158]">Congratulations!</div>
+                      <div className="text-xs text-[#5f6f67]">{request.partnerName || "Partner update"}</div>
+                    </div>
+                  </div>
+                  <p className="text-lg font-semibold leading-7 text-[#19221d]">
+                    Your {request.title} was turned into {request.outcomeTitle}!
+                  </p>
+                  {request.outcomeDescription && (
+                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-[#5f6f67]">
+                      {request.outcomeDescription}
+                    </p>
+                  )}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {request.outcomePhotos.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedRequest(request)}
+                        className="inline-flex items-center gap-2 rounded-xl bg-[#336158] px-3 py-2 text-sm font-semibold text-white hover:bg-[#2a4c48]"
+                      >
+                        <Camera className="h-4 w-4" />
+                        View photos
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRequest(request)}
+                      className="rounded-xl border border-[#dce4da] px-3 py-2 text-sm font-semibold text-[#5f6f67] hover:bg-[#f3f5f2]"
+                    >
+                      Read story
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </motion.section>
+        )}
+
         {false ? (
         <motion.section
           ref={requestsRef}
@@ -501,7 +612,7 @@ export function UserDashboard() {
             <div>
               <h3 className="text-xl text-[#19221d]">My Requests</h3>
               <p className="mt-1 text-sm text-[#5f6f67]">
-                View submitted textile requests, DSS outcomes, partner routing, and current status.
+                View submitted textile requests, recommendation outcomes, partner routing, and current status.
               </p>
             </div>
             <button
@@ -572,7 +683,7 @@ export function UserDashboard() {
                     </div>
                     <div className="mt-3 grid gap-2 text-sm text-[#5f6f67] sm:grid-cols-2 lg:grid-cols-3">
                       <div className="rounded-xl border border-[#e1e7df] bg-white/70 px-3 py-2">
-                        Recommended: {pathwayLabels[request.recommendedPathway] || "DSS pending"}
+                        Recommended: {pathwayLabels[request.recommendedPathway] || "Recommendation pending"}
                       </div>
                       <div className="rounded-xl border border-[#e1e7df] bg-white/70 px-3 py-2">
                         Confidence: {formatConfidence(request.confidence)}
@@ -609,7 +720,7 @@ export function UserDashboard() {
                       }
                       className="rounded-xl bg-[#336158] px-3 py-2 text-sm font-semibold text-white hover:bg-[#2a4c48]"
                     >
-                      Open DSS
+                      Open recommendation
                     </button>
                   </div>
                 </div>
@@ -631,7 +742,7 @@ export function UserDashboard() {
             <div>
               <h3 className="text-xl text-[#19221d]">Requests</h3>
               <p className="mt-1 text-sm text-[#5f6f67]">
-                Track DSS briefs you sent to partners.
+                Track textile briefs you sent to partners.
               </p>
             </div>
           </div>
@@ -671,7 +782,7 @@ export function UserDashboard() {
           <div className="grid gap-3">
             {filteredRequests.length === 0 && (
               <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] px-4 py-5 text-sm text-[#5f6f67]">
-                No partner requests yet. Submit textile details, review the DSS
+                No partner requests yet. Submit textile details, review the
                 recommendation, then send the brief to a partner.
               </div>
             )}
@@ -789,7 +900,7 @@ export function UserDashboard() {
           <div className="grid gap-3">
             {filteredRequests.length === 0 && (
               <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] px-4 py-5 text-sm text-[#5f6f67]">
-                No partner requests yet. Submit textile details, review the DSS
+                No partner requests yet. Submit textile details, review the
                 recommendation, then send the brief to a partner.
               </div>
             )}
@@ -832,7 +943,7 @@ export function UserDashboard() {
               onClick={() => navigate("/dss-requests")}
               className="mt-4 w-full rounded-xl border border-[#dce4da] px-4 py-3 text-sm font-semibold text-[#336158] hover:bg-[#f3f5f2]"
             >
-              View all sent DSS requests
+              View all sent partner requests
             </button>
           )}
         </motion.section>
@@ -875,6 +986,18 @@ export function UserDashboard() {
                   <DetailItem label="Cleanliness" value={selectedRequest.submission.cleanliness} />
                   <DetailItem label="Fabric" value={selectedRequest.submission.fabric} />
                   <DetailItem label="Quantity" value={selectedRequest.submission.quantity || "1"} />
+                  <DetailItem
+                    label="Weight"
+                    value={
+                      selectedRequest.submission.details?.weight_value
+                        ? `${selectedRequest.submission.details.weight_value} ${selectedRequest.submission.details.weight_unit || "kg"}`
+                        : "Not specified"
+                    }
+                  />
+                  <DetailItem
+                    label="Shipping bag"
+                    value={bagGuidance[selectedRequest.selectedPathway] || "Set after pathway selection"}
+                  />
                   <DetailItem label="Brand" value={selectedRequest.submission.details?.brand || "Not specified"} />
                   <DetailItem label="Repairability" value={selectedRequest.submission.details?.repairability || "Not specified"} />
                 </div>
@@ -906,11 +1029,11 @@ export function UserDashboard() {
 
               <section className="space-y-4">
                 <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4">
-                  <h3 className="mb-3 font-semibold text-[#19221d]">DSS Recommendation</h3>
+                  <h3 className="mb-3 font-semibold text-[#19221d]">Recommendation</h3>
                   <div className="grid gap-3 text-sm text-[#5f6f67]">
                     <DetailItem
                       label="Recommended pathway"
-                      value={pathwayLabels[selectedRequest.recommendedPathway] || "DSS pending"}
+                      value={pathwayLabels[selectedRequest.recommendedPathway] || "Recommendation pending"}
                     />
                     <DetailItem label="Confidence" value={formatConfidence(selectedRequest.confidence)} />
                     <DetailItem
@@ -938,6 +1061,11 @@ export function UserDashboard() {
                     <span className="rounded-full bg-white px-3 py-1 text-xs text-[#5f6f67]">
                       {selectedRequest.partnerName || "Not sent to a partner yet"}
                     </span>
+                    {selectedRequest.estimatedCarbonKg != null && (
+                      <span className="rounded-full bg-[#edf7ed] px-3 py-1 text-xs text-[#336158]">
+                        {Number(selectedRequest.estimatedCarbonKg).toFixed(1)} kg CO2e estimate
+                      </span>
+                    )}
                   </div>
                   {selectedRequest.relatedRequests.length > 0 ? (
                     <div className="space-y-2">
@@ -949,6 +1077,26 @@ export function UserDashboard() {
                           <div className="mt-1">
                             {formatStatusLabel(request.status)} · {formatManilaDate(request.created_at)}
                           </div>
+                          {request.outcome_title && (
+                            <div className="mt-3 rounded-2xl border border-[#cfe2cf] bg-[#edf7ed] px-4 py-3 text-[#336158]">
+                              <div className="flex items-center gap-2 font-semibold text-[#19221d]">
+                                <Sparkles className="h-4 w-4 text-[#336158]" />
+                                Congratulations! Your {selectedRequest.title} was turned into {request.outcome_title}!
+                              </div>
+                              <p className="mt-2 leading-6">
+                                {request.outcome_description || "The partner reported a happy update for your textile."}
+                              </p>
+                              {normalizeOutcomePhotos(request.outcome_photos || []).length > 0 && (
+                                <div className="mt-3">
+                                  <ImageCarousel
+                                    title="Outcome photos"
+                                    allowDownload
+                                    images={normalizeOutcomePhotos(request.outcome_photos || [])}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

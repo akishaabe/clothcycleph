@@ -1184,7 +1184,7 @@ export function SettingsPage() {
                 </p>
                 <div className="flex flex-1 flex-col justify-between gap-5">
                   <div className="rounded-xl border border-[#e7ebe6] bg-[#f8faf6] p-5">
-                    <h7 className="mb-2 text-lg text-[#19221d]">Account Status</h7>
+                    <h2 className="mb-2 text-lg text-[#19221d]">Account Status</h2>
                     <p className="mb-4 text-[#5f6f67]">
                       Your account is active and in good standing.
                     </p>
@@ -1197,7 +1197,7 @@ export function SettingsPage() {
                   </div>
 
                   <div className="rounded-xl border-2 border-red-200 bg-red-50 p-5">
-                    <h7 className="mb-2 text-lg text-red-700">Danger Zone</h7>
+                    <h2 className="mb-2 text-lg text-red-700">Danger Zone</h2>
                     <p className="mb-4 text-sm text-red-600">
                       Once you delete your account, there is no going back. Please
                       be certain.

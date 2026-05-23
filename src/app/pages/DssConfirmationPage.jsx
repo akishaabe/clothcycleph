@@ -29,6 +29,20 @@ const pathwayLabels = {
 
 const fixedServicePathways = ["recycle", "donate", "upcycle"];
 
+const bagGuidance = {
+  recycle: { color: "white", label: "White bag" },
+  upcycle: { color: "black", label: "Black bag" },
+  donate: { color: "green", label: "Green bag" },
+};
+
+const estimateCarbonKg = (distanceKm, weightValue, weightUnit) => {
+  const distance = Number(distanceKm || 0);
+  const weightKg =
+    weightUnit === "g" ? Number(weightValue || 0) / 1000 : Number(weightValue || 0);
+  if (!distance || !weightKg) return null;
+  return Number((distance * weightKg * 0.12).toFixed(2));
+};
+
 const statusClass = {
   pending: "bg-[#fff8e8] text-[#7a5427] border-[#ead6ae]",
   accepted: "bg-[#edf7ed] text-[#336158] border-[#cfe2cf]",
@@ -126,22 +140,25 @@ function buildPartnerBrief(submission, pathway, recommendation, recommendations 
 
   return [
     `Selected pathway: ${pathwayLabels[pathway] || pathway}`,
-    `DSS confidence: ${confidence}`,
-    recommendation ? `DSS rank: #${recommendation.rank}` : "",
-    `DSS score: ${score}`,
+    `Recommendation confidence: ${confidence}`,
+    recommendation ? `Recommendation rank: #${recommendation.rank}` : "",
+    `Recommendation score: ${score}`,
     recommendations.length > 0
-      ? `All DSS pathway scores: ${formatRecommendationScores(recommendations)}`
+      ? `All pathway scores: ${formatRecommendationScores(recommendations)}`
       : "",
     `Submission name: ${submission.submission_name || submission.item_type}`,
     `Item: ${submission.item_type}`,
     `Quantity: ${submission.quantity || 1}`,
+    details.weight_value ? `Weight: ${details.weight_value} ${details.weight_unit || "kg"}` : "",
+    bagGuidance[pathway] ? `Shipping bag: ${bagGuidance[pathway].label} for ${pathwayLabels[pathway] || pathway}` : "",
+    options.estimatedCarbonKg != null ? `Routing footprint estimate: ${options.estimatedCarbonKg} kg CO2e based on partner distance and textile weight` : "",
     `Condition: ${submission.condition || "Not specified"}`,
     `Cleanliness: ${submission.cleanliness || "Not specified"}`,
     `Fabric: ${submission.fabric || formatListValue(details.fabric_types_list || details.fabric_types)}`,
     buybackLine,
     submission.upcycle_request ? `Upcycle/buyback request: ${submission.upcycle_request}` : "",
     recommendation ? `Selected pathway reasoning: ${recommendation.explanation}` : "",
-    recommendation ? `Matched DSS checks: ${formatCheckList(recommendation.checks, true)}` : "",
+    recommendation ? `Matched routing checks: ${formatCheckList(recommendation.checks, true)}` : "",
     recommendation ? `Needs review: ${formatCheckList(recommendation.checks, false)}` : "",
   ].filter(Boolean).join("\n");
 }
@@ -261,7 +278,7 @@ export function DssConfirmationPage() {
         ));
       } catch (loadError) {
         if (isMounted) {
-          setError(loadError.message || "Unable to load DSS confirmation.");
+          setError(loadError.message || "Unable to load recommendation review.");
         }
       } finally {
         if (isMounted) {
@@ -339,6 +356,13 @@ export function DssConfirmationPage() {
   }, [partners, selectedPathway]);
 
   const partnerOptions = matchingPartners.length > 0 ? matchingPartners : partners;
+  const selectedPartner = partnerOptions.find((partner) => partner.id === selectedPartnerId) || null;
+  const selectedDistanceKm = selectedPartner?.distance_km == null ? null : Number(selectedPartner.distance_km);
+  const selectedCarbonKg = estimateCarbonKg(
+    selectedDistanceKm,
+    preview?.submission?.details?.weight_value,
+    preview?.submission?.details?.weight_unit,
+  );
 
   const handlePathwayChange = (pathway) => {
     const recommendation = preview?.recommendations.find(
@@ -348,6 +372,7 @@ export function DssConfirmationPage() {
     setSelectedPathway(pathway);
     setBrief(buildPartnerBrief(preview?.submission, pathway, recommendation, preview?.recommendations || [], {
       buybackInterest: buybackPreference === "yes",
+      estimatedCarbonKg: selectedCarbonKg,
     }));
   };
 
@@ -359,8 +384,22 @@ export function DssConfirmationPage() {
     setBuybackPreference(value);
     setBrief(buildPartnerBrief(preview?.submission, selectedPathway, recommendation, preview?.recommendations || [], {
       buybackInterest: value === "yes",
+      estimatedCarbonKg: selectedCarbonKg,
     }));
   };
+
+  useEffect(() => {
+    if (!preview?.submission || !selectedPathway) {
+      return;
+    }
+    const recommendation = preview.recommendations.find(
+      (item) => item.recommended_pathway === selectedPathway,
+    );
+    setBrief(buildPartnerBrief(preview.submission, selectedPathway, recommendation, preview.recommendations || [], {
+      buybackInterest: buybackPreference === "yes",
+      estimatedCarbonKg: selectedCarbonKg,
+    }));
+  }, [selectedPartnerId, selectedCarbonKg, selectedPathway, buybackPreference, preview]);
 
   const refreshNearbyPartners = async () => {
     setError("");
@@ -411,6 +450,8 @@ export function DssConfirmationPage() {
         partner_id: selectedPartnerId,
         recommended_pathway: selectedPathway,
         buyback_interest: selectedPathway === "upcycle" && buybackPreference === "yes",
+        estimated_distance_km: selectedDistanceKm,
+        estimated_carbon_kg: selectedCarbonKg,
         brief,
       });
 
@@ -445,7 +486,7 @@ export function DssConfirmationPage() {
     return (
       <BrandLoadingScreen
         title="Reviewing your textile path"
-        message="Hang tight, the DSS engine is preparing your recommendations."
+        message="Hang tight, we are preparing your recommendations."
         detail="We are checking fabric clues, item details, and partner-fit options."
       />
     );
@@ -455,7 +496,7 @@ export function DssConfirmationPage() {
     return (
       <div className="app-darkable-page flex min-h-screen items-center justify-center bg-[linear-gradient(135deg,#f8faf6,#f3f5f2,#e7ebe6)] px-6">
         <div className="max-w-md text-center">
-          <h1 className="mb-2 text-2xl text-[#19221d]">DSS preview unavailable</h1>
+          <h1 className="mb-2 text-2xl text-[#19221d]">Recommendation preview unavailable</h1>
           <p className="mb-5 text-[#5f6f67]">{error}</p>
           <button
             onClick={() => navigate("/dashboard")}
@@ -498,13 +539,13 @@ export function DssConfirmationPage() {
             <div>
               <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#336158] dark:text-emerald-300">
                 <Sparkles className="h-4 w-4" />
-                DSS confirmation
+                Recommendation review
               </div>
               <h1 className="font-gloock text-4xl text-[#19221d] dark:text-white">
                 Review recommendation and send to a partner
               </h1>
               <p className="mt-3 max-w-2xl text-[#5f6f67] dark:text-zinc-300">
-                The DSS engine reviews your saved submission details, then
+                ClothCycle reviews your saved submission details, then
                 registers a partner request when you send the brief.
               </p>
             </div>
@@ -577,7 +618,7 @@ export function DssConfirmationPage() {
                 <>
                   <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
                     <ClipboardList className="h-5 w-5 text-[#336158] dark:text-emerald-300" />
-                    DSS Recommendations
+                    Recommended pathways
                   </h2>
                   <div className="mb-5 rounded-2xl border border-[#dce4da] bg-[#fbfcfa] p-4 dark:border-white/10 dark:bg-white/[0.04]">
                     <div className="mb-3 text-sm font-semibold text-[#19221d] dark:text-white">
@@ -608,7 +649,7 @@ export function DssConfirmationPage() {
                                 {isSelected && <CheckCircle className="h-4 w-4 text-[#336158] dark:text-emerald-300" />}
                               </div>
                               <div className="mt-1 text-xs">
-                                DSS #{recommendation.rank} · {Math.round(recommendation.confidence * 100)}% confidence
+                                Route #{recommendation.rank} · {Math.round(recommendation.confidence * 100)}% confidence
                               </div>
                               {isOriginal && (
                                 <div className="mt-2 w-fit rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-[#336158] dark:bg-white/10 dark:text-emerald-200">
@@ -620,7 +661,7 @@ export function DssConfirmationPage() {
                         })}
                     </div>
                   <p className="mt-3 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
-                    The cards below explain the DSS scoring only. Use the buttons above to choose what gets sent to the partner.
+                    The cards below explain the recommendation scoring only. Use the buttons above to choose what gets sent to the partner.
                   </p>
                   {selectedPathway === "upcycle" && (
                     <div className="mt-4 rounded-2xl border border-[#dce4da] bg-white p-4 dark:border-white/10 dark:bg-white/[0.04]">
@@ -628,7 +669,7 @@ export function DssConfirmationPage() {
                         Buyback preference for this Upcycle request
                       </div>
                       <p className="mt-1 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
-                        This is not a DSS score. It only tells the partner whether you are open to buyback.
+                        This is not a route score. It only tells the partner whether you are open to buyback.
                       </p>
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
                         {[
@@ -722,7 +763,7 @@ export function DssConfirmationPage() {
                     {preview.recommendations[0]?.explanation}
                   </p>
                   <p className="mt-2 font-semibold">
-                    DSS evaluation stopped before donation, upcycling, or recycling recommendations.
+                    Evaluation stopped before donation, upcycling, or recycling recommendations.
                   </p>
                 </div>
               )}
@@ -812,10 +853,22 @@ export function DssConfirmationPage() {
               <BriefPreview brief={brief} />
               {selectedRecommendation && (
                 <div className="mt-3 rounded-xl bg-[#f7faf5] px-4 py-3 text-sm text-[#5f6f67] dark:bg-white/[0.05] dark:text-zinc-300">
-                  <div>DSS average score: {dssAverageScore?.toFixed(1) || "N/A"} / 100</div>
-                  DSS score: {selectedRecommendation.score.toFixed(1)} / 100 · Rank #{selectedRecommendation.rank}
+                  <div>Average recommendation score: {dssAverageScore?.toFixed(1) || "N/A"} / 100</div>
+                  Recommendation score: {selectedRecommendation.score.toFixed(1)} / 100 · Rank #{selectedRecommendation.rank}
                 </div>
               )}
+              <div className="mt-3 rounded-xl border border-[#dce4da] bg-[#fbfcfa] px-4 py-3 text-sm leading-6 text-[#5f6f67] dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300">
+                <div className="font-semibold text-[#19221d] dark:text-white">Routing footprint context</div>
+                {selectedCarbonKg != null ? (
+                  <p className="mt-1">
+                    This estimate uses selected partner distance, textile weight, and a light freight factor. It is meant for comparing nearby routes, not as a formal carbon audit.
+                  </p>
+                ) : (
+                  <p className="mt-1">
+                    Add textile weight and allow location ranking to show a route estimate before sending.
+                  </p>
+                )}
+              </div>
               {(error || sentMessage) && (
                 <div
                   className={`mt-3 rounded-xl border px-4 py-3 text-sm ${
@@ -851,7 +904,7 @@ export function DssConfirmationPage() {
             <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_12px_34px_rgba(0,0,0,0.3)]">
               <h2 className="mb-2 text-xl font-semibold">Sent requests</h2>
               <p className="text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
-                Partner replies and reminder controls now live on a separate page so this DSS confirmation stays focused.
+                Partner replies and reminder controls now live on a separate page so this recommendation review stays focused.
               </p>
               {highlightedRequestId && (
                 <div className="mt-4 rounded-xl border border-[#cfe2cf] bg-[#edf7ed] px-4 py-3 text-sm text-[#336158] dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200">
@@ -937,8 +990,8 @@ export function DssConfirmationPage() {
                     : `You changed this from your original ${pathwayLabels[selectedServicePathway]} intent to ${pathwayLabels[selectedPathway]}.`}
                   {" "}
                   {selectedRecommendation?.rank === 1
-                    ? "This also matches the top DSS recommendation."
-                    : `The top DSS recommendation is ${pathwayLabels[topRecommendation?.recommended_pathway] || "another pathway"}, but you can still send your chosen pathway.`}
+                    ? "This also matches the top recommendation."
+                    : `The top recommendation is ${pathwayLabels[topRecommendation?.recommended_pathway] || "another pathway"}, but you can still send your chosen pathway.`}
                 </p>
               </div>
             </div>
@@ -947,7 +1000,7 @@ export function DssConfirmationPage() {
                 {pathwayLabels[selectedPathway]} confidence: {Math.round(Number(selectedRecommendation?.confidence || 0) * 100)}%
               </div>
               <div className="mt-1">
-                Top DSS option: {pathwayLabels[topRecommendation?.recommended_pathway] || "Not available"} ({Math.round(Number(topRecommendation?.confidence || 0) * 100)}% confidence)
+                Top suggested option: {pathwayLabels[topRecommendation?.recommended_pathway] || "Not available"} ({Math.round(Number(topRecommendation?.confidence || 0) * 100)}% confidence)
               </div>
               {selectedPathway === "upcycle" && (
                 <div className="mt-3 rounded-xl border border-[#dce4da] bg-white px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">

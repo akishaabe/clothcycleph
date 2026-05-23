@@ -55,6 +55,8 @@ export const createSubmissionSchema = z.object({
       damage_classification: nullableTrimmedStringSchema,
       repurposing_potential: nullableTrimmedStringSchema,
       trim_removal: nullableTrimmedStringSchema,
+      weight_value: z.coerce.number().positive().max(100000).nullable().optional(),
+      weight_unit: z.enum(['kg', 'g']).default('kg').optional(),
     })
     .optional(),
   burn_test: z

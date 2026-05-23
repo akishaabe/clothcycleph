@@ -148,6 +148,8 @@ Table submission_details {
   damage_classification text
   repurposing_potential text
   trim_removal text
+  weight_value numeric
+  weight_unit varchar [note: "kg or g. Default: kg"]
   created_at timestamp [default: `now()`]
   updated_at timestamp [default: `now()`]
 }
@@ -242,8 +244,24 @@ Table transactions {
   status varchar [note: "Default: pending. Values: pending, accepted, completed, rejected"]
   amount numeric
   notes text
+  bag_color varchar [note: "white=recycle, black=upcycle, green=donation"]
+  estimated_distance_km numeric
+  estimated_carbon_kg numeric [note: "Lightweight routing estimate, not a formal footprint inventory"]
+  outcome_title text
+  outcome_description text
+  outcome_photos jsonb [note: "Uploaded partner outcome photo URLs"]
+  outcome_reported_at timestamp
   created_at timestamp [default: `now()`]
   updated_at timestamp [default: `now()`]
+}
+
+Table deleted_records {
+  id uuid [pk, default: `gen_random_uuid()`]
+  entity_type varchar [not null]
+  entity_id uuid [not null]
+  snapshot jsonb
+  deleted_by_user_id uuid [ref: > users.id]
+  deleted_at timestamp [default: `now()`]
 }
 
 Table conversations {

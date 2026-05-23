@@ -38,6 +38,8 @@ export async function createSubmissionD1(
       damage_classification?: string | null;
       repurposing_potential?: string | null;
       trim_removal?: string | null;
+      weight_value?: number | null;
+      weight_unit?: 'kg' | 'g' | null;
     };
     burn_test?: {
       performed?: boolean;
@@ -87,9 +89,9 @@ export async function createSubmissionD1(
          knows_fabric_type, fabric_types, custom_fabric_text, fabric_identification, brand,
          no_brand_visible, fabric_description, restricted_category, fiber_composition,
          uniform_branding, wearability, repairability, contamination_level, damage_classification,
-         repurposing_potential, trim_removal
+         repurposing_potential, trim_removal, weight_value, weight_unit
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         generateD1UUID(),
         id,
@@ -113,6 +115,8 @@ export async function createSubmissionD1(
         payload.details.damage_classification || null,
         payload.details.repurposing_potential || null,
         payload.details.trim_removal || null,
+        payload.details.weight_value == null ? null : Number(payload.details.weight_value),
+        payload.details.weight_unit || 'kg',
       ]
     );
   }

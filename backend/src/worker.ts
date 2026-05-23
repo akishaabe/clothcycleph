@@ -281,6 +281,18 @@ const getStatusCode = (error: Error) => {
 
 const csvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
+const parseMaybeJson = (value: unknown) => {
+  if (!value || typeof value !== 'string') {
+    return value ?? null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+};
+
 app.get('/', (c) => c.json({ message: 'ClothCycle Cloudflare Worker API' }));
 
 app.get('/api/health', (c) =>
@@ -649,7 +661,10 @@ app.put('/api/dss/requests/:id/status', requireAuth, async (c) => {
     user.role,
     c.req.param('id')!,
     body.status,
-    body.notes
+    body.notes,
+    body.outcome_title,
+    body.outcome_description,
+    body.outcome_photos
   );
   return c.json({ message: 'Request status updated', data });
 });
@@ -835,6 +850,22 @@ app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (c) => {
   const userId = c.req.param('id');
   await deleteUserD1(c.env.DB, userId!);
   return c.json({ message: 'User deleted successfully' });
+});
+
+app.get('/api/admin/deleted-records', requireAuth, requireAdmin, async (c) => {
+  const result = await c.env.DB
+    .prepare(
+      `SELECT dr.*, u.name AS deleted_by_name, u.email AS deleted_by_email
+       FROM deleted_records dr
+       LEFT JOIN users u ON u.id = dr.deleted_by_user_id
+       ORDER BY dr.deleted_at DESC
+       LIMIT 200`
+    )
+    .all();
+  return jsonList(c, (result.results || []).map((row: any) => ({
+    ...row,
+    snapshot: parseMaybeJson(row.snapshot),
+  })));
 });
 
 app.get('/api/admin/submissions', requireAuth, requireAdmin, async (c) => {

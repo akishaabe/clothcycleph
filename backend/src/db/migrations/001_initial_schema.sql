@@ -90,6 +90,8 @@ CREATE TABLE IF NOT EXISTS submission_details (
   damage_classification TEXT,
   repurposing_potential TEXT,
   trim_removal TEXT,
+  weight_value DECIMAL(10,3),
+  weight_unit VARCHAR(10) DEFAULT 'kg',
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -124,8 +126,24 @@ CREATE TABLE IF NOT EXISTS transactions (
   to_partner_id UUID REFERENCES partners(id) ON DELETE SET NULL,
   type VARCHAR(50) NOT NULL CHECK (type IN ('recycle', 'donate', 'upcycle', 'buyback')),
   notes TEXT,
+  bag_color VARCHAR(20),
+  estimated_distance_km DECIMAL(10,2),
+  estimated_carbon_kg DECIMAL(10,3),
+  outcome_title TEXT,
+  outcome_description TEXT,
+  outcome_photos JSONB DEFAULT '[]'::jsonb,
+  outcome_reported_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS deleted_records (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  entity_type VARCHAR(100) NOT NULL,
+  entity_id UUID NOT NULL,
+  snapshot JSONB,
+  deleted_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  deleted_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS recommendation_runs (
@@ -248,6 +266,8 @@ CREATE INDEX IF NOT EXISTS idx_submission_details_submission_id ON submission_de
 CREATE INDEX IF NOT EXISTS idx_burn_tests_submission_id ON burn_tests(submission_id);
 CREATE INDEX IF NOT EXISTS idx_submission_images_submission_id ON submission_images(submission_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_submission_id ON transactions(submission_id);
+CREATE INDEX IF NOT EXISTS idx_deleted_records_entity ON deleted_records(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_deleted_records_deleted_at ON deleted_records(deleted_at DESC);
 CREATE INDEX IF NOT EXISTS idx_recommendation_runs_submission_id ON recommendation_runs(submission_id);
 CREATE INDEX IF NOT EXISTS idx_recommendation_runs_status ON recommendation_runs(status);
 CREATE INDEX IF NOT EXISTS idx_recommendation_results_run_id ON recommendation_results(run_id);

@@ -10,6 +10,12 @@ const statusLabels: Record<string, string> = {
   rejected: 'Rejected',
 };
 
+const bagColorByPathway: Record<string, string> = {
+  recycle: 'white',
+  upcycle: 'black',
+  donate: 'green',
+};
+
 function normalizeRequestStatus(status?: string | null) {
   if (status === 'declined' || status === 'rejected') {
     return 'rejected';
@@ -56,6 +62,8 @@ export async function sendRecommendationToPartnerD1(
     partner_id: string;
     recommended_pathway: 'recycle' | 'donate' | 'upcycle';
     buyback_interest?: boolean;
+    estimated_distance_km?: number | null;
+    estimated_carbon_kg?: number | null;
     brief: string;
   }
 ) {
@@ -126,6 +134,9 @@ export async function sendRecommendationToPartnerD1(
         recommendations,
         brief: payload.brief,
         buyback_interest: selectedBuybackInterest,
+        bag_color: bagColorByPathway[payload.recommended_pathway],
+        estimated_distance_km: payload.estimated_distance_km ?? null,
+        estimated_carbon_kg: payload.estimated_carbon_kg ?? null,
         burn_test_analysis: analyzeBurnTest(submission.burn_test),
         rule_checks: recommendation.checks || [],
       }),
@@ -136,11 +147,22 @@ export async function sendRecommendationToPartnerD1(
   const transaction = await executeD1(
     db,
     `INSERT INTO transactions (
-       id, submission_id, from_user_id, to_partner_id, type, status, notes
+       id, submission_id, from_user_id, to_partner_id, type, status, notes,
+       bag_color, estimated_distance_km, estimated_carbon_kg
      )
-     VALUES (?, ?, ?, ?, ?, 'pending', ?)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
      RETURNING *`,
-    [transactionId, payload.submission_id, userId, payload.partner_id, payload.recommended_pathway, payload.brief]
+    [
+      transactionId,
+      payload.submission_id,
+      userId,
+      payload.partner_id,
+      payload.recommended_pathway,
+      payload.brief,
+      bagColorByPathway[payload.recommended_pathway],
+      payload.estimated_distance_km ?? null,
+      payload.estimated_carbon_kg ?? null,
+    ]
   );
 
   await executeD1(
@@ -375,6 +397,8 @@ export async function getUserDssRequestsD1(db: D1Database, userId: string) {
        p.longitude AS partner_longitude,
        s.item_type,
        s.quantity,
+       sd.weight_value,
+       sd.weight_unit,
        s.condition,
        s.cleanliness,
        s.submission_name,
@@ -385,6 +409,7 @@ export async function getUserDssRequestsD1(db: D1Database, userId: string) {
      FROM transactions t
      JOIN partners p ON p.id = t.to_partner_id
      JOIN submissions s ON s.id = t.submission_id
+     LEFT JOIN submission_details sd ON sd.submission_id = s.id
      LEFT JOIN recommendation_results rr ON rr.submission_id = s.id AND rr.partner_id = p.id AND rr.selected = 1
      WHERE t.from_user_id = ?
      ORDER BY COALESCE(t.updated_at, t.created_at) DESC, t.created_at DESC`,
@@ -412,6 +437,8 @@ export async function getPartnerDssRequestsD1(db: D1Database, userId: string, em
        t.*,
        s.item_type,
        s.quantity,
+       sd.weight_value,
+       sd.weight_unit,
        s.condition,
        s.cleanliness,
        s.fabric,
@@ -436,6 +463,8 @@ export async function getPartnerDssRequestsD1(db: D1Database, userId: string, em
        sd.damage_classification,
        sd.repurposing_potential,
        sd.trim_removal,
+       sd.weight_value,
+       sd.weight_unit,
        bt.performed AS burn_performed,
        bt.page AS burn_page,
        bt.moment AS burn_moment,
@@ -471,14 +500,19 @@ export async function updateDssRequestStatusD1(
   role: string | undefined,
   requestId: string,
   status: string,
-  notes?: string
+  notes?: string,
+  outcomeTitle?: string,
+  outcomeDescription?: string,
+  outcomePhotos?: string[]
 ) {
   const normalizedStatus = normalizeRequestStatus(status);
   const transaction = await queryD1First(
     db,
-    `SELECT t.*, p.user_id AS partner_user_id, p.email AS partner_email
+    `SELECT t.*, p.user_id AS partner_user_id, p.email AS partner_email,
+            COALESCE(s.submission_name, s.item_type, 'textile') AS submission_label
      FROM transactions t
      JOIN partners p ON p.id = t.to_partner_id
+     JOIN submissions s ON s.id = t.submission_id
      WHERE t.id = ?`,
     [requestId]
   );
@@ -495,20 +529,87 @@ export async function updateDssRequestStatusD1(
     throw new Error('You do not have permission to update this request');
   }
 
+  const serializedOutcomePhotos = outcomePhotos == null ? null : JSON.stringify(outcomePhotos || []);
   const result = await executeD1(
     db,
     `UPDATE transactions
-     SET status = ?, notes = COALESCE(?, notes), updated_at = CURRENT_TIMESTAMP
+     SET status = ?,
+         notes = COALESCE(?, notes),
+         outcome_title = COALESCE(?, outcome_title),
+         outcome_description = COALESCE(?, outcome_description),
+         outcome_photos = CASE
+           WHEN ? IS NOT NULL THEN ?
+           ELSE outcome_photos
+         END,
+         outcome_reported_at = CASE
+           WHEN ? IS NOT NULL OR ? IS NOT NULL OR ? IS NOT NULL THEN CURRENT_TIMESTAMP
+           ELSE outcome_reported_at
+         END,
+         updated_at = CURRENT_TIMESTAMP
      WHERE id = ?
      RETURNING *`,
-    [normalizedStatus, notes || null, requestId]
+    [
+      normalizedStatus,
+      notes || null,
+      outcomeTitle || null,
+      outcomeDescription || null,
+      serializedOutcomePhotos,
+      serializedOutcomePhotos,
+      outcomeTitle || null,
+      outcomeDescription || null,
+      serializedOutcomePhotos,
+      requestId,
+    ]
+  );
+
+  const outcomeCelebration =
+    normalizedStatus === 'completed' && outcomeTitle
+      ? `Congratulations! Your ${transaction.submission_label || 'textile'} was turned into ${outcomeTitle}!`
+      : '';
+
+  await executeD1(
+    db,
+    `INSERT INTO messages (
+       id, from_user_id, to_user_id, content,
+       related_submission_id, related_transaction_id, action_url, metadata
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      generateD1UUID(),
+      userId,
+      transaction.from_user_id,
+      normalizedStatus === 'completed' && (outcomeTitle || outcomeDescription)
+        ? `${outcomeCelebration || 'Your textile has a new story!'}\n${
+            outcomeDescription || 'Your partner shared what happened to your textile.'
+          }`
+        : `Partner decision: ${statusLabels[normalizedStatus] || normalizedStatus}\n${
+            notes ? `Message to user: ${notes}` : 'No additional message provided.'
+          }`,
+      transaction.submission_id,
+      transaction.id,
+      `/dss/${transaction.submission_id}?request=${transaction.id}`,
+      JSON.stringify({
+        kind: 'dss_status_update',
+        status: normalizedStatus,
+        submission_id: transaction.submission_id,
+        transaction_id: transaction.id,
+        outcome_title: outcomeTitle || null,
+        outcome_photos: outcomePhotos || [],
+        celebration: outcomeCelebration || null,
+      }),
+    ]
   );
 
   await createNotificationD1(db, {
     userId: transaction.from_user_id,
     type: normalizedStatus === 'rejected' ? 'submission_rejected' : 'submission_approved',
-    title: `Partner ${normalizedStatus === 'rejected' ? 'rejected' : 'updated'} your request`,
-    body: `Your ${titleCase(transaction.type)} request is now ${statusLabels[normalizedStatus] || normalizedStatus}.`,
+    title:
+      normalizedStatus === 'completed'
+        ? 'Congratulations! Your textile has a new life'
+        : `Partner ${normalizedStatus === 'rejected' ? 'rejected' : 'updated'} your request`,
+    body: outcomeTitle
+      ? outcomeCelebration
+      : `Your ${titleCase(transaction.type)} request is now ${statusLabels[normalizedStatus] || normalizedStatus}.`,
     data: { submissionId: transaction.submission_id, transactionId: transaction.id, status: normalizedStatus },
   });
 
@@ -588,6 +689,8 @@ async function getSubmissionForUserD1(db: D1Database, submissionId: string, user
        sd.damage_classification,
        sd.repurposing_potential,
        sd.trim_removal,
+       sd.weight_value,
+       sd.weight_unit,
        bt.performed AS burn_performed,
        bt.page AS burn_page,
        bt.moment AS burn_moment,
@@ -638,6 +741,8 @@ function normalizeSubmissionForDss(row: any) {
       damage_classification: row.damage_classification,
       repurposing_potential: row.repurposing_potential,
       trim_removal: row.trim_removal,
+      weight_value: row.weight_value == null ? null : Number(row.weight_value),
+      weight_unit: row.weight_unit || 'kg',
     },
     burn_test: {
       performed: Boolean(row.burn_performed),
@@ -662,6 +767,9 @@ function normalizeRequest(row: any) {
     output_payload: parseJsonObject(row.output_payload),
     partner_latitude: row.partner_latitude == null ? null : Number(row.partner_latitude),
     partner_longitude: row.partner_longitude == null ? null : Number(row.partner_longitude),
+    estimated_distance_km: row.estimated_distance_km == null ? null : Number(row.estimated_distance_km),
+    estimated_carbon_kg: row.estimated_carbon_kg == null ? null : Number(row.estimated_carbon_kg),
+    outcome_photos: parseJsonArray(row.outcome_photos),
   };
 }
 
@@ -694,6 +802,8 @@ function normalizePartnerRequest(row: any) {
       damage_classification: row.damage_classification,
       repurposing_potential: row.repurposing_potential,
       trim_removal: row.trim_removal,
+      weight_value: row.weight_value == null ? null : Number(row.weight_value),
+      weight_unit: row.weight_unit || 'kg',
     },
     burn_test: {
       performed: Boolean(row.burn_performed),
@@ -723,13 +833,15 @@ function buildBrief(submission: any, recommendation: any) {
     `Recommended pathway: ${titleCase(recommendation.recommended_pathway)} (${Math.round(recommendation.confidence * 100)}% confidence)`,
     `Item: ${submission.item_type}`,
     `Quantity: ${submission.quantity || 1}`,
+    details.weight_value ? `Weight: ${details.weight_value} ${details.weight_unit || 'kg'}` : '',
+    `Shipping bag: ${titleCase(bagColorByPathway[recommendation.recommended_pathway])} bag for ${titleCase(recommendation.recommended_pathway)}`,
     `Condition: ${submission.condition}`,
     `Cleanliness: ${submission.cleanliness || 'Not specified'}`,
     `Fabric: ${submission.fabric || details.fabric_types?.join(', ') || details.fabric_description?.join(', ') || 'Not specified'}`,
     `Fabric identified by: ${details.fabric_identification?.join(', ') || 'Not specified'}`,
     `Brand: ${details.no_brand_visible ? 'No brand visible' : details.brand || 'Not specified'}`,
     `Burn test: ${burnTest.performed ? 'Performed' : 'Not performed'}`,
-  ];
+  ].filter(Boolean);
 
   if (burnTest.performed) {
     lines.push(`Burn observations: ${[

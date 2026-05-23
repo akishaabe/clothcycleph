@@ -38,24 +38,24 @@ flowchart TD
 
 | Layer | Component | Responsibility |
 |---|---|---|
-| Presentation Layer | React + Vite frontend | Login, registration, dashboards, textile submission, DSS confirmation, messages, notifications, settings |
+| Presentation Layer | React + Vite frontend | Login, registration, dashboards, textile submission with weight capture, DSS confirmation, partner outcome reports, messages, notifications, settings |
 | API Layer | Hono backend | Handles REST API requests, authentication checks, role checks, validation, and service orchestration |
 | Decision Support Layer | DSS Engine | Evaluates textile details and burn-test answers, ranks Recycle / Donate / Upcycle, records audit trail |
-| Data Layer | Neon PostgreSQL | Stores users, partners, submissions, DSS runs/results, transactions, messages, notifications, admin logs |
+| Data Layer | Neon PostgreSQL / D1-compatible schema | Stores users, partners, submissions, DSS runs/results, transactions, outcome reports, messages, notifications, admin logs, and deleted-record snapshots |
 | External Services | Google OAuth, Email/OTP, file storage | Account sign-in, verification, reset flows, uploaded images and attachments |
 | Deployment Target | Cloudflare Workers | Planned runtime target for the Hono backend |
 
 ## User Flow
 
 1. User registers or logs in.
-2. User submits textile details, optional burn-test answers, images, and intended pathway.
+2. User submits textile details, estimated weight in kg/g, optional burn-test answers, images, and intended pathway.
 3. Backend saves the submission to Neon PostgreSQL.
 4. DSS Engine evaluates the saved answers.
 5. DSS confirmation page shows ranked Recycle / Donate / Upcycle recommendations.
 6. User selects the final pathway and sends the request to a partner.
-7. Partner views the request, DSS explanation, images, and user brief.
-8. Partner accepts, declines, or completes the request.
-9. User receives notification and can track status from request pages.
+7. Partner views the request, DSS explanation, required bag color, images, and user brief.
+8. Partner accepts or declines the request. After acceptance, the partner can mark it completed with a narrative outcome report and photos describing what the textile became.
+9. User receives notification and can track status, bag guidance, lightweight routing footprint estimate, and partner story from request pages.
 
 ## Partner Flow
 
@@ -63,13 +63,14 @@ flowchart TD
 2. Partner views assigned textile requests.
 3. Partner reviews item details, DSS reasoning, user brief, and uploaded images.
 4. Partner updates the request status.
-5. System notifies the user.
-6. Partner may submit rule/preference change requests to admin.
+5. When completing an accepted request, partner can report the textile outcome with title, notes, and photos, such as bag, wallet, construction material, or other recovered product.
+6. System notifies the user.
+7. Partner may submit rule/preference change requests to admin.
 
 ## Admin Flow
 
 1. Admin logs in through admin dashboard.
-2. Admin manages users, partners, submissions, DSS records, and system activity.
+2. Admin manages users, partners, submissions, DSS records, deleted-record snapshots, and system activity.
 3. Admin reviews partner rule change requests.
 4. Admin accepts, declines, or asks for more information.
 5. System records audit activity and notifies the partner.
@@ -100,11 +101,11 @@ The DSS engine currently scores Recycle, Donate, and Upcycle. Buyback is not a s
 |---|---|
 | Identity and Auth | `users`, `user_preferences`, `password_reset_tokens`, `user_recovery_codes`, `auth_events`, `rate_limits` |
 | Partner Management | `partners`, `partner_rule_change_requests` |
-| Textile Submission | `submissions`, `submission_details`, `burn_tests`, `submission_images` |
+| Textile Submission | `submissions`, `submission_details`, `burn_tests`, `submission_images`; weight is stored on `submission_details.weight_value` and `submission_details.weight_unit` |
 | DSS Audit | `recommendation_runs`, `recommendation_results`, `recommendation_feedback`, `dss_rules` |
-| Transactions | `transactions` |
+| Transactions | `transactions`; includes bag color, lightweight distance/carbon estimate metadata, and partner outcome report fields including photo URLs |
 | Communication | `conversations`, `messages`, `message_attachments`, `notifications` |
-| Administration | `activity_logs`, `schema_migrations` |
+| Administration | `activity_logs`, `deleted_records`, `schema_migrations` |
 
 ## Deployment View
 

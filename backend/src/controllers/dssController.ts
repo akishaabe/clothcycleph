@@ -72,13 +72,15 @@ function buildBrief(submission: any, recommendation: any) {
     `Submission name: ${submission.submission_name || submission.item_type}`,
     `Item: ${submission.item_type}`,
     `Quantity: ${submission.quantity || 1}`,
+    submission.details?.weight_value ? `Weight: ${submission.details.weight_value} ${submission.details.weight_unit || 'kg'}` : '',
+    `Shipping bag: ${titleCase(bagColorByPathway[recommendation.recommended_pathway])} bag for ${titleCase(recommendation.recommended_pathway)}`,
     `Condition: ${submission.condition}`,
     `Cleanliness: ${submission.cleanliness || 'Not specified'}`,
     `Fabric: ${submission.fabric || details.fabric_types || details.fabric_description || 'Not specified'}`,
     `Fabric identified by: ${details.fabric_identification || 'Not specified'}`,
     `Brand: ${details.no_brand_visible ? 'No brand visible' : details.brand || 'Not specified'}`,
     `Burn test: ${burnTest.performed ? 'Performed' : 'Not performed'}`,
-  ];
+  ].filter(Boolean);
 
   if (burnTest.performed) {
     lines.push(`Burn observations: ${[
@@ -113,6 +115,12 @@ function buildBrief(submission: any, recommendation: any) {
 
   return lines.join('\n');
 }
+
+const bagColorByPathway: Record<string, string> = {
+  recycle: 'white',
+  upcycle: 'black',
+  donate: 'green',
+};
 
 async function getSubmissionForUser(submissionId: string, userId: string, role?: string) {
   const result = await query(
@@ -261,6 +269,9 @@ export const sendRecommendationToPartner = async (req: AuthRequest, res: Respons
           recommendations,
           brief,
           buyback_interest: selectedBuybackInterest,
+          bag_color: bagColorByPathway[recommended_pathway],
+          estimated_distance_km: req.body.estimated_distance_km ?? null,
+          estimated_carbon_kg: req.body.estimated_carbon_kg ?? null,
           burn_test_analysis: analyzeBurnTest(submission.burn_test),
           rule_checks: recommendation.checks || [],
         }),
@@ -270,11 +281,22 @@ export const sendRecommendationToPartner = async (req: AuthRequest, res: Respons
     const transactionId = uuidv4();
     const transactionResult = await client.query(
       `INSERT INTO transactions (
-         id, submission_id, from_user_id, to_partner_id, type, status, notes
+         id, submission_id, from_user_id, to_partner_id, type, status, notes,
+         bag_color, estimated_distance_km, estimated_carbon_kg
        )
-       VALUES ($1, $2, $3, $4, $5, 'pending', $6)
+       VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8, $9)
        RETURNING *`,
-      [transactionId, submission_id, userId, partner_id, recommended_pathway, brief]
+      [
+        transactionId,
+        submission_id,
+        userId,
+        partner_id,
+        recommended_pathway,
+        brief,
+        bagColorByPathway[recommended_pathway],
+        req.body.estimated_distance_km ?? null,
+        req.body.estimated_carbon_kg ?? null,
+      ]
     );
 
     await client.query(
@@ -374,6 +396,8 @@ export const getUserDssRequests = async (req: AuthRequest, res: Response) => {
          s.item_type,
          s.submission_name,
          s.quantity,
+         sd.weight_value,
+         sd.weight_unit,
          s.condition,
          s.cleanliness,
          rr.confidence,
@@ -383,6 +407,7 @@ export const getUserDssRequests = async (req: AuthRequest, res: Response) => {
        FROM transactions t
        JOIN partners p ON p.id = t.to_partner_id
        JOIN submissions s ON s.id = t.submission_id
+       LEFT JOIN submission_details sd ON sd.submission_id = s.id
        LEFT JOIN recommendation_results rr ON rr.submission_id = s.id AND rr.partner_id = p.id AND rr.selected = true
        WHERE t.from_user_id = $1
        ORDER BY COALESCE(t.updated_at, t.created_at) DESC, t.created_at DESC`,
@@ -430,6 +455,8 @@ export const getPartnerDssRequests = async (req: AuthRequest, res: Response) => 
          s.item_type,
          s.submission_name,
          s.quantity,
+         sd.weight_value,
+         sd.weight_unit,
          s.condition,
          s.cleanliness,
          s.fabric,
@@ -492,9 +519,11 @@ export const updateDssRequestStatus = async (req: AuthRequest, res: Response) =>
     }
 
     const transactionResult = await query(
-      `SELECT t.*, p.user_id AS partner_user_id, p.email AS partner_email
+      `SELECT t.*, p.user_id AS partner_user_id, p.email AS partner_email,
+              COALESCE(s.submission_name, s.item_type, 'textile') AS submission_label
        FROM transactions t
        JOIN partners p ON p.id = t.to_partner_id
+       JOIN submissions s ON s.id = t.submission_id
        WHERE t.id = $1`,
       [req.params.id]
     );
@@ -516,13 +545,44 @@ export const updateDssRequestStatus = async (req: AuthRequest, res: Response) =>
     const status = normalizeRequestStatus(req.body.status);
     const result = await query(
       `UPDATE transactions
-       SET status = $1, notes = COALESCE($2, notes), updated_at = NOW()
-       WHERE id = $3
+       SET status = $1,
+           notes = COALESCE($2, notes),
+           outcome_title = COALESCE($3, outcome_title),
+           outcome_description = COALESCE($4, outcome_description),
+           outcome_photos = CASE
+             WHEN $5::jsonb IS NOT NULL THEN $5::jsonb
+             ELSE outcome_photos
+           END,
+           outcome_reported_at = CASE
+             WHEN $3 IS NOT NULL OR $4 IS NOT NULL OR $5::jsonb IS NOT NULL THEN NOW()
+             ELSE outcome_reported_at
+           END,
+           updated_at = NOW()
+       WHERE id = $6
        RETURNING *`,
-      [status, req.body.notes || null, req.params.id]
+      [
+        status,
+        req.body.notes || null,
+        req.body.outcome_title || null,
+        req.body.outcome_description || null,
+        req.body.outcome_photos == null ? null : JSON.stringify(req.body.outcome_photos || []),
+        req.params.id,
+      ]
     );
 
     const userActionUrl = `/dss/${transaction.submission_id}?request=${transaction.id}`;
+    const outcomeCelebration =
+      status === 'completed' && req.body.outcome_title
+        ? `Congratulations! Your ${transaction.submission_label || 'textile'} was turned into ${req.body.outcome_title}!`
+        : '';
+    const messageContent =
+      status === 'completed' && (req.body.outcome_title || req.body.outcome_description)
+        ? `${outcomeCelebration || 'Your textile has a new story!'}\n${
+            req.body.outcome_description || 'Your partner shared what happened to your textile.'
+          }`
+        : `Partner decision: ${statusLabels[status] || status}\n${
+            req.body.notes ? `Message to user: ${req.body.notes}` : 'No additional message provided.'
+          }`;
     await query(
       `INSERT INTO messages (
          id, from_user_id, to_user_id, content,
@@ -533,7 +593,7 @@ export const updateDssRequestStatus = async (req: AuthRequest, res: Response) =>
         uuidv4(),
         userId,
         transaction.from_user_id,
-        `Partner decision: ${statusLabels[status] || status}\n${req.body.notes ? `Message to user: ${req.body.notes}` : 'No additional message provided.'}`,
+        messageContent,
         transaction.submission_id,
         transaction.id,
         userActionUrl,
@@ -542,6 +602,9 @@ export const updateDssRequestStatus = async (req: AuthRequest, res: Response) =>
           status,
           submission_id: transaction.submission_id,
           transaction_id: transaction.id,
+          outcome_title: req.body.outcome_title || null,
+          outcome_photos: req.body.outcome_photos || [],
+          celebration: outcomeCelebration || null,
         }),
       ]
     );
@@ -549,8 +612,12 @@ export const updateDssRequestStatus = async (req: AuthRequest, res: Response) =>
     await enqueueNotification(
       transaction.from_user_id,
       status === 'rejected' ? 'submission_rejected' : 'submission_approved',
-      `Partner ${status === 'rejected' ? 'rejected' : 'updated'} your request`,
-      `Your ${titleCase(transaction.type)} request is now ${statusLabels[status] || status}.`,
+      status === 'completed'
+        ? 'Congratulations! Your textile has a new life'
+        : `Partner ${status === 'rejected' ? 'rejected' : 'updated'} your request`,
+      status === 'completed' && req.body.outcome_title
+        ? outcomeCelebration
+        : `Your ${titleCase(transaction.type)} request is now ${statusLabels[status] || status}.`,
       { submissionId: transaction.submission_id, transactionId: transaction.id, status }
     );
 

@@ -202,6 +202,7 @@ export function AdminDashboard() {
   const [ruleChangeRequests, setRuleChangeRequests] = useState([]);
   const [adminSubmissions, setAdminSubmissions] = useState([]);
   const [dssRules, setDssRules] = useState([]);
+  const [deletedRecords, setDeletedRecords] = useState([]);
   const [dssRuleForm, setDssRuleForm] = useState({
     rule_key: "",
     pathway: "",
@@ -237,6 +238,7 @@ export function AdminDashboard() {
           notificationsResponse,
           submissionsResponse,
           rulesResponse,
+          deletedRecordsResponse,
         ] = await Promise.all([
           dssService.getAuditRuns(),
           dssService.getRuleChangeRequests(),
@@ -244,12 +246,14 @@ export function AdminDashboard() {
           notificationService.getUnreadCount(),
           adminService.getSubmissions(),
           adminService.getDssRules(),
+          adminService.getDeletedRecords(),
         ]);
         if (isMounted) {
           setDssAuditRuns(response.data);
           setRuleChangeRequests(ruleRequestsResponse.data);
           setAdminSubmissions(submissionsResponse.data);
           setDssRules(rulesResponse.data);
+          setDeletedRecords(deletedRecordsResponse.data || []);
           setBadgeCounts({
             messages: Number(messagesResponse.unread_count || 0),
             notifications: Number(notificationsResponse.unread_count || 0),
@@ -635,6 +639,7 @@ export function AdminDashboard() {
       ["pending_rule_requests", ruleChangeRequests.filter((request) => request.status === "pending").length],
       ["submissions", adminSubmissions.length],
       ["dss_rules", dssRules.length],
+      ["deleted_records", deletedRecords.length],
       ["system_health", systemHealth.value],
     ];
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -1090,6 +1095,43 @@ export function AdminDashboard() {
               {adminSubmissions.length === 0 && (
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-white/10 dark:bg-black/20 dark:text-gray-300">
                   No submissions yet.
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xl text-gray-950 dark:text-white">Deleted Records</h3>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                  Admin-only archive for records removed through management actions.
+                </p>
+              </div>
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 dark:bg-white/10 dark:text-gray-200">
+                {deletedRecords.length}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {deletedRecords.slice(0, 5).map((record) => (
+                <details
+                  key={record.id}
+                  className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-black/20"
+                >
+                  <summary className="cursor-pointer text-sm font-semibold text-gray-950 dark:text-white">
+                    {record.entity_type} · {record.snapshot?.name || record.snapshot?.email || record.entity_id}
+                  </summary>
+                  <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+                    Deleted {record.deleted_at ? formatManilaDate(record.deleted_at) : "recently"}
+                  </div>
+                  <pre className="mt-3 max-h-44 overflow-auto rounded-lg bg-white p-3 text-xs text-gray-700 dark:bg-black/30 dark:text-gray-200">
+                    {JSON.stringify(record.snapshot || {}, null, 2)}
+                  </pre>
+                </details>
+              ))}
+              {deletedRecords.length === 0 && (
+                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600 dark:border-white/10 dark:bg-black/20 dark:text-gray-300">
+                  No deleted records have been archived yet.
                 </div>
               )}
             </div>

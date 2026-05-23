@@ -107,9 +107,11 @@ export const createSubmission = async (req: Request, res: Response) => {
            contamination_level,
            damage_classification,
            repurposing_potential,
-           trim_removal
+           trim_removal,
+           weight_value,
+           weight_unit
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
           ON CONFLICT (submission_id)
           DO UPDATE SET
             item_types = EXCLUDED.item_types,
@@ -132,6 +134,8 @@ export const createSubmission = async (req: Request, res: Response) => {
             damage_classification = EXCLUDED.damage_classification,
             repurposing_potential = EXCLUDED.repurposing_potential,
             trim_removal = EXCLUDED.trim_removal,
+            weight_value = EXCLUDED.weight_value,
+            weight_unit = EXCLUDED.weight_unit,
             updated_at = NOW()`,
         [
           id,
@@ -155,6 +159,8 @@ export const createSubmission = async (req: Request, res: Response) => {
           details.damage_classification ?? null,
           details.repurposing_potential ?? null,
           details.trim_removal ?? null,
+          details.weight_value ?? null,
+          details.weight_unit ?? 'kg',
         ]
       );
     }

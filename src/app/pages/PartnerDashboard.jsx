@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Recycle, Package, Clock, CheckCircle, XCircle, Bell, User, BarChart3, Settings, LogOut, MessageSquare, Eye, Loader2, RefreshCw, X, Search } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { dssService, messageService, notificationService } from "../../services/api";
+import { dssService, messageService, notificationService, uploadService } from "../../services/api";
 import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
 import { ImageCarousel } from "../components/ImageCarousel";
 import { formatManilaDate, parseUtcTimestamp } from "../../utils/dateTime";
@@ -26,6 +26,12 @@ const pathwayLabels = {
   donate: "Donate",
   upcycle: "Upcycle",
   buyback: "Buyback",
+};
+
+const bagGuidance = {
+  recycle: "White bag",
+  upcycle: "Black bag",
+  donate: "Green bag",
 };
 
 const statusStyles = {
@@ -81,6 +87,11 @@ export function PartnerDashboard() {
   const [requests, setRequests] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [statusNote, setStatusNote] = useState("");
+  const [outcomeTitle, setOutcomeTitle] = useState("");
+  const [outcomeDescription, setOutcomeDescription] = useState("");
+  const [outcomeFiles, setOutcomeFiles] = useState([]);
+  const [outcomePreviews, setOutcomePreviews] = useState([]);
+  const [isUploadingOutcome, setIsUploadingOutcome] = useState(false);
   const [isLoadingRequests, setIsLoadingRequests] = useState(true);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [requestError, setRequestError] = useState("");
@@ -179,6 +190,10 @@ export function PartnerDashboard() {
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    setOutcomeTitle(selectedRequest.outcome_title || "");
+    setOutcomeDescription(selectedRequest.outcome_description || "");
+    setOutcomeFiles([]);
+    setOutcomePreviews([]);
 
     return () => {
       document.body.style.overflow = previousOverflow;
@@ -271,27 +286,73 @@ export function PartnerDashboard() {
       : [{ month: formatManilaDate(new Date(), { month: "short" }), users: 0, submissions: 0 }];
   }, [requests]);
 
-  const updateRequestStatus = async (request, status, noteOverride) => {
+  const updateRequestStatus = async (request, status, noteOverride, options = {}) => {
     setIsUpdatingStatus(true);
     setRequestError("");
     const noteToSend = noteOverride ?? statusNote;
 
     try {
-      await dssService.updateRequestStatus(request.id, {
+      let uploadedOutcomePhotos = options.outcome_photos || [];
+      if (status === "completed" && outcomeFiles.length > 0) {
+        setIsUploadingOutcome(true);
+        uploadedOutcomePhotos = await uploadService.uploadMultipleFiles(outcomeFiles);
+      }
+      const response = await dssService.updateRequestStatus(request.id, {
         status,
         notes: noteToSend || undefined,
+        outcome_title: status === "completed" ? outcomeTitle || undefined : undefined,
+        outcome_description: status === "completed" ? outcomeDescription || undefined : undefined,
+        outcome_photos: status === "completed" ? uploadedOutcomePhotos : undefined,
       });
       await loadRequests();
       const normalizedStatus = normalizeStatus(status);
       setSelectedRequest((current) =>
-        current?.id === request.id ? { ...current, status: normalizedStatus, notes: noteToSend || current.notes } : current,
+        current?.id === request.id
+          ? {
+              ...current,
+              ...response.data,
+              status: normalizedStatus,
+              notes: noteToSend || current.notes,
+              outcome_title: status === "completed" ? outcomeTitle : current.outcome_title,
+              outcome_description: status === "completed" ? outcomeDescription : current.outcome_description,
+              outcome_photos: status === "completed" ? uploadedOutcomePhotos : current.outcome_photos,
+            }
+          : current,
       );
       setStatusNote("");
+      setOutcomeTitle("");
+      setOutcomeDescription("");
+      setOutcomeFiles([]);
+      setOutcomePreviews([]);
     } catch (error) {
       setRequestError(error.message || "Unable to update request status.");
     } finally {
       setIsUpdatingStatus(false);
+      setIsUploadingOutcome(false);
     }
+  };
+
+  const existingOutcomeImages = useMemo(() => {
+    if (!selectedRequest?.outcome_photos?.length) {
+      return [];
+    }
+
+    return selectedRequest.outcome_photos.map((photo, index) => ({
+      url: typeof photo === "string" ? photo : photo?.url,
+      label: typeof photo === "object" && photo?.label ? photo.label : `Outcome photo ${index + 1}`,
+    })).filter((photo) => photo.url);
+  }, [selectedRequest]);
+
+  const previewOutcomeImages = useMemo(
+    () => outcomePreviews.map((url, index) => ({ url, label: outcomeFiles[index]?.name || `Selected photo ${index + 1}` })),
+    [outcomeFiles, outcomePreviews],
+  );
+
+  const handleOutcomeFiles = (files) => {
+    const selectedFiles = Array.from(files || []);
+    setOutcomeFiles(selectedFiles);
+    outcomePreviews.forEach((preview) => URL.revokeObjectURL(preview));
+    setOutcomePreviews(selectedFiles.map((file) => URL.createObjectURL(file)));
   };
 
   const submitRuleRequest = async (event) => {
@@ -326,7 +387,7 @@ export function PartnerDashboard() {
       <BrandLoadingScreen
         tone="partner"
         title="Loading partner requests"
-        message="We are gathering DSS briefs sent to your organization."
+        message="We are gathering textile briefs sent to your organization."
         detail="Accepted, pending, and completed requests will appear in a moment."
       />
     );
@@ -475,7 +536,7 @@ export function PartnerDashboard() {
           <details open>
             <summary className="flex cursor-pointer list-none flex-col gap-3 border-b border-[#d6e6f8] p-6 sm:flex-row sm:items-center sm:justify-between dark:border-white/10">
               <div>
-                <h3 className="text-xl text-[#10233f] dark:text-white">DSS Partner Requests</h3>
+                <h3 className="text-xl text-[#10233f] dark:text-white">Partner Requests</h3>
                 <p className="mt-1 text-sm text-[#41668f] dark:text-[#9fc5f8]">
                   View all user briefs, filter by status, then respond with a clear partner decision.
                 </p>
@@ -556,7 +617,7 @@ export function PartnerDashboard() {
                 {!isLoadingRequests && filteredRequests.length === 0 && (
                   <tr>
                     <td colSpan={7} className="py-10 text-center text-[#41668f] dark:text-[#9fc5f8]">
-                      No DSS requests match this view.
+                      No requests match this view.
                     </td>
                   </tr>
                 )}
@@ -626,7 +687,7 @@ export function PartnerDashboard() {
         >
           <h3 className="text-xl text-[#10233f]">Request partner rule or preference changes</h3>
           <p className="mt-1 text-sm text-[#41668f]">
-            Tell admins what your organization can accept so DSS partner matching can improve without changing rules silently.
+            Tell admins what your organization can accept so partner matching can improve without changing rules silently.
           </p>
           <div className="mt-5 grid gap-4 lg:grid-cols-[240px_1fr]">
             <label className="block">
@@ -853,6 +914,8 @@ export function PartnerDashboard() {
               {[
                 ["Pathway", pathwayLabels[selectedRequest.type] || selectedRequest.type],
                 ["Quantity", selectedRequest.quantity || 1],
+                ["Weight", selectedRequest.weight_value ? `${selectedRequest.weight_value} ${selectedRequest.weight_unit || "kg"}` : "Not specified"],
+                ["Shipping bag", bagGuidance[selectedRequest.type] || "Not specified"],
                 ["Condition", selectedRequest.condition || "Not specified"],
                 ["Cleanliness", selectedRequest.cleanliness || "Not specified"],
                 ["Buyback interest", selectedRequest.buyback_interest ? "Yes" : "No"],
@@ -876,7 +939,7 @@ export function PartnerDashboard() {
 
               <div className="space-y-4">
                 <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
-                  <h3 className="mb-4 text-xl font-semibold text-[#10233f] dark:text-white">DSS engine result</h3>
+                  <h3 className="mb-4 text-xl font-semibold text-[#10233f] dark:text-white">Recommendation summary</h3>
                   {(() => {
                     const recommendation = getDssRecommendation(selectedRequest);
                     const checks = recommendation.checks || selectedRequest.output_payload?.rule_checks || [];
@@ -903,7 +966,7 @@ export function PartnerDashboard() {
                             </div>
                           </div>
                         </div>
-                        <p>{recommendation.explanation || "No DSS explanation was saved for this request."}</p>
+                        <p>{recommendation.explanation || "No recommendation note was saved for this request."}</p>
                         {selectedRequest.output_payload?.recommendations?.length > 0 && (
                           <div className="rounded-xl border border-[#d6e6f8] bg-[#fbfdff] p-4 dark:border-blue-400/20 dark:bg-white/[0.04]">
                             <div className="mb-3 font-semibold text-[#10233f] dark:text-white">
@@ -929,7 +992,7 @@ export function PartnerDashboard() {
                         {checks.length > 0 && (
                           <details className="rounded-xl border border-[#d6e6f8] bg-[#fbfdff] px-4 py-3 dark:border-blue-400/20 dark:bg-white/[0.04]">
                             <summary className="cursor-pointer font-semibold text-[#4f6f9f] dark:text-[#9fc5f8]">
-                              View matched and missed DSS checks
+                              View routing checks
                             </summary>
                             <div className="mt-3 flex flex-wrap gap-2">
                               {checks.map((check) => (
@@ -998,11 +1061,10 @@ export function PartnerDashboard() {
                     placeholder="Example: Accepted for donation. Please pack clean items separately and bring them on Friday afternoon."
                     className="mb-3 w-full resize-y rounded-xl border border-[#d6e6f8] p-4 text-base leading-7 text-[#10233f] outline-none focus:border-[#4f6f9f] dark:border-blue-400/20 dark:bg-[#0f1b33] dark:text-white"
                   />
-                  <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="grid gap-2 sm:grid-cols-2">
                     {[
                       ["accepted", "Accept request"],
                       ["rejected", "Reject request"],
-                      ["completed", "Mark completed"],
                     ].map(([status, label]) => (
                       <button
                         key={status}
@@ -1019,6 +1081,70 @@ export function PartnerDashboard() {
                     ))}
                   </div>
                 </div>
+
+                {normalizeStatus(selectedRequest.status) === "accepted" && (
+                  <div className="grid gap-3 rounded-2xl border border-[#d6e6f8] bg-white p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
+                    <div>
+                      <h3 className="text-2xl font-semibold text-[#10233f] dark:text-white">Report what happened</h3>
+                      <p className="mt-1 text-sm leading-6 text-[#41668f] dark:text-[#9fc5f8]">
+                        Share the user-facing story once the textile has been processed. This sends a notification and message to the user.
+                      </p>
+                    </div>
+                    <input
+                      value={outcomeTitle}
+                      onChange={(event) => setOutcomeTitle(event.target.value)}
+                      className="rounded-xl border border-[#d6e6f8] px-4 py-3 text-sm text-[#10233f] outline-none focus:border-[#4f6f9f] dark:border-blue-400/20 dark:bg-[#0f1b33] dark:text-white"
+                      placeholder="Example: Turned into tote bags"
+                    />
+                    <textarea
+                      value={outcomeDescription}
+                      onChange={(event) => setOutcomeDescription(event.target.value)}
+                      rows={4}
+                      className="resize-y rounded-xl border border-[#d6e6f8] px-4 py-3 text-sm leading-6 text-[#10233f] outline-none focus:border-[#4f6f9f] dark:border-blue-400/20 dark:bg-[#0f1b33] dark:text-white"
+                      placeholder="Example: We sorted and stitched the fabric into two tote bags for the next community sale."
+                    />
+                    <label className="block cursor-pointer rounded-2xl border-2 border-dashed border-[#d6e6f8] bg-[#fbfdff] p-5 text-center text-sm text-[#41668f] transition-colors hover:bg-[#eff6ff] dark:border-blue-400/20 dark:bg-white/[0.04] dark:text-[#9fc5f8]">
+                      Add outcome photos
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={(event) => handleOutcomeFiles(event.target.files)}
+                      />
+                    </label>
+                    {(previewOutcomeImages.length > 0 || existingOutcomeImages.length > 0) && (
+                      <ImageCarousel
+                        images={previewOutcomeImages.length > 0 ? previewOutcomeImages : existingOutcomeImages}
+                        title={previewOutcomeImages.length > 0 ? "Selected outcome photos" : "Outcome photos"}
+                        allowDownload={existingOutcomeImages.length > 0}
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => updateRequestStatus(selectedRequest, "completed")}
+                      disabled={isUpdatingStatus || isUploadingOutcome || !outcomeTitle.trim()}
+                      className="rounded-xl bg-[#4f6f9f] px-4 py-3 text-sm font-semibold text-white hover:bg-[#3f5f8f] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isUploadingOutcome ? "Uploading photos..." : isUpdatingStatus ? "Completing..." : "Mark as completed"}
+                    </button>
+                  </div>
+                )}
+
+                {normalizeStatus(selectedRequest.status) === "completed" && (selectedRequest.outcome_title || existingOutcomeImages.length > 0) && (
+                  <div className="grid gap-3 rounded-2xl border border-[#d6e6f8] bg-white p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
+                    <h3 className="text-2xl font-semibold text-[#10233f] dark:text-white">Completion report</h3>
+                    {selectedRequest.outcome_title && (
+                      <p className="text-sm leading-6 text-[#41668f] dark:text-[#9fc5f8]">
+                        <span className="font-semibold text-[#10233f] dark:text-white">{selectedRequest.outcome_title}: </span>
+                        {selectedRequest.outcome_description || "Completed"}
+                      </p>
+                    )}
+                    {existingOutcomeImages.length > 0 && (
+                      <ImageCarousel images={existingOutcomeImages} title="Outcome photos" allowDownload />
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
