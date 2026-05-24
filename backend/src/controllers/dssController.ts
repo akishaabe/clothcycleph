@@ -71,7 +71,7 @@ function buildBrief(submission: any, recommendation: any) {
     `Recommended pathway: ${titleCase(recommendation.recommended_pathway)} (${Math.round(recommendation.confidence * 100)}% confidence)`,
     `Submission name: ${submission.submission_name || submission.item_type}`,
     `Item: ${submission.item_type}`,
-    `Quantity: ${submission.quantity || 1}`,
+    submission.quantity ? `Quantity: ${submission.quantity}` : '',
     submission.details?.weight_value ? `Weight: ${submission.details.weight_value} ${submission.details.weight_unit || 'kg'}` : '',
     `Shipping bag: ${titleCase(bagColorByPathway[recommendation.recommended_pathway])} bag for ${titleCase(recommendation.recommended_pathway)}`,
     `Condition: ${submission.condition}`,
@@ -470,7 +470,21 @@ export const getPartnerDssRequests = async (req: AuthRequest, res: Response) => 
          u.email AS user_email,
          rr.confidence,
          rr.explanation,
-         rr.output_payload
+         rr.output_payload,
+         COALESCE((
+           SELECT json_agg(rtu ORDER BY rtu.created_at DESC)
+           FROM request_tracking_updates rtu
+           WHERE rtu.submission_id = s.id
+             AND (rtu.request_id = t.id OR rtu.request_id IS NULL)
+         ), '[]'::json) AS tracking_updates,
+         (
+           SELECT row_to_json(rtu)
+           FROM request_tracking_updates rtu
+           WHERE rtu.submission_id = s.id
+             AND (rtu.request_id = t.id OR rtu.request_id IS NULL)
+           ORDER BY rtu.created_at DESC
+           LIMIT 1
+         ) AS latest_tracking_update
        FROM transactions t
        JOIN submissions s ON s.id = t.submission_id
        JOIN users u ON u.id = t.from_user_id
@@ -862,9 +876,141 @@ export const getPartnerRuleChangeRequests = async (req: AuthRequest, res: Respon
       throw new AppError(403, 'Only partners and admins can view partner rule change requests');
     }
 
-    res.json({ data: result.rows, count: result.rows.length });
+    const requestIds = result.rows.map((row: any) => row.id);
+    let repliesByRequest: Record<string, any[]> = {};
+
+    if (requestIds.length > 0) {
+      const repliesResult = await query(
+        `SELECT
+           r.*,
+           u.name AS author_name,
+           u.email AS author_email
+         FROM partner_rule_change_request_replies r
+         LEFT JOIN users u ON u.id = r.author_user_id
+         WHERE r.request_id = ANY($1)
+         ORDER BY r.created_at ASC`,
+        [requestIds]
+      );
+
+      repliesByRequest = repliesResult.rows.reduce((groups: Record<string, any[]>, reply: any) => {
+        groups[reply.request_id] = [...(groups[reply.request_id] || []), reply];
+        return groups;
+      }, {});
+    }
+
+    const rows = result.rows.map((row: any) => ({
+      ...row,
+      replies: repliesByRequest[row.id] || [],
+    }));
+
+    res.json({ data: rows, count: rows.length });
   } catch (error) {
     res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};
+
+export const replyToPartnerRuleChangeRequest = async (req: AuthRequest, res: Response) => {
+  const client = await getClient();
+
+  try {
+    if (!req.user?.id) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    if (!['partner', 'admin'].includes(String(req.user.role))) {
+      throw new AppError(403, 'Only related partners and admins can reply to partner rule requests');
+    }
+
+    const { id } = req.params;
+    const message = String(req.body.message || '').trim();
+
+    if (!message) {
+      throw new AppError(400, 'Reply message is required');
+    }
+
+    await client.query('BEGIN');
+
+    const requestResult = await client.query(
+      `SELECT prcr.*, p.user_id AS partner_user_id, p.email AS partner_email
+       FROM partner_rule_change_requests prcr
+       LEFT JOIN partners p ON p.id = prcr.partner_id
+       WHERE prcr.id = $1`,
+      [id]
+    );
+
+    if (requestResult.rows.length === 0) {
+      throw new AppError(404, 'Partner rule change request not found');
+    }
+
+    const request = requestResult.rows[0];
+    const isRelatedPartner =
+      req.user.role === 'partner' &&
+      (request.requested_by_user_id === req.user.id ||
+        request.partner_user_id === req.user.id ||
+        String(request.partner_email || '').toLowerCase() === String(req.user.email || '').toLowerCase());
+
+    if (req.user.role !== 'admin' && !isRelatedPartner) {
+      throw new AppError(403, 'You can reply only to your own partner rule request');
+    }
+
+    if (req.user.role === 'partner' && ['accepted', 'approved', 'declined'].includes(String(request.status))) {
+      throw new AppError(400, 'Replies are disabled after the request is accepted or declined');
+    }
+
+    const replyResult = await client.query(
+      `INSERT INTO partner_rule_change_request_replies (request_id, author_user_id, author_role, message)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [id, req.user.id, req.user.role, message]
+    );
+
+    await client.query(
+      `UPDATE partner_rule_change_requests
+       SET updated_at = NOW()
+       WHERE id = $1`,
+      [id]
+    );
+
+    const authorResult = await client.query('SELECT name, email FROM users WHERE id = $1', [req.user.id]);
+    const authorName = authorResult.rows[0]?.name || authorResult.rows[0]?.email || (req.user.role === 'admin' ? 'Admin' : 'Partner');
+
+    if (req.user.role === 'partner') {
+      const admins = await client.query(`SELECT id FROM users WHERE role = 'admin' AND COALESCE(status, 'active') = 'active'`);
+      await Promise.all(admins.rows.map((admin: any) =>
+        enqueueNotification(
+          admin.id,
+          'system',
+          'Partner added details',
+          `${authorName} replied to a partner rule request.`,
+          { action_url: `/admin?panel=rule-requests&request=${id}&highlight=${id}`, ruleChangeRequestId: id }
+        )
+      ));
+    } else {
+      const partnerUsers = await client.query(
+        `SELECT DISTINCT u.id
+         FROM users u
+         WHERE u.id = $1 OR u.partner_id = $2`,
+        [request.requested_by_user_id, request.partner_id]
+      );
+      await Promise.all(partnerUsers.rows.map((partnerUser: any) =>
+        enqueueNotification(
+          partnerUser.id,
+          'system',
+          'Admin replied to rule request',
+          `${authorName} replied to your partner rule request.`,
+          { action_url: `/partner?panel=rule-requests&highlight=${id}`, ruleChangeRequestId: id }
+        )
+      ));
+    }
+
+    await client.query('COMMIT');
+
+    res.status(201).json({ message: 'Reply saved', data: { ...replyResult.rows[0], author_name: authorName } });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  } finally {
+    client.release();
   }
 };
 

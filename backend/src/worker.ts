@@ -27,6 +27,8 @@ import {
 } from './services/authD1Service.js';
 import {
   createSubmissionD1,
+  createTrackingUpdateD1,
+  getTrackingUpdatesD1,
   getUserSubmissionsD1,
   getSubmissionByIdD1,
   updateSubmissionStatusD1,
@@ -57,7 +59,7 @@ import {
 import { uploadFileToR2 } from './services/d1UploadService.js';
 import { generateD1UUID, type D1Database } from './config/d1.js';
 import type { EmailProvider } from './services/workerEmailService.js';
-import { createSubmissionSchema, updateSubmissionStatusSchema } from './schemas/submissions.js';
+import { createSubmissionSchema, createTrackingUpdateSchema, updateSubmissionStatusSchema } from './schemas/submissions.js';
 import { sendMessageSchema } from './schemas/messages.js';
 import { createTransactionSchema, updateTransactionStatusSchema } from './schemas/transactions.js';
 import {
@@ -71,6 +73,7 @@ import {
   verifyResetCodeSchema,
 } from './schemas/auth.js';
 import {
+  partnerRuleChangeReplySchema,
   partnerRuleChangeRequestSchema,
   remindDssRequestSchema,
   sendDssRecommendationSchema,
@@ -85,6 +88,7 @@ import {
   getUserDssRequestsD1,
   listDssPartnersD1,
   remindDssRequestD1,
+  replyToPartnerRuleChangeRequestD1,
   sendRecommendationToPartnerD1,
   updateDssRequestStatusD1,
   updatePartnerRuleChangeRequestStatusD1,
@@ -524,6 +528,31 @@ app.get('/api/submissions/:id', requireAuth, async (c) => {
   return jsonData(c, submission);
 });
 
+app.get('/api/submissions/:id/tracking', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; role?: string; email?: string };
+  const submissionId = c.req.param('id');
+  const result = await getTrackingUpdatesD1(c.env.DB, submissionId!, {
+    id: user.id!,
+    role: user.role,
+    email: user.email,
+  });
+  if (!result) {
+    return c.json({ error: 'You do not have access to this tracking history' }, 403);
+  }
+  return jsonList(c, result.results);
+});
+
+app.post('/api/submissions/:id/tracking', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; email?: string };
+  const submissionId = c.req.param('id');
+  const body = await parseJsonBody(c, createTrackingUpdateSchema);
+  const update = await createTrackingUpdateD1(c.env.DB, submissionId!, { id: user.id!, email: user.email }, body);
+  if (!update) {
+    return c.json({ error: 'Submission not found' }, 404);
+  }
+  return c.json({ message: 'Tracking update recorded successfully', data: update }, 201);
+});
+
 app.put('/api/submissions/:id/status', requireAuth, async (c) => {
   const submissionId = c.req.param('id');
   const body = await parseJsonBody(c, updateSubmissionStatusSchema);
@@ -631,6 +660,14 @@ app.post('/api/dss/rule-change-requests', requireAuth, async (c) => {
   const body = await parseJsonBody(c, partnerRuleChangeRequestSchema);
   const data = await createPartnerRuleChangeRequestD1(c.env.DB, user.id!, user.email, body);
   return c.json({ message: 'Rule change request submitted for admin review', data }, 201);
+});
+
+app.post('/api/dss/rule-change-requests/:id/replies', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string; email?: string; role?: string };
+  const requestId = c.req.param('id');
+  const body = await parseJsonBody(c, partnerRuleChangeReplySchema);
+  const data = await replyToPartnerRuleChangeRequestD1(c.env.DB, user, requestId!, body.message);
+  return c.json({ message: 'Reply saved', data }, 201);
 });
 
 app.put('/api/dss/rule-change-requests/:id/status', requireAuth, requireAdmin, async (c) => {
@@ -848,24 +885,88 @@ app.put('/api/admin/users/:id', requireAuth, requireAdmin, async (c) => {
 
 app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (c) => {
   const userId = c.req.param('id');
-  await deleteUserD1(c.env.DB, userId!);
+  const user = c.get('user') as any;
+  await deleteUserD1(c.env.DB, userId!, user?.id);
   return c.json({ message: 'User deleted successfully' });
 });
 
 app.get('/api/admin/deleted-records', requireAuth, requireAdmin, async (c) => {
+  const url = new URL(c.req.url);
+  const page = Math.max(1, Number(url.searchParams.get('page') || 1));
+  const limit = Math.min(100, Math.max(10, Number(url.searchParams.get('limit') || 25)));
+  const offset = (page - 1) * limit;
+  const clauses: string[] = [];
+  const params: any[] = [];
+  const push = (value: any) => {
+    params.push(value);
+    return '?';
+  };
+
+  const entityType = url.searchParams.get('entity_type');
+  if (entityType) {
+    clauses.push(`dr.entity_type = ${push(entityType.toLowerCase())}`);
+  }
+
+  const deletedBy = url.searchParams.get('deleted_by');
+  if (deletedBy) {
+    const value = `%${deletedBy.toLowerCase()}%`;
+    clauses.push(`(
+      lower(COALESCE(dr.deleted_by_user_id, '')) LIKE ${push(value)}
+      OR lower(COALESCE(u.name, '')) LIKE ${push(value)}
+      OR lower(COALESCE(u.email, '')) LIKE ${push(value)}
+      OR lower(COALESCE(u.role, '')) LIKE ${push(value)}
+    )`);
+  }
+
+  const keyword = url.searchParams.get('keyword');
+  if (keyword) {
+    const value = `%${keyword.toLowerCase()}%`;
+    clauses.push(`(
+      lower(COALESCE(dr.entity_type, '')) LIKE ${push(value)}
+      OR lower(COALESCE(dr.entity_id, '')) LIKE ${push(value)}
+      OR lower(COALESCE(dr.snapshot, '')) LIKE ${push(value)}
+      OR lower(COALESCE(u.name, '')) LIKE ${push(value)}
+      OR lower(COALESCE(u.email, '')) LIKE ${push(value)}
+    )`);
+  }
+
+  const dateFrom = url.searchParams.get('date_from');
+  if (dateFrom) {
+    clauses.push(`dr.deleted_at >= ${push(dateFrom)}`);
+  }
+
+  const dateTo = url.searchParams.get('date_to');
+  if (dateTo) {
+    clauses.push(`dr.deleted_at < datetime(${push(dateTo)}, '+1 day')`);
+  }
+
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const countResult = await c.env.DB
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM deleted_records dr
+       LEFT JOIN users u ON u.id = dr.deleted_by_user_id
+       ${where}`
+    )
+    .bind(...params)
+    .first();
   const result = await c.env.DB
     .prepare(
       `SELECT dr.*, u.name AS deleted_by_name, u.email AS deleted_by_email
        FROM deleted_records dr
        LEFT JOIN users u ON u.id = dr.deleted_by_user_id
+       ${where}
        ORDER BY dr.deleted_at DESC
-       LIMIT 200`
+       LIMIT ? OFFSET ?`
     )
+    .bind(...params, limit, offset)
     .all();
-  return jsonList(c, (result.results || []).map((row: any) => ({
+  const records = (result.results || []).map((row: any) => ({
     ...row,
     snapshot: parseMaybeJson(row.snapshot),
-  })));
+  }));
+  const count = Number((countResult as any)?.count || 0);
+  return c.json({ data: records, count, page, limit, total_pages: Math.max(1, Math.ceil(count / limit)) });
 });
 
 app.get('/api/admin/submissions', requireAuth, requireAdmin, async (c) => {
@@ -984,12 +1085,24 @@ app.put('/api/admin/dss-rules/:id', requireAuth, requireAdmin, async (c) => {
 });
 
 app.delete('/api/admin/dss-rules/:id', requireAuth, requireAdmin, async (c) => {
+  const user = c.get('user') as any;
   const result = await c.env.DB
     .prepare('DELETE FROM dss_rules WHERE id = ? RETURNING *')
     .bind(c.req.param('id'))
     .first();
   if (!result) {
     return c.json({ error: 'DSS rule not found' }, 404);
+  }
+  try {
+    await c.env.DB
+      .prepare(
+        `INSERT INTO deleted_records (id, entity_type, entity_id, snapshot, deleted_by_user_id)
+         VALUES (?, 'dss_rule', ?, ?, ?)`
+      )
+      .bind(generateD1UUID(), c.req.param('id'), JSON.stringify(result), user?.id || null)
+      .run();
+  } catch (error) {
+    console.warn('Unable to archive deleted DSS rule record:', error);
   }
   return c.json({ message: 'DSS rule deleted', data: result });
 });
@@ -1016,6 +1129,17 @@ app.delete('/api/notifications/:id', requireAuth, async (c) => {
   const deleted = await deleteNotificationD1(c.env.DB, notificationId!, user.id!);
   if (!deleted) {
     return c.json({ error: 'Notification not found' }, 404);
+  }
+  try {
+    await c.env.DB
+      .prepare(
+        `INSERT INTO deleted_records (id, entity_type, entity_id, snapshot, deleted_by_user_id)
+         VALUES (?, 'notification', ?, ?, ?)`
+      )
+      .bind(generateD1UUID(), notificationId, JSON.stringify(deleted), user.id || null)
+      .run();
+  } catch (error) {
+    console.warn('Unable to archive deleted notification record:', error);
   }
   return c.json({ message: 'Notification deleted', data: deleted });
 });

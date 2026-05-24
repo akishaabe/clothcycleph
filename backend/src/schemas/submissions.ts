@@ -70,8 +70,28 @@ export const createSubmissionSchema = z.object({
       ashes: optionalStringArraySchema,
     })
     .optional(),
+}).superRefine((data, ctx) => {
+  const hasQuantity = data.quantity != null && Number(data.quantity) > 0;
+  const hasWeight = data.details?.weight_value != null && Number(data.details.weight_value) > 0;
+
+  if (!hasQuantity && !hasWeight) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please provide either the quantity of items or the estimated weight.',
+      path: ['quantity'],
+    });
+  }
 });
 
 export const updateSubmissionStatusSchema = z.object({
   status: z.enum(['pending', 'verified', 'processed', 'rejected']),
+});
+
+export const createTrackingUpdateSchema = z.object({
+  request_id: z.string().uuid().nullable().optional(),
+  progress_status: z.enum(['request_sent', 'scheduled', 'in_transit', 'dropoff_completed', 'completed']),
+  fulfillment_method: z.enum(['drop_off', 'shipping', 'pickup', 'other']).default('drop_off').optional(),
+  logistics_company: z.string().trim().max(160).nullable().optional(),
+  tracking_number: z.string().trim().max(160).nullable().optional(),
+  notes: z.string().trim().max(1000).nullable().optional(),
 });

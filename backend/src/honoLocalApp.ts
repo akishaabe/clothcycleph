@@ -31,6 +31,8 @@ import {
   createSubmission,
   getSubmissionById,
   getUserSubmissions,
+  getSubmissionTrackingUpdates,
+  createSubmissionTrackingUpdate,
   updateSubmissionStatus,
 } from './controllers/submissionController.js';
 import {
@@ -68,6 +70,7 @@ import {
   getUserDssRequests,
   listPartners,
   remindDssRequest,
+  replyToPartnerRuleChangeRequest,
   sendRecommendationToPartner,
   updateDssRequestStatus,
   updatePartnerRuleChangeRequestStatus,
@@ -102,10 +105,11 @@ import {
   updateProfileSchema,
   verifyResetCodeSchema,
 } from './schemas/auth.js';
-import { createSubmissionSchema, updateSubmissionStatusSchema } from './schemas/submissions.js';
+import { createSubmissionSchema, createTrackingUpdateSchema, updateSubmissionStatusSchema } from './schemas/submissions.js';
 import { sendMessageSchema } from './schemas/messages.js';
 import { createTransactionSchema, updateTransactionStatusSchema } from './schemas/transactions.js';
 import {
+  partnerRuleChangeReplySchema,
   partnerRuleChangeRequestSchema,
   remindDssRequestSchema,
   sendDssRecommendationSchema,
@@ -263,6 +267,8 @@ app.post('/api/auth/2fa/disable', controller(disableTwoFactor, { auth: true, bod
 app.post('/api/submissions', controller(createSubmission, { auth: true, bodySchema: createSubmissionSchema }));
 app.get('/api/submissions', controller(getUserSubmissions, { auth: true }));
 app.get('/api/submissions/:id', controller(getSubmissionById, { auth: true, paramsSchema: uuidParamSchema }));
+app.get('/api/submissions/:id/tracking', controller(getSubmissionTrackingUpdates, { auth: true, paramsSchema: uuidParamSchema }));
+app.post('/api/submissions/:id/tracking', controller(createSubmissionTrackingUpdate, { auth: true, paramsSchema: uuidParamSchema, bodySchema: createTrackingUpdateSchema }));
 app.put(
   '/api/submissions/:id/status',
   controller(updateSubmissionStatus, {
@@ -327,6 +333,10 @@ app.get('/api/dss/partners', controller(listPartners, { auth: true }));
 app.get('/api/dss/audit', controller(getDssAuditRuns, { auth: true }));
 app.get('/api/dss/audit/export', controller(exportDssAuditReport, { auth: true }));
 app.get('/api/dss/rule-change-requests', controller(getPartnerRuleChangeRequests, { auth: true }));
+app.post(
+  '/api/dss/rule-change-requests/:id/replies',
+  controller(replyToPartnerRuleChangeRequest, { auth: true, paramsSchema: uuidParamSchema, bodySchema: partnerRuleChangeReplySchema })
+);
 app.put(
   '/api/dss/rule-change-requests/:id/status',
   controller(updatePartnerRuleChangeRequestStatus, { auth: true, paramsSchema: uuidParamSchema })

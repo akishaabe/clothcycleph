@@ -608,17 +608,22 @@ export async function updateUserD1(
   return normalizeUser(user);
 }
 
-export async function deleteUserD1(db: D1Database, userId: string) {
+export async function deleteUserD1(db: D1Database, userId: string, deletedByUserId?: string) {
   const user = await queryD1First(db, 'SELECT * FROM users WHERE id = ?', [userId]);
   if (!user) {
     throw new Error('User not found');
   }
-  await executeD1(
-    db,
-    `INSERT INTO deleted_records (id, entity_type, entity_id, snapshot)
-     VALUES (?, 'user', ?, ?)`,
-    [generateD1UUID(), userId, JSON.stringify(user)]
-  );
+  try {
+    const { password_hash, ...snapshot } = user;
+    await executeD1(
+      db,
+      `INSERT INTO deleted_records (id, entity_type, entity_id, snapshot, deleted_by_user_id)
+       VALUES (?, 'user', ?, ?, ?)`,
+      [generateD1UUID(), userId, JSON.stringify(snapshot), deletedByUserId || null]
+    );
+  } catch (error) {
+    console.warn('Unable to archive deleted user record:', error);
+  }
   const result = await executeD1(db, 'DELETE FROM users WHERE id = ?', [userId]);
   if (!result) {
     throw new Error('User not found');
@@ -627,7 +632,7 @@ export async function deleteUserD1(db: D1Database, userId: string) {
 }
 
 export async function deleteOwnAccountD1(db: D1Database, userId: string, password: string) {
-  const user = await queryD1First(db, 'SELECT password_hash FROM users WHERE id = ?', [userId]);
+  const user = await queryD1First(db, 'SELECT * FROM users WHERE id = ?', [userId]);
   if (!user) {
     throw new Error('User not found');
   }
@@ -635,6 +640,18 @@ export async function deleteOwnAccountD1(db: D1Database, userId: string, passwor
   const isValidPassword = await comparePassword(password, user.password_hash);
   if (!isValidPassword) {
     throw new Error('Invalid password');
+  }
+
+  try {
+    const { password_hash, ...snapshot } = user;
+    await executeD1(
+      db,
+      `INSERT INTO deleted_records (id, entity_type, entity_id, snapshot, deleted_by_user_id)
+       VALUES (?, 'user_account_self_delete', ?, ?, ?)`,
+      [generateD1UUID(), userId, JSON.stringify(snapshot), userId]
+    );
+  } catch (error) {
+    console.warn('Unable to archive deleted account record:', error);
   }
 
   await executeD1(db, 'DELETE FROM users WHERE id = ?', [userId]);

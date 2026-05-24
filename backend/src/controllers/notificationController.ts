@@ -1,6 +1,7 @@
 import type { HttpRequest as Request, HttpResponse as Response } from '../types/http.js';
 import type { HttpRequest as AuthRequest } from '../types/http.js';
 import { AppError } from '../utils/errorHandler.js';
+import { query } from '../config/database.js';
 import {
   getUserNotifications,
   getUnreadNotificationCount,
@@ -133,6 +134,16 @@ export const deleteNotificationById = async (req: AuthRequest, res: Response) =>
 
     if (!notification) {
       throw new AppError(404, 'Notification not found');
+    }
+
+    try {
+      await query(
+        `INSERT INTO deleted_records (entity_type, entity_id, snapshot, deleted_by_user_id)
+         VALUES ('notification', $1, $2, $3)`,
+        [id, JSON.stringify(notification), userId]
+      );
+    } catch (archiveError) {
+      console.warn('Unable to archive deleted notification record:', archiveError);
     }
 
     res.json({

@@ -27,3 +27,7 @@ export const partnerRuleChangeRequestSchema = z.object({
   requested_change: z.string().trim().min(1).max(2000),
   reason: z.string().trim().max(1000).optional(),
 });
+
+export const partnerRuleChangeReplySchema = z.object({
+  message: z.string().trim().min(1).max(2000),
+});

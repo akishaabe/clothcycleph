@@ -103,7 +103,7 @@ The DSS engine currently scores Recycle, Donate, and Upcycle. Buyback is not a s
 | Partner Management | `partners`, `partner_rule_change_requests` |
 | Textile Submission | `submissions`, `submission_details`, `burn_tests`, `submission_images`; weight is stored on `submission_details.weight_value` and `submission_details.weight_unit` |
 | DSS Audit | `recommendation_runs`, `recommendation_results`, `recommendation_feedback`, `dss_rules` |
-| Transactions | `transactions`; includes bag color, lightweight distance/carbon estimate metadata, and partner outcome report fields including photo URLs |
+| Transactions | `transactions`, `request_tracking_updates`; includes bag color, lightweight distance/carbon estimate metadata, user-side logistics/progress tracking, and partner outcome report fields including photo URLs |
 | Communication | `conversations`, `messages`, `message_attachments`, `notifications` |
 | Administration | `activity_logs`, `deleted_records`, `schema_migrations` |
 

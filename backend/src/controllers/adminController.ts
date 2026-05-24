@@ -148,11 +148,16 @@ export const deleteAdminUser = async (req: Request, res: Response) => {
       throw new AppError(404, 'User not found');
     }
 
-    await query(
-      `INSERT INTO deleted_records (entity_type, entity_id, snapshot, deleted_by_user_id)
-       VALUES ('user', $1, $2, $3)`,
-      [req.params.id, JSON.stringify(existing.rows[0]), req.user?.id || null]
-    );
+    try {
+      const { password_hash, ...snapshot } = existing.rows[0];
+      await query(
+        `INSERT INTO deleted_records (entity_type, entity_id, snapshot, deleted_by_user_id)
+         VALUES ('user', $1, $2, $3)`,
+        [req.params.id, JSON.stringify(snapshot), req.user?.id || null]
+      );
+    } catch (archiveError) {
+      console.warn('Unable to archive deleted user record:', archiveError);
+    }
 
     const result = await query('DELETE FROM users WHERE id = $1 RETURNING id', [req.params.id]);
     if (result.rows.length === 0) {
@@ -168,15 +173,73 @@ export const deleteAdminUser = async (req: Request, res: Response) => {
 export const getDeletedRecords = async (req: Request, res: Response) => {
   try {
     requireAdmin(req);
+    const page = Math.max(1, Number(req.query.page || 1));
+    const limit = Math.min(100, Math.max(10, Number(req.query.limit || 25)));
+    const offset = (page - 1) * limit;
+    const filters: string[] = [];
+    const params: unknown[] = [];
+
+    const addParam = (value: unknown) => {
+      params.push(value);
+      return `$${params.length}`;
+    };
+
+    if (req.query.entity_type) {
+      filters.push(`dr.entity_type = ${addParam(String(req.query.entity_type).toLowerCase())}`);
+    }
+
+    if (req.query.deleted_by) {
+      const value = `%${String(req.query.deleted_by).toLowerCase()}%`;
+      const placeholder = addParam(value);
+      filters.push(`(
+        lower(COALESCE(dr.deleted_by_user_id::text, '')) LIKE ${placeholder}
+        OR lower(COALESCE(u.name, '')) LIKE ${placeholder}
+        OR lower(COALESCE(u.email, '')) LIKE ${placeholder}
+        OR lower(COALESCE(u.role, '')) LIKE ${placeholder}
+      )`);
+    }
+
+    if (req.query.keyword) {
+      const value = `%${String(req.query.keyword).toLowerCase()}%`;
+      const placeholder = addParam(value);
+      filters.push(`(
+        lower(COALESCE(dr.entity_type, '')) LIKE ${placeholder}
+        OR lower(COALESCE(dr.entity_id::text, '')) LIKE ${placeholder}
+        OR lower(COALESCE(dr.snapshot::text, '')) LIKE ${placeholder}
+        OR lower(COALESCE(u.name, '')) LIKE ${placeholder}
+        OR lower(COALESCE(u.email, '')) LIKE ${placeholder}
+      )`);
+    }
+
+    if (req.query.date_from) {
+      filters.push(`dr.deleted_at >= ${addParam(String(req.query.date_from))}::timestamp`);
+    }
+
+    if (req.query.date_to) {
+      filters.push(`dr.deleted_at < (${addParam(String(req.query.date_to))}::date + INTERVAL '1 day')`);
+    }
+
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const countResult = await query(
+      `SELECT COUNT(*)::int AS count
+       FROM deleted_records dr
+       LEFT JOIN users u ON u.id = dr.deleted_by_user_id
+       ${where}`,
+      params
+    );
+
     const result = await query(
       `SELECT dr.*, u.name AS deleted_by_name, u.email AS deleted_by_email
        FROM deleted_records dr
        LEFT JOIN users u ON u.id = dr.deleted_by_user_id
+       ${where}
        ORDER BY dr.deleted_at DESC
-       LIMIT 200`
+       LIMIT ${addParam(limit)} OFFSET ${addParam(offset)}`,
+      params
     );
 
-    res.json({ data: result.rows, count: result.rows.length });
+    const count = Number(countResult.rows[0]?.count || 0);
+    res.json({ data: result.rows, count, page, limit, total_pages: Math.max(1, Math.ceil(count / limit)) });
   } catch (error) {
     res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
   }
@@ -332,6 +395,16 @@ export const deleteDssRule = async (req: Request, res: Response) => {
     const result = await query('DELETE FROM dss_rules WHERE id = $1 RETURNING *', [req.params.id]);
     if (result.rows.length === 0) {
       throw new AppError(404, 'DSS rule not found');
+    }
+
+    try {
+      await query(
+        `INSERT INTO deleted_records (entity_type, entity_id, snapshot, deleted_by_user_id)
+         VALUES ('dss_rule', $1, $2, $3)`,
+        [req.params.id, JSON.stringify(result.rows[0]), req.user?.id || null]
+      );
+    } catch (archiveError) {
+      console.warn('Unable to archive deleted DSS rule record:', archiveError);
     }
 
     res.json({ message: 'DSS rule deleted', data: result.rows[0] });

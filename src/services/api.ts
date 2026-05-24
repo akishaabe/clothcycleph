@@ -16,6 +16,8 @@ import {
   UpdateProfilePayload,
   Submission,
   CreateSubmissionPayload,
+  CreateTrackingUpdatePayload,
+  RequestTrackingUpdate,
   UpdateSubmissionStatusPayload,
   Message,
   SendMessagePayload,
@@ -446,6 +448,32 @@ export const dssService = {
       body: JSON.stringify(payload),
     });
   },
+
+  async replyToRuleChangeRequest(
+    requestId: string,
+    payload: { message: string },
+  ): Promise<{ message: string; data: any }> {
+    return fetchWithAuth(`/dss/rule-change-requests/${requestId}/replies`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getTrackingUpdates(id: string): Promise<{ data: RequestTrackingUpdate[]; count: number }> {
+    return fetchWithAuth(`/submissions/${id}/tracking`, {
+      method: 'GET',
+    });
+  },
+
+  async createTrackingUpdate(
+    id: string,
+    payload: CreateTrackingUpdatePayload
+  ): Promise<{ message: string; data: RequestTrackingUpdate }> {
+    return fetchWithAuth(`/submissions/${id}/tracking`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
 };
 
 // ============= MESSAGE ENDPOINTS =============
@@ -602,8 +630,25 @@ export const adminService = {
     });
   },
 
-  async getDeletedRecords(): Promise<{ data: any[]; count: number }> {
-    return fetchWithAuth('/admin/deleted-records', { method: 'GET' });
+  async getDeletedRecords(options: {
+    entityType?: string;
+    deletedBy?: string;
+    keyword?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    limit?: number;
+  } = {}): Promise<{ data: any[]; count: number; page?: number; limit?: number; total_pages?: number }> {
+    const params = new URLSearchParams();
+    if (options.entityType) params.set('entity_type', options.entityType);
+    if (options.deletedBy) params.set('deleted_by', options.deletedBy);
+    if (options.keyword) params.set('keyword', options.keyword);
+    if (options.dateFrom) params.set('date_from', options.dateFrom);
+    if (options.dateTo) params.set('date_to', options.dateTo);
+    if (options.page) params.set('page', String(options.page));
+    if (options.limit) params.set('limit', String(options.limit));
+
+    return fetchWithAuth(`/admin/deleted-records${params.toString() ? `?${params.toString()}` : ''}`, { method: 'GET' });
   },
 
   async getSubmissions(): Promise<{ data: Submission[]; count: number }> {

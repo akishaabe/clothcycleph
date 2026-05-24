@@ -129,8 +129,41 @@ export interface Submission {
   scheduled_at?: string;
   details?: SubmissionDetails | null;
   burn_test?: BurnTestDetails | null;
+  tracking_updates?: RequestTrackingUpdate[];
+  latest_tracking_update?: RequestTrackingUpdate | null;
   created_at: string;
   updated_at: string;
+}
+
+export type TrackingProgressStatus =
+  | 'request_sent'
+  | 'scheduled'
+  | 'in_transit'
+  | 'dropoff_completed'
+  | 'completed';
+
+export interface RequestTrackingUpdate {
+  id: string;
+  submission_id: string;
+  request_id?: string | null;
+  user_id: string;
+  partner_id?: string | null;
+  progress_status: TrackingProgressStatus;
+  fulfillment_method?: 'drop_off' | 'shipping' | 'pickup' | 'other';
+  logistics_company?: string | null;
+  tracking_number?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface CreateTrackingUpdatePayload {
+  request_id?: string | null;
+  progress_status: TrackingProgressStatus;
+  fulfillment_method?: 'drop_off' | 'shipping' | 'pickup' | 'other';
+  logistics_company?: string | null;
+  tracking_number?: string | null;
+  notes?: string | null;
 }
 
 export interface SubmissionDetails {

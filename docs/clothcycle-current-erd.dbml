@@ -255,6 +255,21 @@ Table transactions {
   updated_at timestamp [default: `now()`]
 }
 
+Table request_tracking_updates {
+  id uuid [pk, default: `gen_random_uuid()`]
+  submission_id uuid [not null, ref: > submissions.id]
+  request_id uuid [ref: > transactions.id]
+  user_id uuid [not null, note: "References users.id; user who recorded the progress update"]
+  partner_id uuid [ref: > partners.id]
+  progress_status varchar [not null, note: "request_sent, scheduled, in_transit, dropoff_completed, completed"]
+  fulfillment_method varchar [note: "drop_off, shipping, pickup, other. Default: drop_off"]
+  logistics_company varchar [note: "Optional courier/logistics company"]
+  tracking_number varchar [note: "Optional shipping tracking number"]
+  notes text
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
 Table deleted_records {
   id uuid [pk, default: `gen_random_uuid()`]
   entity_type varchar [not null]

@@ -1103,7 +1103,7 @@ export const deleteOwnAccount = async (req: Request, res: Response) => {
       throw new AppError(400, 'Password is required to delete your account');
     }
 
-    const result = await query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+    const result = await query('SELECT * FROM users WHERE id = $1', [userId]);
     if (result.rows.length === 0) {
       throw new AppError(404, 'User not found');
     }
@@ -1111,6 +1111,17 @@ export const deleteOwnAccount = async (req: Request, res: Response) => {
     const isValidPassword = await comparePassword(password, result.rows[0].password_hash);
     if (!isValidPassword) {
       throw new AppError(401, 'Invalid password');
+    }
+
+    try {
+      const { password_hash, ...snapshot } = result.rows[0];
+      await query(
+        `INSERT INTO deleted_records (entity_type, entity_id, snapshot, deleted_by_user_id)
+         VALUES ('user_account_self_delete', $1, $2, $3)`,
+        [userId, JSON.stringify(snapshot), userId]
+      );
+    } catch (archiveError) {
+      console.warn('Unable to archive deleted account record:', archiveError);
     }
 
     await query('DELETE FROM users WHERE id = $1', [userId]);

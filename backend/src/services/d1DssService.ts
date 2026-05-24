@@ -298,8 +298,41 @@ export async function getPartnerRuleChangeRequestsD1(
   db: D1Database,
   user?: { id?: string; email?: string; role?: string }
 ) {
+  const attachReplies = async (result: any) => {
+    const requestIds = (result.results || []).map((row: any) => row.id);
+    if (requestIds.length === 0) {
+      return result;
+    }
+
+    const placeholders = requestIds.map(() => '?').join(', ');
+    const replies = await queryD1(
+      db,
+      `SELECT
+         r.*,
+         u.name AS author_name,
+         u.email AS author_email
+       FROM partner_rule_change_request_replies r
+       LEFT JOIN users u ON u.id = r.author_user_id
+       WHERE r.request_id IN (${placeholders})
+       ORDER BY r.created_at ASC`,
+      requestIds
+    );
+    const repliesByRequest = (replies.results || []).reduce((groups: Record<string, any[]>, reply: any) => {
+      groups[reply.request_id] = [...(groups[reply.request_id] || []), reply];
+      return groups;
+    }, {});
+
+    return {
+      ...result,
+      results: (result.results || []).map((row: any) => ({
+        ...row,
+        replies: repliesByRequest[row.id] || [],
+      })),
+    };
+  };
+
   if (user?.role === 'partner') {
-    return queryD1(
+    const result = await queryD1(
       db,
       `SELECT
          prcr.*,
@@ -315,9 +348,11 @@ export async function getPartnerRuleChangeRequestsD1(
        ORDER BY prcr.created_at DESC`,
       [user.id || '', user.id || '', user.email || '']
     );
+
+    return attachReplies(result);
   }
 
-  return queryD1(
+  const result = await queryD1(
     db,
     `SELECT
        prcr.*,
@@ -329,6 +364,96 @@ export async function getPartnerRuleChangeRequestsD1(
      LEFT JOIN users u ON u.id = prcr.requested_by_user_id
      ORDER BY prcr.created_at DESC`
   );
+
+  return attachReplies(result);
+}
+
+export async function replyToPartnerRuleChangeRequestD1(
+  db: D1Database,
+  user: { id?: string; email?: string; role?: string },
+  requestId: string,
+  message: string
+) {
+  if (!user.id || !['partner', 'admin'].includes(String(user.role))) {
+    throw new Error('Only related partners and admins can reply to partner rule requests');
+  }
+
+  const request = await queryD1First(
+    db,
+    `SELECT prcr.*, p.user_id AS partner_user_id, p.email AS partner_email
+     FROM partner_rule_change_requests prcr
+     LEFT JOIN partners p ON p.id = prcr.partner_id
+     WHERE prcr.id = ?`,
+    [requestId]
+  );
+
+  if (!request) {
+    throw new Error('Partner rule change request not found');
+  }
+
+  const isRelatedPartner =
+    user.role === 'partner' &&
+    (request.requested_by_user_id === user.id ||
+      request.partner_user_id === user.id ||
+      normalizeText(request.partner_email) === normalizeText(user.email));
+
+  if (user.role !== 'admin' && !isRelatedPartner) {
+    throw new Error('You can reply only to your own partner rule request');
+  }
+
+  if (user.role === 'partner' && ['accepted', 'approved', 'declined'].includes(String(request.status))) {
+    throw new Error('Replies are disabled after the request is accepted or declined');
+  }
+
+  const id = generateD1UUID();
+  const result = await executeD1(
+    db,
+    `INSERT INTO partner_rule_change_request_replies (id, request_id, author_user_id, author_role, message)
+     VALUES (?, ?, ?, ?, ?)
+     RETURNING *`,
+    [id, requestId, user.id, String(user.role), message]
+  );
+
+  await executeD1(db, `UPDATE partner_rule_change_requests SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [requestId]);
+
+  const author = await queryD1First(db, 'SELECT name, email FROM users WHERE id = ?', [user.id]);
+  const authorName = author?.name || author?.email || (user.role === 'admin' ? 'Admin' : 'Partner');
+
+  if (user.role === 'partner') {
+    const admins = await queryD1(db, `SELECT id FROM users WHERE role = 'admin' AND COALESCE(status, 'active') = 'active'`);
+    await Promise.all((admins.results || []).map((admin: any) =>
+      createNotificationD1(db, {
+        userId: admin.id,
+        type: 'system',
+        title: 'Partner added details',
+        body: `${authorName} replied to a partner rule request.`,
+        data: { action_url: `/admin?panel=rule-requests&request=${requestId}&highlight=${requestId}`, ruleChangeRequestId: requestId },
+      })
+    ));
+  } else {
+    const partnerUsers = await queryD1(
+      db,
+      `SELECT DISTINCT u.id
+       FROM users u
+       WHERE u.id = ? OR u.partner_id = ?`,
+      [request.requested_by_user_id, request.partner_id || '']
+    );
+    await Promise.all((partnerUsers.results || []).map((partnerUser: any) =>
+      createNotificationD1(db, {
+        userId: partnerUser.id,
+        type: 'system',
+        title: 'Admin replied to rule request',
+        body: `${authorName} replied to your partner rule request.`,
+        data: { action_url: `/partner?panel=rule-requests&highlight=${requestId}`, ruleChangeRequestId: requestId },
+      })
+    ));
+  }
+
+  return {
+    ...(result.results?.[0] || {}),
+    author_name: authorName,
+    author_email: author?.email,
+  };
 }
 
 export async function updatePartnerRuleChangeRequestStatusD1(
@@ -490,7 +615,21 @@ export async function getPartnerDssRequestsD1(db: D1Database, userId: string, em
     params
   );
 
-  return { ...result, results: result.results?.map(normalizePartnerRequest) };
+  const hydrated = await Promise.all(
+    (result.results || []).map(async (row) => {
+      const tracking = await queryD1(db, 'SELECT * FROM request_tracking_updates WHERE submission_id = ? AND (request_id = ? OR request_id IS NULL) ORDER BY created_at DESC', [
+        row.submission_id,
+        row.id,
+      ]);
+      return {
+        ...normalizePartnerRequest(row),
+        tracking_updates: tracking.results || [],
+        latest_tracking_update: tracking.results?.[0] || null,
+      };
+    }),
+  );
+
+  return { ...result, results: hydrated };
 }
 
 export async function updateDssRequestStatusD1(
@@ -832,7 +971,7 @@ function buildBrief(submission: any, recommendation: any) {
   const lines = [
     `Recommended pathway: ${titleCase(recommendation.recommended_pathway)} (${Math.round(recommendation.confidence * 100)}% confidence)`,
     `Item: ${submission.item_type}`,
-    `Quantity: ${submission.quantity || 1}`,
+    submission.quantity ? `Quantity: ${submission.quantity}` : '',
     details.weight_value ? `Weight: ${details.weight_value} ${details.weight_unit || 'kg'}` : '',
     `Shipping bag: ${titleCase(bagColorByPathway[recommendation.recommended_pathway])} bag for ${titleCase(recommendation.recommended_pathway)}`,
     `Condition: ${submission.condition}`,

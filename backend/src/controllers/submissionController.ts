@@ -2,12 +2,41 @@ import type { HttpRequest as Request, HttpResponse as Response } from '../types/
 import { getClient, query } from '../config/database.js';
 import { AppError } from '../utils/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
+import { createNotification } from '../services/notificationService.js';
 
 const joinTextValues = (values?: string[] | null) =>
   Array.isArray(values) && values.length > 0 ? values.join(', ') : null;
 
 const toJsonArrayValues = (values?: unknown[] | null) =>
   Array.isArray(values) ? values.map((value) => JSON.stringify(value)) : [];
+
+const trackingStatusLabels: Record<string, string> = {
+  request_sent: 'Request sent',
+  scheduled: 'Scheduled',
+  in_transit: 'Shipped / In transit',
+  dropoff_completed: 'Drop-off completed',
+  completed: 'Completed',
+};
+
+const trackingMethodLabels: Record<string, string> = {
+  drop_off: 'Direct drop-off',
+  shipping: 'Shipping',
+  pickup: 'Pickup',
+  other: 'Other',
+};
+
+const buildTrackingMessage = (
+  status: string,
+  logisticsCompany?: string | null,
+  trackingNumber?: string | null,
+  notes?: string | null,
+) => {
+  const parts = [`The user updated the request status to ${trackingStatusLabels[status] || status}.`];
+  if (logisticsCompany) parts.push(`Courier: ${logisticsCompany}.`);
+  if (trackingNumber) parts.push(`Tracking Number: ${trackingNumber}.`);
+  if (notes) parts.push(`Notes: ${notes}`);
+  return parts.join(' ');
+};
 
 export const createSubmission = async (req: Request, res: Response) => {
   const client = await getClient();
@@ -76,7 +105,7 @@ export const createSubmission = async (req: Request, res: Response) => {
         'pending',
         submission_name ?? null,
         service_type ?? null,
-        quantity ?? 1,
+        quantity ?? null,
         buyback_interest ?? false,
         action ?? null,
         upcycle_request ?? null,
@@ -268,7 +297,19 @@ export const getUserSubmissions = async (req: Request, res: Response) => {
       `SELECT
          s.*,
          row_to_json(sd) AS details,
-         row_to_json(bt) AS burn_test
+         row_to_json(bt) AS burn_test,
+         COALESCE((
+           SELECT json_agg(rtu ORDER BY rtu.created_at DESC)
+           FROM request_tracking_updates rtu
+           WHERE rtu.submission_id = s.id
+         ), '[]'::json) AS tracking_updates,
+         (
+           SELECT row_to_json(rtu)
+           FROM request_tracking_updates rtu
+           WHERE rtu.submission_id = s.id
+           ORDER BY rtu.created_at DESC
+           LIMIT 1
+         ) AS latest_tracking_update
        FROM submissions s
        LEFT JOIN submission_details sd ON sd.submission_id = s.id
        LEFT JOIN LATERAL (
@@ -300,7 +341,19 @@ export const getSubmissionById = async (req: Request, res: Response) => {
       `SELECT
          s.*,
          row_to_json(sd) AS details,
-         row_to_json(bt) AS burn_test
+         row_to_json(bt) AS burn_test,
+         COALESCE((
+           SELECT json_agg(rtu ORDER BY rtu.created_at DESC)
+           FROM request_tracking_updates rtu
+           WHERE rtu.submission_id = s.id
+         ), '[]'::json) AS tracking_updates,
+         (
+           SELECT row_to_json(rtu)
+           FROM request_tracking_updates rtu
+           WHERE rtu.submission_id = s.id
+           ORDER BY rtu.created_at DESC
+           LIMIT 1
+         ) AS latest_tracking_update
        FROM submissions s
        LEFT JOIN submission_details sd ON sd.submission_id = s.id
        LEFT JOIN LATERAL (
@@ -344,5 +397,152 @@ export const updateSubmissionStatus = async (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
+  }
+};
+
+export const getSubmissionTrackingUpdates = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = req.user;
+
+    if (!user?.id) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    const access = await query(
+      `SELECT s.id
+       FROM submissions s
+       LEFT JOIN transactions t ON t.submission_id = s.id
+       LEFT JOIN partners p ON p.id = t.to_partner_id
+       WHERE s.id = $1
+         AND (
+           s.user_id = $2
+           OR $3 = 'admin'
+           OR p.user_id = $2
+           OR lower(p.email) = lower($4)
+         )
+       LIMIT 1`,
+      [id, user.id, user.role, user.email || '']
+    );
+
+    if (access.rows.length === 0) {
+      throw new AppError(403, 'You do not have access to this tracking history');
+    }
+
+    const updates = await query(
+      `SELECT rtu.*, u.name AS user_name, p.name AS partner_name
+       FROM request_tracking_updates rtu
+       LEFT JOIN users u ON u.id = rtu.user_id
+       LEFT JOIN partners p ON p.id = rtu.partner_id
+       WHERE rtu.submission_id = $1
+       ORDER BY rtu.created_at DESC`,
+      [id]
+    );
+
+    res.json({ data: updates.rows, count: updates.rows.length });
+  } catch (error) {
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};
+
+export const createSubmissionTrackingUpdate = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    const {
+      request_id,
+      progress_status,
+      fulfillment_method = 'drop_off',
+      logistics_company,
+      tracking_number,
+      notes,
+    } = req.body;
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    const submission = await query('SELECT * FROM submissions WHERE id = $1 AND user_id = $2', [id, userId]);
+    if (submission.rows.length === 0) {
+      throw new AppError(404, 'Submission not found');
+    }
+
+    const requestResult = await query(
+      `SELECT t.*, p.name AS partner_name, u.id AS partner_message_user_id
+       FROM transactions t
+       LEFT JOIN partners p ON p.id = t.to_partner_id
+       LEFT JOIN users u ON u.id = p.user_id OR lower(u.email) = lower(p.email)
+       WHERE t.submission_id = $1
+         AND t.from_user_id = $2
+         AND ($3::uuid IS NULL OR t.id = $3::uuid)
+       ORDER BY COALESCE(t.updated_at, t.created_at) DESC
+       LIMIT 1`,
+      [id, userId, request_id || null]
+    );
+    const requestRow = requestResult.rows[0] || null;
+    const updateId = uuidv4();
+
+    const result = await query(
+      `INSERT INTO request_tracking_updates (
+         id, submission_id, request_id, user_id, partner_id, progress_status,
+         fulfillment_method, logistics_company, tracking_number, notes
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING *`,
+      [
+        updateId,
+        id,
+        requestRow?.id || request_id || null,
+        userId,
+        requestRow?.to_partner_id || null,
+        progress_status,
+        fulfillment_method,
+        logistics_company || null,
+        tracking_number || null,
+        notes || null,
+      ]
+    );
+
+    const messageContent = buildTrackingMessage(progress_status, logistics_company, tracking_number, notes);
+    if (requestRow?.partner_message_user_id && requestRow.partner_message_user_id !== userId) {
+      await query(
+        `INSERT INTO messages (id, from_user_id, to_user_id, content)
+         VALUES ($1, $2, $3, $4)`,
+        [uuidv4(), userId, requestRow.partner_message_user_id, messageContent]
+      );
+
+      await createNotification({
+        userId: requestRow.partner_message_user_id,
+        type: 'partner_update',
+        title: 'Request tracking updated',
+        body: `${submission.rows[0].submission_name || submission.rows[0].item_type}: ${trackingStatusLabels[progress_status] || progress_status}`,
+        data: {
+          submissionId: id,
+          requestId: requestRow.id,
+          trackingUpdateId: updateId,
+          progressStatus: progress_status,
+          actionUrl: `/partner?request=${requestRow.id}`,
+        },
+      });
+    }
+
+    await createNotification({
+      userId,
+      type: 'system',
+      title: 'Tracking update recorded',
+      body: `${submission.rows[0].submission_name || submission.rows[0].item_type}: ${trackingStatusLabels[progress_status] || progress_status}`,
+      data: { submissionId: id, trackingUpdateId: updateId, progressStatus: progress_status },
+    });
+
+    res.status(201).json({
+      message: 'Tracking update recorded successfully',
+      data: {
+        ...result.rows[0],
+        status_label: trackingStatusLabels[progress_status] || progress_status,
+        fulfillment_method_label: trackingMethodLabels[fulfillment_method] || fulfillment_method,
+      },
+    });
+  } catch (error) {
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
   }
 };

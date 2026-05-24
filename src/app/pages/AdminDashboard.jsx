@@ -161,6 +161,60 @@ const toConfidencePercent = (value) => {
   return numericValue > 1 ? numericValue : numericValue * 100;
 };
 
+const formatActivityTime = (value) => {
+  if (!value) {
+    return "Recent";
+  }
+
+  const timestamp = getTimestamp(value);
+  if (!Number.isFinite(timestamp)) {
+    return "Recent";
+  }
+
+  const diffMs = Date.now() - timestamp;
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diffMs >= 0 && diffMs < minute) {
+    return "Just now";
+  }
+
+  if (diffMs >= 0 && diffMs < hour) {
+    const minutes = Math.max(1, Math.floor(diffMs / minute));
+    return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  }
+
+  if (diffMs >= 0 && diffMs < day) {
+    const hours = Math.max(1, Math.floor(diffMs / hour));
+    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+
+  if (diffMs >= 0 && diffMs < 7 * day) {
+    const days = Math.max(1, Math.floor(diffMs / day));
+    return `${days} day${days === 1 ? "" : "s"} ago`;
+  }
+
+  return formatManilaDate(value, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "Asia/Manila",
+  });
+};
+
+const formatActivityExactTime = (value) =>
+  value
+    ? formatManilaDate(value, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: "Asia/Manila",
+      })
+    : "";
+
 const canCreateRole = (role) => role === "Admin" || role === "Partner";
 const canSuspendRole = (role) => role === "User" || role === "Partner";
 
@@ -217,6 +271,8 @@ export function AdminDashboard() {
   const [ruleRequestSearch, setRuleRequestSearch] = useState("");
   const [showAllRuleRequests, setShowAllRuleRequests] = useState(false);
   const [ruleRequestNotes, setRuleRequestNotes] = useState({});
+  const [ruleReplyDrafts, setRuleReplyDrafts] = useState({});
+  const [ruleReplyStatus, setRuleReplyStatus] = useState({});
   const [showAllDssAudit, setShowAllDssAudit] = useState(false);
   const [dssAuditSort, setDssAuditSort] = useState("newest");
   const [isActivityExpanded, setIsActivityExpanded] = useState(false);
@@ -479,22 +535,24 @@ export function AdminDashboard() {
 
   const systemActivity = useMemo(() => {
     const accountEvents = accounts.slice(0, 4).map((account) => ({
-      time: account.joined || "Recent",
+      timestamp: account.joined,
       action: `${account.role} account ${account.status}`,
       user: account.name,
     }));
     const dssEvents = dssAuditRuns.slice(0, 4).map((run) => ({
-      time: run.created_at ? formatManilaDate(run.created_at) : "Recent",
+      timestamp: run.created_at,
       action: `DSS ${run.recommended_pathway} recommendation`,
       user: run.submission_name || run.item_type || "Submission",
     }));
     const ruleEvents = ruleChangeRequests.slice(0, 4).map((request) => ({
-      time: request.created_at ? formatManilaDate(request.created_at) : "Recent",
+      timestamp: request.updated_at || request.reviewed_at || request.created_at,
       action: `Partner rule request ${request.status || "pending"}`,
       user: request.partner_name || request.requested_by_name || "Partner",
     }));
 
-    return [...ruleEvents, ...dssEvents, ...accountEvents].slice(0, isActivityExpanded ? 12 : 4);
+    return [...ruleEvents, ...dssEvents, ...accountEvents]
+      .sort((a, b) => getTimestamp(b.timestamp) - getTimestamp(a.timestamp))
+      .slice(0, isActivityExpanded ? 12 : 4);
   }, [accounts, dssAuditRuns, isActivityExpanded, ruleChangeRequests]);
 
   const openCreateModal = (role = activeRole) => {
@@ -686,6 +744,30 @@ export function AdminDashboard() {
       setRuleRequestNotes((current) => ({ ...current, [request.id]: "" }));
     } catch (error) {
       setDssAuditError(error.message || "Unable to update partner rule request.");
+    }
+  };
+
+  const submitRuleRequestReply = async (request) => {
+    const message = String(ruleReplyDrafts[request.id] || "").trim();
+
+    if (!message) {
+      setRuleReplyStatus((current) => ({ ...current, [request.id]: { type: "error", message: "Add a reply before sending." } }));
+      return;
+    }
+
+    setRuleReplyStatus((current) => ({ ...current, [request.id]: { type: "loading", message: "Sending reply..." } }));
+
+    try {
+      await dssService.replyToRuleChangeRequest(request.id, { message });
+      const response = await dssService.getRuleChangeRequests();
+      setRuleChangeRequests(response.data);
+      setRuleReplyDrafts((current) => ({ ...current, [request.id]: "" }));
+      setRuleReplyStatus((current) => ({ ...current, [request.id]: { type: "success", message: "Reply sent to partner." } }));
+    } catch (error) {
+      setRuleReplyStatus((current) => ({
+        ...current,
+        [request.id]: { type: "error", message: error.message || "Unable to send reply." },
+      }));
     }
   };
 
@@ -1044,9 +1126,9 @@ export function AdminDashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.36 }}
-          className="mb-8 grid gap-6 lg:grid-cols-2"
+          className="mb-8 grid gap-6"
         >
-          <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-white/10 dark:bg-white/[0.04]">
+          <section className="order-2 rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-white/10 dark:bg-white/[0.04]">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-xl text-gray-950 dark:text-white">Submission Oversight</h3>
@@ -1058,15 +1140,15 @@ export function AdminDashboard() {
                 {adminSubmissions.length}
               </span>
             </div>
-            <div className="space-y-3">
-              {adminSubmissions.slice(0, 5).map((submission) => (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {adminSubmissions.slice(0, 6).map((submission) => (
                 <div
                   key={submission.id}
                   className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-black/20"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="font-semibold text-gray-950 dark:text-white">
+                  <div className="flex h-full flex-col gap-4 sm:flex-row sm:items-center sm:justify-between md:flex-col md:items-stretch xl:flex-row xl:items-center">
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-gray-950 dark:text-white">
                         {submission.submission_name || submission.item_type}
                       </div>
                       <div className="mt-1 text-sm text-gray-600 dark:text-gray-300">
@@ -1082,7 +1164,7 @@ export function AdminDashboard() {
                           current.map((item) => (item.id === submission.id ? { ...item, status } : item)),
                         );
                       }}
-                      className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 dark:border-white/10 dark:bg-black/20 dark:text-white"
+                      className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 dark:border-white/10 dark:bg-black/20 dark:text-white"
                     >
                       <option value="pending">Pending</option>
                       <option value="verified">Verified</option>
@@ -1093,25 +1175,32 @@ export function AdminDashboard() {
                 </div>
               ))}
               {adminSubmissions.length === 0 && (
-                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-white/10 dark:bg-black/20 dark:text-gray-300">
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-white/10 dark:bg-black/20 dark:text-gray-300 md:col-span-2 xl:col-span-3">
                   No submissions yet.
                 </div>
               )}
             </div>
           </section>
 
-          <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-white/10 dark:bg-white/[0.04]">
+          <section className="order-1 rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-white/10 dark:bg-white/[0.04]">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-xl text-gray-950 dark:text-white">Deleted Records</h3>
                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                  Admin-only archive for records removed through management actions.
+                  Open the admin-only archive for removed records and delete actions.
                 </p>
               </div>
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 dark:bg-white/10 dark:text-gray-200">
                 {deletedRecords.length}
               </span>
             </div>
+            <Link
+              to="/admin/deleted-records"
+              className="mb-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-black dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+            >
+              View Deleted Records
+              <ChevronRight className="h-4 w-4" />
+            </Link>
             <div className="space-y-3">
               {deletedRecords.slice(0, 5).map((record) => (
                 <details
@@ -1137,7 +1226,7 @@ export function AdminDashboard() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-white/10 dark:bg-white/[0.04]">
+          <section className="order-3 rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-white/10 dark:bg-white/[0.04]">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-xl text-gray-950 dark:text-white">Editable DSS Rules</h3>
@@ -1369,6 +1458,8 @@ export function AdminDashboard() {
 
             {sortedRuleChangeRequests.slice(0, showAllRuleRequests ? 30 : 3).map((request, index) => {
               const isHighlighted = highlightedRuleRequestId === request.id;
+              const replies = request.replies || [];
+              const replyState = ruleReplyStatus[request.id];
 
               return (
               <motion.details
@@ -1415,10 +1506,39 @@ export function AdminDashboard() {
                         <p className="mt-2">{request.admin_notes}</p>
                       </div>
                     )}
+                    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-black/20">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Reply thread</div>
+                      <div className="mt-3 space-y-2">
+                        {replies.length === 0 && (
+                          <p className="text-sm text-gray-600 dark:text-gray-300">No replies yet.</p>
+                        )}
+                        {replies.map((reply) => (
+                          <div key={reply.id} className="rounded-xl border border-gray-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-white/[0.05]">
+                            <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                              <span className="font-semibold capitalize">{reply.author_role}</span>
+                              <span>{reply.author_name || reply.author_email || "Unknown"}</span>
+                              <span>
+                                {reply.created_at
+                                  ? formatManilaDate(reply.created_at, {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric",
+                                      hour: "numeric",
+                                      minute: "2-digit",
+                                      timeZone: "Asia/Manila",
+                                    })
+                                  : "Recent"}
+                              </span>
+                            </div>
+                            <p>{reply.message}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="rounded-2xl border border-gray-200 bg-white p-4 text-gray-950 shadow-lg dark:border-white/10 dark:bg-white/[0.05] dark:text-white">
-                    <div className="mb-3">
+                  <div className="rounded-2xl border border-gray-200 bg-white p-4 text-gray-950 shadow-lg dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:sticky lg:top-4 lg:self-start">
+                    <div className="mb-4">
                       <div className="font-semibold text-gray-950 dark:text-white">Admin decision</div>
                       <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
                         This note and status will be sent to the partner.
@@ -1436,7 +1556,7 @@ export function AdminDashboard() {
                     className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-950 outline-none placeholder:text-gray-500 focus:border-gray-500 dark:border-white/10 dark:bg-black/20 dark:text-white dark:placeholder:text-gray-400 dark:focus:border-white/40"
                     placeholder="Optional message to partner before updating status"
                   />
-                  <div className="mt-3 grid gap-2">
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
                     {[
                       ["accepted", "Accept", CheckCircle, "bg-emerald-600 hover:bg-emerald-500"],
                       ["needs_more_information", "Need more info", HelpCircle, "bg-amber-500 hover:bg-amber-400"],
@@ -1453,6 +1573,36 @@ export function AdminDashboard() {
                         {label}
                       </motion.button>
                     ))}
+                  </div>
+                  <div className="mt-5 border-t border-gray-200 pt-4 dark:border-white/10">
+                    <div className="mb-2 text-sm font-semibold text-gray-950 dark:text-white">Reply to partner</div>
+                    <textarea
+                      value={ruleReplyDrafts[request.id] || ""}
+                      onChange={(event) =>
+                        setRuleReplyDrafts((current) => ({ ...current, [request.id]: event.target.value }))
+                      }
+                      rows={3}
+                      disabled={replyState?.type === "loading"}
+                      className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-950 outline-none placeholder:text-gray-500 focus:border-gray-500 disabled:opacity-60 dark:border-white/10 dark:bg-black/20 dark:text-white"
+                      placeholder="Add a clarification or next step for this partner..."
+                    />
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      {replyState?.message ? (
+                        <span className={`text-xs ${replyState.type === "error" ? "text-red-600 dark:text-red-300" : "text-gray-600 dark:text-gray-300"}`}>
+                          {replyState.message}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Replies are visible to the related partner.</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => submitRuleRequestReply(request)}
+                        disabled={replyState?.type === "loading"}
+                        className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                      >
+                        {replyState?.type === "loading" ? "Sending..." : "Send reply"}
+                      </button>
+                    </div>
                   </div>
                   </div>
                 </div>
@@ -1648,7 +1798,14 @@ export function AdminDashboard() {
                     <div className="text-xs text-gray-600">{log.user}</div>
                   </div>
                 </div>
-                <span className="text-sm text-gray-600">{log.time}</span>
+                <span className="text-right text-sm text-gray-600">
+                  <span className="block">{formatActivityTime(log.timestamp)}</span>
+                  {log.timestamp && (
+                    <span className="block text-xs text-gray-500">
+                      {formatActivityExactTime(log.timestamp)}
+                    </span>
+                  )}
+                </span>
               </div>
             ))}
             {systemActivity.length === 0 && (

@@ -212,8 +212,8 @@ export function DssRequestsPage() {
                     : "border-[#e1e7df]"
                 }`}
               >
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div>
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+                  <div className="min-w-0">
                     <div className="font-semibold text-[#19221d]">
                       {request.submission_name || request.item_type}
                     </div>
@@ -247,8 +247,8 @@ export function DssRequestsPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full border px-3 py-1 text-xs ${statusClass[normalizeStatus(request.status)] || statusClass.pending}`}>
+                  <div className="flex flex-wrap items-center gap-2 md:w-36 md:justify-end">
+                    <span className={`inline-flex min-h-8 items-center justify-center rounded-full border px-3 py-1 text-xs ${statusClass[normalizeStatus(request.status)] || statusClass.pending}`}>
                       {formatStatusLabel(normalizeStatus(request.status))}
                     </span>
                     {normalizeStatus(request.status) === "accepted" && <CheckCircle className="h-4 w-4 text-[#336158]" />}
@@ -256,10 +256,10 @@ export function DssRequestsPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 md:flex md:flex-wrap">
                   <button
                     onClick={() => navigate(`/dss/${request.submission_id}?request=${request.id}`)}
-                    className="rounded-xl border border-[#dce4da] px-3 py-2 text-sm text-[#5f6f67] hover:bg-[#f3f5f2]"
+                    className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[#dce4da] px-3 py-2 text-center text-sm text-[#5f6f67] hover:bg-[#f3f5f2]"
                   >
                     View recommendation
                   </button>
@@ -267,7 +267,7 @@ export function DssRequestsPage() {
                     <button
                       onClick={() => handleReminder(request.id)}
                       disabled={remindingId === request.id}
-                      className="inline-flex items-center gap-2 rounded-xl bg-[#336158] px-3 py-2 text-sm text-white hover:bg-[#2a4c48] disabled:opacity-50"
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#336158] px-3 py-2 text-center text-sm text-white hover:bg-[#2a4c48] disabled:opacity-50"
                     >
                       <Bell className="h-4 w-4" />
                       {remindingId === request.id ? "Sending..." : "Remind partner"}

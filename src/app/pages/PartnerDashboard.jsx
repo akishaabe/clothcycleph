@@ -41,6 +41,27 @@ const statusStyles = {
   rejected: "bg-red-100 text-red-700",
 };
 
+const decisionStatusStyles = {
+  accepted: {
+    Icon: CheckCircle,
+    label: "Accepted",
+    className:
+      "border-[#cfe2cf] bg-[#edf7ed] text-[#336158] dark:border-emerald-400/25 dark:bg-emerald-400/10 dark:text-emerald-200",
+  },
+  completed: {
+    Icon: CheckCircle,
+    label: "Completed",
+    className:
+      "border-green-200 bg-green-50 text-green-700 dark:border-green-400/25 dark:bg-green-400/10 dark:text-green-200",
+  },
+  rejected: {
+    Icon: XCircle,
+    label: "Rejected",
+    className:
+      "border-red-100 bg-red-50 text-red-700 dark:border-red-400/25 dark:bg-red-400/10 dark:text-red-200",
+  },
+};
+
 const normalizeStatus = (status) => {
   if (status === "declined" || status === "rejected") return "rejected";
   if (status === "in_progress") return "accepted";
@@ -54,11 +75,37 @@ const formatStatusLabel = (status) =>
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
+const trackingStatusLabels = {
+  request_sent: "Request sent",
+  scheduled: "Scheduled",
+  in_transit: "Shipped / In transit",
+  dropoff_completed: "Drop-off completed",
+  completed: "Completed",
+};
+
+const fulfillmentMethodLabels = {
+  drop_off: "Direct drop-off",
+  shipping: "Shipping",
+  pickup: "Pickup",
+  other: "Other",
+};
+
 const formatDate = (value) =>
   formatManilaDate(value, {
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: "Asia/Manila",
+  });
+
+const formatDateTime = (value) =>
+  formatManilaDate(value, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Asia/Manila",
   });
 
 const formatPercent = (value) =>
@@ -74,6 +121,37 @@ const getDssRecommendation = (request) =>
     explanation: request?.explanation,
     checks: request?.output_payload?.rule_checks || [],
   };
+
+function DecisionStatusIndicator({ status, compact = false }) {
+  const normalizedStatus = normalizeStatus(status);
+  const decisionStyle = decisionStatusStyles[normalizedStatus];
+
+  if (!decisionStyle) {
+    return null;
+  }
+
+  const { Icon, label, className } = decisionStyle;
+  const message =
+    normalizedStatus === "accepted"
+      ? "You've accepted this request."
+      : normalizedStatus === "rejected"
+        ? "You've rejected this request."
+        : "You've completed this request.";
+
+  return (
+    <div className={`rounded-2xl border ${className} ${compact ? "px-3 py-2" : "p-4"}`}>
+      <div className="flex items-center gap-2 font-semibold">
+        <Icon className="h-4 w-4" />
+        <span>{label}</span>
+      </div>
+      {!compact && (
+        <p className="mt-2 text-sm leading-6">
+          {message}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function PartnerDashboard() {
   const navigate = useNavigate();
@@ -109,6 +187,8 @@ export function PartnerDashboard() {
     reason: "",
   });
   const [ruleRequestMessage, setRuleRequestMessage] = useState("");
+  const [ruleReplyDrafts, setRuleReplyDrafts] = useState({});
+  const [ruleReplyStatus, setRuleReplyStatus] = useState({});
 
   const loadRequests = async () => {
     setIsLoadingRequests(true);
@@ -305,13 +385,15 @@ export function PartnerDashboard() {
         outcome_photos: status === "completed" ? uploadedOutcomePhotos : undefined,
       });
       await loadRequests();
-      const normalizedStatus = normalizeStatus(status);
+      const updatedRequest = response.data || {};
+      const normalizedStatus = normalizeStatus(updatedRequest.status || status);
       setSelectedRequest((current) =>
         current?.id === request.id
           ? {
               ...current,
-              ...response.data,
+              ...updatedRequest,
               status: normalizedStatus,
+              status_label: updatedRequest.status_label || formatStatusLabel(normalizedStatus),
               notes: noteToSend || current.notes,
               outcome_title: status === "completed" ? outcomeTitle : current.outcome_title,
               outcome_description: status === "completed" ? outcomeDescription : current.outcome_description,
@@ -366,6 +448,29 @@ export function PartnerDashboard() {
       await loadRuleRequests();
     } catch (error) {
       setRuleRequestMessage(error.message || "Unable to submit preference request.");
+    }
+  };
+
+  const submitRuleRequestReply = async (request) => {
+    const message = String(ruleReplyDrafts[request.id] || "").trim();
+
+    if (!message) {
+      setRuleReplyStatus((current) => ({ ...current, [request.id]: { type: "error", message: "Add a reply before sending." } }));
+      return;
+    }
+
+    setRuleReplyStatus((current) => ({ ...current, [request.id]: { type: "loading", message: "Sending reply..." } }));
+
+    try {
+      await dssService.replyToRuleChangeRequest(request.id, { message });
+      setRuleReplyDrafts((current) => ({ ...current, [request.id]: "" }));
+      setRuleReplyStatus((current) => ({ ...current, [request.id]: { type: "success", message: "Reply sent to admins." } }));
+      await loadRuleRequests();
+    } catch (error) {
+      setRuleReplyStatus((current) => ({
+        ...current,
+        [request.id]: { type: "error", message: error.message || "Unable to send reply." },
+      }));
     }
   };
 
@@ -628,7 +733,7 @@ export function PartnerDashboard() {
                     <td className="py-3 px-4 text-sm text-[#10233f] dark:text-white">{request.user_name}</td>
                     <td className="py-3 px-4 text-sm text-[#41668f] dark:text-[#cfe1ff]">{pathwayLabels[request.type] || request.type}</td>
                     <td className="py-3 px-4 text-sm text-[#41668f] dark:text-[#cfe1ff]">
-                      {request.quantity || 1} · {request.submission_name || request.item_type}
+                      {request.quantity || "Quantity not specified"} · {request.submission_name || request.item_type}
                     </td>
                     <td className="py-3 px-4">
                       <span
@@ -652,20 +757,28 @@ export function PartnerDashboard() {
                         >
                           <Eye className="w-4 h-4 text-[#41668f]" />
                         </button>
-                        <button
-                          onClick={() => updateRequestStatus(request, "accepted", "")}
-                          className="w-8 h-8 rounded-lg bg-[#4f6f9f]/20 flex items-center justify-center hover:bg-[#4f6f9f]/30 transition-colors"
-                          title="Accept"
-                        >
-                          <CheckCircle className="w-4 h-4 text-[#4f6f9f]" />
-                        </button>
-                        <button
-                          onClick={() => updateRequestStatus(request, "rejected", "")}
-                          className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center hover:bg-red-200 transition-colors"
-                          title="Reject"
-                        >
-                          <XCircle className="w-4 h-4 text-red-600" />
-                        </button>
+                        {normalizeStatus(request.status) === "pending" ? (
+                          <>
+                            <button
+                              onClick={() => updateRequestStatus(request, "accepted", "")}
+                              disabled={isUpdatingStatus}
+                              className="w-8 h-8 rounded-lg bg-[#4f6f9f]/20 flex items-center justify-center hover:bg-[#4f6f9f]/30 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                              title="Accept"
+                            >
+                              <CheckCircle className="w-4 h-4 text-[#4f6f9f]" />
+                            </button>
+                            <button
+                              onClick={() => updateRequestStatus(request, "rejected", "")}
+                              disabled={isUpdatingStatus}
+                              className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center hover:bg-red-200 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                              title="Reject"
+                            >
+                              <XCircle className="w-4 h-4 text-red-600" />
+                            </button>
+                          </>
+                        ) : (
+                          <DecisionStatusIndicator status={request.status} compact />
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -796,7 +909,7 @@ export function PartnerDashboard() {
             </div>
           </div>
 
-          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          <div className="mt-5 grid gap-4">
             {isLoadingRuleRequests && (
               <div className="rounded-2xl border border-[#d6e6f8] bg-[#fbfdff] p-5 text-sm text-[#41668f] dark:border-white/10 dark:bg-black/20 dark:text-[#9fc5f8]">
                 Loading rule requests...
@@ -815,6 +928,10 @@ export function PartnerDashboard() {
                 .map((item) => {
                 const status = String(item.status || "pending");
                 const isHighlighted = highlightedRuleRequestId === item.id;
+                const replies = item.replies || [];
+                const canReply = !["accepted", "approved", "declined"].includes(status);
+                const isClosedRequest = !canReply;
+                const replyState = ruleReplyStatus[item.id];
                 const statusClass =
                   status === "accepted" || status === "approved"
                     ? "bg-[#4f6f9f]/20 text-[#10233f]"
@@ -835,34 +952,97 @@ export function PartnerDashboard() {
                         : "border-[#d6e6f8] dark:border-white/10"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[#41668f] dark:text-[#9fc5f8]">
-                          {item.rule_area}
-                        </p>
-                        <h4 className="mt-1 line-clamp-2 font-semibold text-[#10233f] dark:text-white">
-                          {item.requested_change}
-                        </h4>
+                    <div className={`grid gap-5 lg:items-stretch ${canReply ? "lg:grid-cols-[minmax(0,1fr)_360px]" : "lg:grid-cols-1"}`}>
+                      <div className={`flex min-w-0 flex-col ${canReply ? "lg:min-h-[15rem]" : ""}`}>
+                        <div>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-[#41668f] dark:text-[#9fc5f8]">
+                                {item.rule_area}
+                              </p>
+                              <h4 className="mt-1 line-clamp-2 font-semibold text-[#10233f] dark:text-white">
+                                {item.requested_change}
+                              </h4>
+                            </div>
+                            <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}>
+                              {formatStatusLabel(status)}
+                            </span>
+                          </div>
+                          {item.reason && (
+                            <p className="mt-4 text-sm leading-6 text-[#41668f] dark:text-[#cfe1ff]">
+                              {item.reason}
+                            </p>
+                          )}
+                        </div>
+                        <div className={`${isClosedRequest ? "mt-6" : "mt-8 lg:mt-auto lg:pt-8"}`}>
+                          {item.admin_notes && (
+                            <div className="rounded-xl bg-[#eff6ff] p-4 text-sm leading-6 text-[#41668f] dark:bg-black/20 dark:text-[#cfe1ff]">
+                              <span className="font-semibold text-[#10233f] dark:text-white">Admin note: </span>
+                              {item.admin_notes}
+                            </div>
+                          )}
+                          <p className={`${item.admin_notes ? "mt-6" : "mt-0"} text-xs text-[#6b93b8] dark:text-[#9fc5f8]`}>
+                            Submitted {formatDate(item.created_at)}
+                            {item.reviewed_at ? ` - Updated ${formatDate(item.reviewed_at)}` : ""}
+                          </p>
+                        </div>
                       </div>
-                      <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}>
-                        {formatStatusLabel(status)}
-                      </span>
+
+                      {canReply && (
+                        <div className="h-full rounded-xl border border-[#d6e6f8] bg-white p-4 dark:border-white/10 dark:bg-black/20">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-[#41668f] dark:text-[#9fc5f8]">
+                            Reply thread
+                          </div>
+                          <div className="mt-3 max-h-56 space-y-2 overflow-y-auto pr-1">
+                            {replies.length === 0 && (
+                              <p className="text-sm text-[#41668f] dark:text-[#cfe1ff]">
+                                No replies yet.
+                              </p>
+                            )}
+                            {replies.map((reply) => (
+                              <div
+                                key={reply.id}
+                                className="rounded-lg border border-[#d6e6f8] bg-[#fbfdff] px-3 py-2 text-sm text-[#41668f] dark:border-white/10 dark:bg-white/[0.04] dark:text-[#cfe1ff]"
+                              >
+                                <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-[#6b93b8] dark:text-[#9fc5f8]">
+                                  <span className="font-semibold capitalize">{reply.author_role}</span>
+                                  <span>{reply.author_name || reply.author_email || "Unknown"}</span>
+                                  <span>{reply.created_at ? formatDateTime(reply.created_at) : "Recent"}</span>
+                                </div>
+                                {reply.message}
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mt-3">
+                            <textarea
+                              value={ruleReplyDrafts[item.id] || ""}
+                              onChange={(event) =>
+                                setRuleReplyDrafts((current) => ({ ...current, [item.id]: event.target.value }))
+                              }
+                              disabled={replyState?.type === "loading"}
+                              rows={3}
+                              className="w-full resize-none rounded-xl border border-[#d6e6f8] bg-[#fbfdff] px-3 py-2 text-sm text-[#10233f] outline-none focus:border-[#4f6f9f] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-black/20 dark:text-white"
+                              placeholder="Add more details for admins..."
+                            />
+                            <div className="mt-3 flex justify-center">
+                              {replyState?.message ? (
+                                <span className={`mr-auto self-center text-xs ${replyState.type === "error" ? "text-red-600 dark:text-red-300" : "text-[#41668f] dark:text-[#9fc5f8]"}`}>
+                                  {replyState.message}
+                                </span>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => submitRuleRequestReply(item)}
+                                disabled={replyState?.type === "loading"}
+                                className="min-w-32 rounded-xl bg-[#4f6f9f] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#3f5f8f] disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {replyState?.type === "loading" ? "Sending..." : "Send reply"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    {item.reason && (
-                      <p className="mt-3 line-clamp-3 text-sm leading-6 text-[#41668f] dark:text-[#cfe1ff]">
-                        {item.reason}
-                      </p>
-                    )}
-                    {item.admin_notes && (
-                      <div className="mt-4 rounded-xl bg-[#eff6ff] p-3 text-sm leading-6 text-[#41668f] dark:bg-black/20 dark:text-[#cfe1ff]">
-                        <span className="font-semibold text-[#10233f] dark:text-white">Admin note: </span>
-                        {item.admin_notes}
-                      </div>
-                    )}
-                    <p className="mt-4 text-xs text-[#6b93b8] dark:text-[#9fc5f8]">
-                      Submitted {formatDate(item.created_at)}
-                      {item.reviewed_at ? ` - Updated ${formatDate(item.reviewed_at)}` : ""}
-                    </p>
                   </motion.article>
                 );
               })}
@@ -879,7 +1059,11 @@ export function PartnerDashboard() {
         </motion.section>
       </div>
 
-      {selectedRequest && (
+      {selectedRequest && (() => {
+        const selectedDecisionStatus = normalizeStatus(selectedRequest.status);
+        const isDecisionLocked = ["accepted", "rejected", "completed"].includes(selectedDecisionStatus);
+
+        return (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-[#10233f]/35 p-4 backdrop-blur-sm md:p-8"
           onMouseDown={(event) => {
@@ -888,56 +1072,56 @@ export function PartnerDashboard() {
             }
           }}
         >
-          <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-[#d6e6f8] bg-white p-6 shadow-[0_24px_70px_rgba(16,35,63,0.24)] md:p-8 dark:border-blue-400/20 dark:bg-[#111c2f]">
+          <div className="max-h-[92vh] w-full max-w-7xl overflow-y-auto rounded-[28px] border border-[#d6e6f8] bg-white p-6 shadow-[0_24px_70px_rgba(16,35,63,0.24)] md:p-8 dark:border-blue-400/20 dark:bg-[#111c2f]">
             <div className="mb-7 flex items-start justify-between gap-4">
               <div>
-                <div className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#41668f]">
+                <div className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#41668f] dark:text-[#9fc5f8]">
                   Partner request
                 </div>
-                <h2 className="text-3xl font-bold text-[#10233f]">
+                <h2 className="text-3xl font-bold text-[#10233f] dark:text-white">
                   {selectedRequest.submission_name || selectedRequest.item_type}
                 </h2>
-                <p className="mt-1 text-sm text-[#41668f]">
+                <p className="mt-1 text-sm text-[#41668f] dark:text-[#9fc5f8]">
                   {pathwayLabels[selectedRequest.type] || selectedRequest.type} request sent by {selectedRequest.user_name} · {formatDate(selectedRequest.created_at)}
                 </p>
               </div>
               <button
                 onClick={() => setSelectedRequest(null)}
-                className="rounded-xl bg-[#eff6ff] p-2 text-[#41668f] hover:bg-[#dbeafe]"
+                className="rounded-xl bg-[#eff6ff] p-2 text-[#41668f] hover:bg-[#dbeafe] dark:bg-white/10 dark:text-[#9fc5f8] dark:hover:bg-white/15"
                 aria-label="Close request details"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {[
                 ["Pathway", pathwayLabels[selectedRequest.type] || selectedRequest.type],
-                ["Quantity", selectedRequest.quantity || 1],
+                ["Quantity", selectedRequest.quantity || "Not specified"],
                 ["Weight", selectedRequest.weight_value ? `${selectedRequest.weight_value} ${selectedRequest.weight_unit || "kg"}` : "Not specified"],
                 ["Shipping bag", bagGuidance[selectedRequest.type] || "Not specified"],
                 ["Condition", selectedRequest.condition || "Not specified"],
                 ["Cleanliness", selectedRequest.cleanliness || "Not specified"],
                 ["Buyback interest", selectedRequest.buyback_interest ? "Yes" : "No"],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-xl bg-[#eff6ff] px-4 py-3">
-                  <div className="text-xs uppercase tracking-wide text-[#41668f]">
+                <div key={label} className="rounded-xl bg-[#eff6ff] px-4 py-3 dark:bg-blue-400/10">
+                  <div className="text-xs uppercase tracking-wide text-[#41668f] dark:text-[#9fc5f8]">
                     {label}
                   </div>
-                  <div className="mt-1 font-semibold text-[#10233f]">{value}</div>
+                  <div className="mt-1 font-semibold text-[#10233f] dark:text-white">{value}</div>
                 </div>
               ))}
             </div>
 
-            <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-              <div className="rounded-2xl border border-[#d6e6f8] bg-[#fbfdff] p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
-                <h3 className="mb-4 text-xl font-semibold text-[#10233f] dark:text-white">Brief sent by user</h3>
-                <pre className="whitespace-pre-wrap font-sans text-base leading-7 text-[#41668f] dark:text-[#9fc5f8]">
-                  {selectedRequest.output_payload?.brief || selectedRequest.notes || "No brief provided."}
-                </pre>
-              </div>
+            <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.95fr)] lg:items-start">
+              <div className="space-y-6">
+                <div className="rounded-2xl border border-[#d6e6f8] bg-[#fbfdff] p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
+                  <h3 className="mb-4 text-xl font-semibold text-[#10233f] dark:text-white">Brief sent by user</h3>
+                  <pre className="max-h-[34rem] overflow-y-auto whitespace-pre-wrap pr-2 font-sans text-base leading-7 text-[#41668f] dark:text-[#9fc5f8]">
+                    {selectedRequest.output_payload?.brief || selectedRequest.notes || "No brief provided."}
+                  </pre>
+                </div>
 
-              <div className="space-y-4">
                 <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
                   <h3 className="mb-4 text-xl font-semibold text-[#10233f] dark:text-white">Recommendation summary</h3>
                   {(() => {
@@ -1014,7 +1198,9 @@ export function PartnerDashboard() {
                     );
                   })()}
                 </div>
+              </div>
 
+              <div className="space-y-6">
                 <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
                   <h3 className="mb-4 text-xl font-semibold text-[#10233f] dark:text-white">Submission details</h3>
                   <div className="space-y-3 text-base leading-7 text-[#41668f] dark:text-[#9fc5f8]">
@@ -1047,39 +1233,97 @@ export function PartnerDashboard() {
                 )}
 
                 <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
-                  <h3 className="mb-2 text-2xl font-semibold text-[#10233f] dark:text-white">Partner decision and message to user</h3>
-                  <p className="mb-4 text-sm leading-6 text-[#41668f] dark:text-[#9fc5f8]">
-                    Accept when your organization can handle the item. Decline
-                    when capacity, location, cleanliness, or pathway fit is not
-                    suitable. The note below will be sent back to the user as
-                    the reason or next step.
-                  </p>
-                  <textarea
-                    value={statusNote}
-                    onChange={(event) => setStatusNote(event.target.value)}
-                    rows={7}
-                    placeholder="Example: Accepted for donation. Please pack clean items separately and bring them on Friday afternoon."
-                    className="mb-3 w-full resize-y rounded-xl border border-[#d6e6f8] p-4 text-base leading-7 text-[#10233f] outline-none focus:border-[#4f6f9f] dark:border-blue-400/20 dark:bg-[#0f1b33] dark:text-white"
-                  />
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {[
-                      ["accepted", "Accept request"],
-                      ["rejected", "Reject request"],
-                    ].map(([status, label]) => (
-                      <button
-                        key={status}
-                        onClick={() => updateRequestStatus(selectedRequest, status)}
-                        disabled={isUpdatingStatus}
-                        className={`rounded-xl px-3 py-3 text-sm text-white disabled:opacity-50 ${
-                          status === "rejected"
-                            ? "bg-red-600 hover:bg-red-700"
-                            : "bg-[#4f6f9f] hover:bg-[#3f5f8f]"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
+                  <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-xl font-semibold text-[#10233f] dark:text-white">User tracking updates</h3>
+                      <p className="mt-1 text-sm leading-6 text-[#41668f] dark:text-[#9fc5f8]">
+                        User-side logistics and drop-off documentation for this request.
+                      </p>
+                    </div>
+                    {selectedRequest.latest_tracking_update && (
+                      <span className="rounded-full bg-[#eff6ff] px-3 py-1 text-xs font-semibold text-[#41668f] dark:bg-white/10 dark:text-[#9fc5f8]">
+                        {trackingStatusLabels[selectedRequest.latest_tracking_update.progress_status] ||
+                          formatStatusLabel(selectedRequest.latest_tracking_update.progress_status)}
+                      </span>
+                    )}
                   </div>
+                  {selectedRequest.tracking_updates?.length > 0 ? (
+                    <div className="space-y-3">
+                      {selectedRequest.tracking_updates.map((update) => (
+                        <div
+                          key={update.id}
+                          className="rounded-xl border border-[#d6e6f8] bg-[#fbfdff] px-4 py-3 text-sm text-[#41668f] dark:border-white/10 dark:bg-black/20 dark:text-[#cfe1ff]"
+                        >
+                          <div className="font-semibold text-[#10233f] dark:text-white">
+                            {trackingStatusLabels[update.progress_status] || formatStatusLabel(update.progress_status)}
+                          </div>
+                          <div className="mt-1 text-xs text-[#6b93b8] dark:text-[#9fc5f8]">
+                            {formatDateTime(update.created_at)}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                            <span className="rounded-full bg-[#eff6ff] px-2 py-1 dark:bg-white/10">
+                              {fulfillmentMethodLabels[update.fulfillment_method] || formatStatusLabel(update.fulfillment_method)}
+                            </span>
+                            {update.logistics_company && (
+                              <span className="rounded-full bg-[#eff6ff] px-2 py-1 dark:bg-white/10">{update.logistics_company}</span>
+                            )}
+                            {update.tracking_number && (
+                              <span className="rounded-full bg-[#eff6ff] px-2 py-1 dark:bg-white/10">#{update.tracking_number}</span>
+                            )}
+                          </div>
+                          {update.notes && <p className="mt-2 leading-6">{update.notes}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-xl border border-dashed border-[#d6e6f8] bg-[#fbfdff] px-4 py-3 text-sm text-[#41668f] dark:border-white/10 dark:bg-black/20 dark:text-[#cfe1ff]">
+                      No tracking updates yet.
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
+                  <h3 className="mb-2 text-2xl font-semibold text-[#10233f] dark:text-white">Partner decision and message to user</h3>
+                  {isDecisionLocked ? (
+                    <DecisionStatusIndicator
+                      status={selectedDecisionStatus}
+                    />
+                  ) : (
+                    <>
+                      <p className="mb-4 text-sm leading-6 text-[#41668f] dark:text-[#9fc5f8]">
+                        Accept when your organization can handle the item. Decline
+                        when capacity, location, cleanliness, or pathway fit is not
+                        suitable. The note below will be sent back to the user as
+                        the reason or next step.
+                      </p>
+                      <textarea
+                        value={statusNote}
+                        onChange={(event) => setStatusNote(event.target.value)}
+                        rows={7}
+                        placeholder="Example: Accepted for donation. Please pack clean items separately and bring them on Friday afternoon."
+                        className="mb-3 w-full resize-y rounded-xl border border-[#d6e6f8] p-4 text-base leading-7 text-[#10233f] outline-none focus:border-[#4f6f9f] dark:border-blue-400/20 dark:bg-[#0f1b33] dark:text-white"
+                      />
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {[
+                          ["accepted", "Accept request"],
+                          ["rejected", "Reject request"],
+                        ].map(([status, label]) => (
+                          <button
+                            key={status}
+                            onClick={() => updateRequestStatus(selectedRequest, status)}
+                            disabled={isUpdatingStatus}
+                            className={`rounded-xl px-3 py-3 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50 ${
+                              status === "rejected"
+                                ? "bg-red-600 hover:bg-red-700"
+                                : "bg-[#4f6f9f] hover:bg-[#3f5f8f]"
+                            }`}
+                          >
+                            {isUpdatingStatus ? "Saving..." : label}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {normalizeStatus(selectedRequest.status) === "accepted" && (
@@ -1149,7 +1393,8 @@ export function PartnerDashboard() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {showLogoutConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10233f]/35 p-6 backdrop-blur-sm">

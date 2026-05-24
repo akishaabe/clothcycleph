@@ -92,6 +92,25 @@ const trimRemovalOptions = [
   "Many mixed components",
 ];
 
+const quantityOrWeightMessage =
+  "Please provide either the quantity of items or the estimated weight.";
+
+const sanitizeWholeNumberInput = (value) => String(value || "").replace(/\D/g, "");
+
+const sanitizeDecimalInput = (value) => {
+  const cleaned = String(value || "").replace(/[^\d.]/g, "");
+  const [firstPart, ...restParts] = cleaned.split(".");
+  const normalized = `${firstPart}${restParts.length > 0 ? `.${restParts.join("")}` : ""}`;
+  return normalized === "." ? "" : normalized;
+};
+
+const hasPositiveNumericValue = (value) => {
+  const text = String(value || "").trim();
+  if (!text || text === ".") return false;
+  const numericValue = Number(text);
+  return Number.isFinite(numericValue) && numericValue > 0;
+};
+
 const fiberCompositionOptions = [
   { value: "cotton_natural", label: "100% cotton or natural fiber" },
   { value: "polyester_synthetic", label: "100% polyester or synthetic fiber" },
@@ -575,9 +594,11 @@ export function SubmissionFormPage() {
 
     if (!canSubmitForm) {
       setSubmitError(
-        "Please update the highlighted donation answers before submitting.",
+        !hasQuantityOrWeight
+          ? quantityOrWeightMessage
+          : "Please update the highlighted donation answers before submitting.",
       );
-      setStep(hasDonationBlockedUniform ? 1 : 2);
+      setStep(!hasQuantityOrWeight || !isStepTwoComplete ? 2 : hasDonationBlockedUniform ? 1 : 2);
       return;
     }
 
@@ -613,7 +634,7 @@ export function SubmissionFormPage() {
         description: formData.description || null,
         photos: photosWithLabels,
         service_type: toServiceType(),
-        quantity: Number(formData.quantity),
+        quantity: formData.quantity ? Number(formData.quantity) : null,
         buyback_interest:
           formData.action === "Upcycle" && formData.buybackInterest === "Yes",
         action: formData.action,
@@ -739,12 +760,15 @@ export function SubmissionFormPage() {
     (formData.burnTestChoice === "No" ||
       (formData.burnTestChoice === "Yes" && formData.burnTestAshes.length > 0));
 
+  const hasQuantityOrWeight =
+    hasPositiveNumericValue(formData.quantity) ||
+    hasPositiveNumericValue(formData.weightValue);
+
   const isStepTwoComplete =
     hasItemTypes &&
     formData.condition &&
     formData.cleanliness &&
-    formData.quantity &&
-    formData.weightValue &&
+    hasQuantityOrWeight &&
     !hasDonationBlockingAnswer;
 
   const isStepThreeComplete =
@@ -803,8 +827,8 @@ export function SubmissionFormPage() {
     { label: "Item Type", value: formData.itemTypes.join(", "), step: 2 },
     { label: "Condition", value: formData.condition, step: 2 },
     { label: "Cleanliness", value: formData.cleanliness, step: 2 },
-    { label: "Quantity", value: `${formData.quantity} items`, step: 2 },
-    { label: "Weight", value: `${formData.weightValue} ${formData.weightUnit}`, step: 2 },
+    formData.quantity && { label: "Quantity", value: `${formData.quantity} items`, step: 2 },
+    formData.weightValue && { label: "Weight", value: `${formData.weightValue} ${formData.weightUnit}`, step: 2 },
     { label: "Fabric Type Known", value: formData.knowsFabricType, step: 3 },
     {
       label: "Material/Fiber Composition",
@@ -1331,29 +1355,29 @@ export function SubmissionFormPage() {
 
               <QuestionBlock label="Q4: Quantity (items)">
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={formData.quantity}
                   onChange={(event) =>
-                    updateField("quantity", event.target.value)
+                    updateField("quantity", sanitizeWholeNumberInput(event.target.value))
                   }
                   className="w-full px-4 py-3 border-2 border-[#d4d8d0] rounded-xl focus:border-[#6b8e6b] bg-white"
                   placeholder="Enter number of items"
-                  min="1"
                 />
               </QuestionBlock>
 
               <QuestionBlock label="Estimated weight">
                 <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={formData.weightValue}
                     onChange={(event) =>
-                      updateField("weightValue", event.target.value)
+                      updateField("weightValue", sanitizeDecimalInput(event.target.value))
                     }
                     className="w-full px-4 py-3 border-2 border-[#d4d8d0] rounded-xl focus:border-[#6b8e6b] bg-white"
                     placeholder="Enter textile weight"
-                    min="0.01"
-                    step="0.01"
                   />
                   <select
                     value={formData.weightUnit}
@@ -1365,6 +1389,12 @@ export function SubmissionFormPage() {
                   </select>
                 </div>
               </QuestionBlock>
+
+              {!hasQuantityOrWeight && (
+                <div className="rounded-xl border border-[#d4a574] bg-[#fff8e8] px-4 py-3 text-sm text-[#7a5427]">
+                  {quantityOrWeightMessage}
+                </div>
+              )}
 
               <div className="flex gap-3">
                 <button

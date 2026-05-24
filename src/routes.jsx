@@ -12,6 +12,7 @@ const LoginPage = lazyPage(() => import("./app/pages/LoginPage"), "LoginPage");
 const SignUpPage = lazyPage(() => import("./app/pages/SignUpPage"), "SignUpPage");
 const UserDashboard = lazyPage(() => import("./app/pages/UserDashboard"), "UserDashboard");
 const AdminDashboard = lazyPage(() => import("./app/pages/AdminDashboard"), "AdminDashboard");
+const AdminDeletedRecordsPage = lazyPage(() => import("./app/pages/AdminDeletedRecordsPage"), "AdminDeletedRecordsPage");
 const PartnerDashboard = lazyPage(() => import("./app/pages/PartnerDashboard"), "PartnerDashboard");
 const SettingsPage = lazyPage(() => import("./app/pages/SettingsPage"), "SettingsPage");
 const SubmissionFormPage = lazyPage(() => import("./app/pages/SubmissionFormPage"), "SubmissionFormPage");
@@ -77,6 +78,10 @@ export const router = createBrowserRouter([
   {
     path: "/admin",
     Component: protectedPage(AdminDashboard, ["admin"]),
+  },
+  {
+    path: "/admin/deleted-records",
+    Component: protectedPage(AdminDeletedRecordsPage, ["admin"]),
   },
   {
     path: "/settings",

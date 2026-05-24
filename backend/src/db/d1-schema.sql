@@ -238,6 +238,27 @@ CREATE INDEX IF NOT EXISTS idx_transactions_from_user_id ON transactions(from_us
 CREATE INDEX IF NOT EXISTS idx_transactions_to_partner_id ON transactions(to_partner_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
 
+CREATE TABLE IF NOT EXISTS request_tracking_updates (
+  id TEXT PRIMARY KEY,
+  submission_id TEXT NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
+  request_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  partner_id TEXT REFERENCES partners(id) ON DELETE SET NULL,
+  progress_status TEXT NOT NULL CHECK (progress_status IN ('request_sent', 'scheduled', 'in_transit', 'dropoff_completed', 'completed')),
+  fulfillment_method TEXT DEFAULT 'drop_off' CHECK (fulfillment_method IN ('drop_off', 'shipping', 'pickup', 'other')),
+  logistics_company TEXT,
+  tracking_number TEXT,
+  notes TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_request_tracking_submission_id ON request_tracking_updates(submission_id);
+CREATE INDEX IF NOT EXISTS idx_request_tracking_request_id ON request_tracking_updates(request_id);
+CREATE INDEX IF NOT EXISTS idx_request_tracking_user_id ON request_tracking_updates(user_id);
+CREATE INDEX IF NOT EXISTS idx_request_tracking_partner_id ON request_tracking_updates(partner_id);
+CREATE INDEX IF NOT EXISTS idx_request_tracking_created_at ON request_tracking_updates(created_at DESC);
+
 CREATE TABLE IF NOT EXISTS deleted_records (
   id TEXT PRIMARY KEY,
   entity_type TEXT NOT NULL,
@@ -337,6 +358,20 @@ CREATE TABLE IF NOT EXISTS partner_rule_change_requests (
 
 CREATE INDEX IF NOT EXISTS idx_partner_rule_change_requests_partner_id ON partner_rule_change_requests(partner_id);
 CREATE INDEX IF NOT EXISTS idx_partner_rule_change_requests_status ON partner_rule_change_requests(status);
+
+CREATE TABLE IF NOT EXISTS partner_rule_change_request_replies (
+  id TEXT PRIMARY KEY,
+  request_id TEXT NOT NULL REFERENCES partner_rule_change_requests(id) ON DELETE CASCADE,
+  author_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  author_role TEXT NOT NULL CHECK (author_role IN ('partner', 'admin')),
+  message TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_partner_rule_change_request_replies_request_id
+  ON partner_rule_change_request_replies(request_id);
+CREATE INDEX IF NOT EXISTS idx_partner_rule_change_request_replies_created_at
+  ON partner_rule_change_request_replies(created_at DESC);
 
 -- Notifications table
 CREATE TABLE IF NOT EXISTS notifications (

@@ -72,7 +72,7 @@ export async function createSubmissionD1(
       payload.description || null,
       JSON.stringify(payload.photos || []),
       payload.service_type || null,
-      payload.quantity || 1,
+      payload.quantity == null ? null : Number(payload.quantity),
       payload.buyback_interest ? 1 : 0,
       payload.action || null,
       payload.submission_name || null,
@@ -169,6 +169,128 @@ export async function updateSubmissionStatusD1(db: D1Database, id: string, statu
   ));
 }
 
+export async function getTrackingUpdatesD1(db: D1Database, submissionId: string, user: { id: string; role?: string; email?: string }) {
+  const access = await queryD1First(
+    db,
+    `SELECT s.id
+     FROM submissions s
+     LEFT JOIN transactions t ON t.submission_id = s.id
+     LEFT JOIN partners p ON p.id = t.to_partner_id
+     WHERE s.id = ?
+       AND (
+         s.user_id = ?
+         OR ? = 'admin'
+         OR p.user_id = ?
+         OR lower(p.email) = lower(?)
+       )
+     LIMIT 1`,
+    [submissionId, user.id, user.role || '', user.id, user.email || '']
+  );
+
+  if (!access) {
+    return null;
+  }
+
+  return queryD1(db, 'SELECT * FROM request_tracking_updates WHERE submission_id = ? ORDER BY created_at DESC', [
+    submissionId,
+  ]);
+}
+
+export async function createTrackingUpdateD1(
+  db: D1Database,
+  submissionId: string,
+  user: { id: string; email?: string },
+  payload: {
+    request_id?: string | null;
+    progress_status: string;
+    fulfillment_method?: string | null;
+    logistics_company?: string | null;
+    tracking_number?: string | null;
+    notes?: string | null;
+  }
+) {
+  const submission = await queryD1First(db, 'SELECT * FROM submissions WHERE id = ? AND user_id = ?', [
+    submissionId,
+    user.id,
+  ]);
+  if (!submission) {
+    return null;
+  }
+
+  const request = await queryD1First<any>(
+    db,
+    `SELECT t.*, p.name AS partner_name, u.id AS partner_message_user_id
+     FROM transactions t
+     LEFT JOIN partners p ON p.id = t.to_partner_id
+     LEFT JOIN users u ON u.id = p.user_id OR lower(u.email) = lower(p.email)
+     WHERE t.submission_id = ?
+       AND t.from_user_id = ?
+       AND (? IS NULL OR t.id = ?)
+     ORDER BY COALESCE(t.updated_at, t.created_at) DESC
+     LIMIT 1`,
+    [submissionId, user.id, payload.request_id || null, payload.request_id || null]
+  );
+
+  const id = generateD1UUID();
+  const fulfillmentMethod = payload.fulfillment_method || 'drop_off';
+  const update = await queryD1First(
+    db,
+    `INSERT INTO request_tracking_updates (
+       id, submission_id, request_id, user_id, partner_id, progress_status,
+       fulfillment_method, logistics_company, tracking_number, notes
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     RETURNING *`,
+    [
+      id,
+      submissionId,
+      request?.id || payload.request_id || null,
+      user.id,
+      request?.to_partner_id || null,
+      payload.progress_status,
+      fulfillmentMethod,
+      payload.logistics_company || null,
+      payload.tracking_number || null,
+      payload.notes || null,
+    ]
+  );
+
+  const statusLabel = trackingStatusLabel(payload.progress_status);
+  const messageParts = [`The user updated the request status to ${statusLabel}.`];
+  if (payload.logistics_company) messageParts.push(`Courier: ${payload.logistics_company}.`);
+  if (payload.tracking_number) messageParts.push(`Tracking Number: ${payload.tracking_number}.`);
+  if (payload.notes) messageParts.push(`Notes: ${payload.notes}`);
+
+  if (request?.partner_message_user_id && request.partner_message_user_id !== user.id) {
+    await executeD1(db, 'INSERT INTO messages (id, from_user_id, to_user_id, content) VALUES (?, ?, ?, ?)', [
+      generateD1UUID(),
+      user.id,
+      request.partner_message_user_id,
+      messageParts.join(' '),
+    ]);
+
+    await executeD1(db, 'INSERT INTO notifications (id, user_id, type, title, body, data) VALUES (?, ?, ?, ?, ?, ?)', [
+      generateD1UUID(),
+      request.partner_message_user_id,
+      'partner_update',
+      'Request tracking updated',
+      `${submission.submission_name || submission.item_type}: ${statusLabel}`,
+      JSON.stringify({ submissionId, requestId: request.id, trackingUpdateId: id, progressStatus: payload.progress_status }),
+    ]);
+  }
+
+  await executeD1(db, 'INSERT INTO notifications (id, user_id, type, title, body, data) VALUES (?, ?, ?, ?, ?, ?)', [
+    generateD1UUID(),
+    user.id,
+    'system',
+    'Tracking update recorded',
+    `${submission.submission_name || submission.item_type}: ${statusLabel}`,
+    JSON.stringify({ submissionId, trackingUpdateId: id, progressStatus: payload.progress_status }),
+  ]);
+
+  return update;
+}
+
 function normalizeSubmission(row: any) {
   if (!row) {
     return null;
@@ -213,9 +335,12 @@ async function hydrateSubmission(db: D1Database, row: any) {
     return null;
   }
 
-  const [details, burnTest] = await Promise.all([
+  const [details, burnTest, tracking] = await Promise.all([
     queryD1First(db, 'SELECT * FROM submission_details WHERE submission_id = ?', [submission.id]),
     queryD1First(db, 'SELECT * FROM burn_tests WHERE submission_id = ? ORDER BY created_at DESC LIMIT 1', [
+      submission.id,
+    ]),
+    queryD1(db, 'SELECT * FROM request_tracking_updates WHERE submission_id = ? ORDER BY created_at DESC', [
       submission.id,
     ]),
   ]);
@@ -224,7 +349,21 @@ async function hydrateSubmission(db: D1Database, row: any) {
     ...submission,
     details: normalizeDetails(details),
     burn_test: normalizeBurnTest(burnTest),
+    tracking_updates: tracking.results || [],
+    latest_tracking_update: tracking.results?.[0] || null,
   };
+}
+
+function trackingStatusLabel(status: string) {
+  return (
+    {
+      request_sent: 'Request sent',
+      scheduled: 'Scheduled',
+      in_transit: 'Shipped / In transit',
+      dropoff_completed: 'Drop-off completed',
+      completed: 'Completed',
+    } as Record<string, string>
+  )[status] || status;
 }
 
 function normalizeDetails(row: any) {

@@ -35,6 +35,30 @@ const bagGuidance = {
   donate: { color: "green", label: "Green bag" },
 };
 
+const shippingReminderContent = {
+  recycle: {
+    label: "White bag",
+    title: "Recycle pathway",
+    instruction:
+      "Use a white bag so partner staff can identify this as a recycling request.",
+    swatchClass: "border-[#cfd8cf] bg-white dark:border-white/40 dark:bg-white",
+  },
+  donate: {
+    label: "Clean packaging",
+    title: "Donate pathway",
+    instruction:
+      "Pack clean items separately and keep them dry so they are ready for partner sorting.",
+    swatchClass: "border-[#a7c8ad] bg-[#edf7ed] dark:border-emerald-300 dark:bg-emerald-200",
+  },
+  upcycle: {
+    label: "Protect materials",
+    title: "Upcycle pathway",
+    instruction:
+      "Protect reusable fabric, trims, buttons, zippers, and accessories from bending or snagging.",
+    swatchClass: "border-[#5f6f67] bg-[#19221d] dark:border-zinc-300 dark:bg-zinc-100",
+  },
+};
+
 const estimateCarbonKg = (distanceKm, weightValue, weightUnit) => {
   const distance = Number(distanceKm || 0);
   const weightKg =
@@ -148,7 +172,7 @@ function buildPartnerBrief(submission, pathway, recommendation, recommendations 
       : "",
     `Submission name: ${submission.submission_name || submission.item_type}`,
     `Item: ${submission.item_type}`,
-    `Quantity: ${submission.quantity || 1}`,
+    submission.quantity ? `Quantity: ${submission.quantity}` : "",
     details.weight_value ? `Weight: ${details.weight_value} ${details.weight_unit || "kg"}` : "",
     bagGuidance[pathway] ? `Shipping bag: ${bagGuidance[pathway].label} for ${pathwayLabels[pathway] || pathway}` : "",
     options.estimatedCarbonKg != null ? `Routing footprint estimate: ${options.estimatedCarbonKg} kg CO2e based on partner distance and textile weight` : "",
@@ -187,6 +211,39 @@ function BriefPreview({ brief }) {
           </p>
         );
       })}
+    </div>
+  );
+}
+
+function ShippingReminderCard({ pathway }) {
+  const reminder = shippingReminderContent[pathway];
+
+  if (!reminder) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-2xl border border-[#dce4da] bg-white/90 p-5 shadow-[0_12px_34px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_12px_34px_rgba(0,0,0,0.3)]">
+      <div className="text-xs font-bold uppercase tracking-wide text-[#336158] dark:text-emerald-300">
+        Shipping reminder
+      </div>
+      <div className="mt-5 flex items-start gap-4">
+        <span
+          aria-hidden="true"
+          className={`mt-0.5 h-10 w-10 shrink-0 rounded-full border-2 ${reminder.swatchClass}`}
+        />
+        <div className="min-w-0">
+          <div className="text-lg font-semibold leading-6 text-[#19221d] dark:text-white">
+            {reminder.label}
+          </div>
+          <div className="text-sm text-[#336158] dark:text-emerald-300">
+            {reminder.title}
+          </div>
+        </div>
+      </div>
+      <p className="mt-4 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
+        {reminder.instruction}
+      </p>
     </div>
   );
 }
@@ -848,6 +905,8 @@ export function DssConfirmationPage() {
           </div>
 
           <aside className="space-y-6">
+            <ShippingReminderCard pathway={selectedPathway} />
+
             <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_12px_34px_rgba(0,0,0,0.3)]">
               <h2 className="mb-3 text-xl font-semibold">Partner brief</h2>
               <BriefPreview brief={brief} />
@@ -951,7 +1010,7 @@ export function DssConfirmationPage() {
                     {normalizeStatus(request.status) === "accepted" && (
                       <div className="mt-3 flex items-center gap-2 text-sm text-[#336158]">
                         <CheckCircle className="h-4 w-4" />
-                        Partner accepted this request.
+                        Partner accepted your request.
                       </div>
                     )}
                     {normalizeStatus(request.status) === "pending" && (

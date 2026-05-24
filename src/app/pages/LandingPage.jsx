@@ -386,16 +386,16 @@ export function LandingPage() {
                   "Support communities by giving garments a meaningful second purpose.",
               },
               {
-                icon: Recycle,
-                title: "Recycle",
-                description:
-                  "Divert damaged or unusable textiles into responsible recycling streams.",
-              },
-              {
                 icon: Scissors,
                 title: "Upcycle",
                 description:
-                  "Recycle or upcycle pieces into new materials and creative second-life products.",
+                  "Convert pieces into new materials and creative second-life products.",
+              },
+              {
+                icon: Recycle,
+                title: "Recycle",
+                description:
+                  "Divert damaged or unusable textiles into responsible end of life streams.",
               },
             ].map((item) => (
               <motion.div

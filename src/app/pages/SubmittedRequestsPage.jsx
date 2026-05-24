@@ -273,36 +273,46 @@ export function SubmittedRequestsPage() {
             )}
 
             {visibleRequests.map((request) => (
-              <article key={request.id} className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-5">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <article key={request.id} className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-5 md:p-6">
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="text-base font-semibold leading-6 text-[#19221d]">{request.title}</div>
+                    <span className={`inline-flex min-h-9 w-fit shrink-0 items-center justify-center rounded-full border px-3 py-1 text-xs ${statusClass[request.status] || statusClass.pending}`}>
+                      {formatStatusLabel(request.status)}
+                    </span>
+                  </div>
+
                   <div className="min-w-0">
-                    <div className="font-semibold text-[#19221d]">{request.title}</div>
-                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#5f6f67]">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#5f6f67]">
                       <span>{pathwayLabels[request.selectedPathway] || formatStatusLabel(request.selectedPathway)}</span>
                       <span>Partner: {request.partnerName || "Not sent yet"}</span>
                       <span>{formatManilaDate(request.submittedAt)}</span>
                     </div>
-                    <div className="mt-3 grid gap-2 text-sm text-[#5f6f67] sm:grid-cols-2 lg:grid-cols-3">
-                      <div className="rounded-xl border border-[#e1e7df] bg-white/70 px-3 py-2">
-                        Recommended: {pathwayLabels[request.recommendedPathway] || "Recommendation pending"}
-                      </div>
-                      <div className="rounded-xl border border-[#e1e7df] bg-white/70 px-3 py-2">
-                        Confidence: {formatConfidence(request.confidence)}
-                      </div>
-                      <div className="rounded-xl border border-[#e1e7df] bg-white/70 px-3 py-2">
-                        Score: {request.score == null ? "N/A" : `${Number(request.score).toFixed(1)} / 100`}
-                      </div>
+                  </div>
+
+                  <div className="grid gap-2.5 text-sm text-[#5f6f67] sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="flex min-h-10 items-center rounded-xl border border-[#e1e7df] bg-white/70 px-3 py-2">
+                      Recommended: {pathwayLabels[request.recommendedPathway] || "Recommendation pending"}
                     </div>
+                    <div className="flex min-h-10 items-center rounded-xl border border-[#e1e7df] bg-white/70 px-3 py-2">
+                      Confidence: {formatConfidence(request.confidence)}
+                    </div>
+                    <div className="flex min-h-10 items-center rounded-xl border border-[#e1e7df] bg-white/70 px-3 py-2">
+                      Score: {request.score == null ? "N/A" : `${Number(request.score).toFixed(1)} / 100`}
+                    </div>
+                  </div>
+
+                  <div>
                     {request.outcomeTitle && (
-                      <div className="mt-3 rounded-2xl border border-[#cfe2cf] bg-[#edf7ed] px-4 py-3 text-sm text-[#336158]">
-                        <div className="font-semibold text-[#19221d]">
+                      <div className="rounded-2xl border border-[#cfe2cf] bg-[#edf7ed] px-4 py-4 text-sm text-[#336158]">
+                        <div className="font-semibold leading-6 text-[#19221d]">
                           Congratulations! Your {request.title} was turned into {request.outcomeTitle}!
                         </div>
                         {request.outcomePhotos.length > 0 && (
                           <button
                             type="button"
                             onClick={() => setSelectedRequest(request)}
-                            className="mt-2 rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-[#336158] hover:bg-[#f7faf5]"
+                            className="mt-3 inline-flex min-h-8 items-center justify-center rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-[#336158] hover:bg-[#f7faf5]"
                           >
                             View photos
                           </button>
@@ -310,13 +320,11 @@ export function SubmittedRequestsPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className={`rounded-full border px-3 py-1 text-xs ${statusClass[request.status] || statusClass.pending}`}>
-                      {formatStatusLabel(request.status)}
-                    </span>
+
+                  <div className="grid w-full gap-2">
                     <button
                       onClick={() => setSelectedRequest(request)}
-                      className="rounded-xl border border-[#dce4da] px-3 py-2 text-sm font-semibold text-[#5f6f67] hover:bg-[#f3f5f2]"
+                      className="inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-[#dce4da] px-4 py-2 text-center text-sm font-semibold text-[#5f6f67] hover:bg-[#f3f5f2]"
                     >
                       View Details
                     </button>
@@ -324,7 +332,7 @@ export function SubmittedRequestsPage() {
                       onClick={() =>
                         navigate(`/dss/${request.submission.id}${request.latestPartnerRequest ? `?request=${request.latestPartnerRequest.id}` : ""}`)
                       }
-                      className="rounded-xl bg-[#336158] px-3 py-2 text-sm font-semibold text-white hover:bg-[#2a4c48]"
+                      className="inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-[#336158] px-4 py-2 text-center text-sm font-semibold text-white hover:bg-[#2a4c48]"
                     >
                       Open recommendation
                     </button>
@@ -387,7 +395,7 @@ function RequestDetailsModal({ request, onClose, onOpenDss, onOpenMessages }) {
               <DetailItem label="Condition" value={request.submission.condition} />
               <DetailItem label="Cleanliness" value={request.submission.cleanliness} />
               <DetailItem label="Fabric" value={request.submission.fabric} />
-              <DetailItem label="Quantity" value={request.submission.quantity || "1"} />
+              <DetailItem label="Quantity" value={request.submission.quantity || "Not specified"} />
               <DetailItem label="Brand" value={request.submission.details?.brand || "Not specified"} />
               <DetailItem label="Repairability" value={request.submission.details?.repairability || "Not specified"} />
             </div>
