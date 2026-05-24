@@ -1,26 +1,39 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { config } from '../config/env.js';
+import { config, getConfig, type AppConfig, type EnvRecord } from '../config/env.js';
 
-export const generateToken = (payload: any): string => {
-  if (!config.jwt.secret) {
+type ConfigSource = AppConfig | EnvRecord;
+
+const resolveConfig = (source?: ConfigSource): AppConfig => {
+  if (!source) {
+    return config;
+  }
+
+  return 'jwt' in source ? source as AppConfig : getConfig(source as EnvRecord);
+};
+
+export const generateToken = (payload: any, source?: ConfigSource): string => {
+  const resolvedConfig = resolveConfig(source);
+
+  if (!resolvedConfig.jwt.secret) {
     throw new Error('JWT_SECRET is required');
   }
 
   const options: jwt.SignOptions = {
-    expiresIn: config.jwt.expiresIn as jwt.SignOptions['expiresIn'],
+    expiresIn: resolvedConfig.jwt.expiresIn as jwt.SignOptions['expiresIn'],
   };
 
-  return jwt.sign(payload, config.jwt.secret as jwt.Secret, options);
+  return jwt.sign(payload, resolvedConfig.jwt.secret as jwt.Secret, options);
 };
 
-export const verifyToken = (token: string): any => {
+export const verifyToken = (token: string, source?: ConfigSource): any => {
   try {
-    if (!config.jwt.secret) {
+    const resolvedConfig = resolveConfig(source);
+    if (!resolvedConfig.jwt.secret) {
       throw new Error('JWT_SECRET is required');
     }
-    return jwt.verify(token, config.jwt.secret!);
+    return jwt.verify(token, resolvedConfig.jwt.secret!);
   } catch (error) {
     throw new Error('Invalid token');
   }

@@ -10,7 +10,7 @@ import {
   verifyToken,
 } from '../utils/auth.js';
 import { v4 as uuidv4 } from 'uuid';
-import { config } from '../config/env.js';
+import { config, type AppConfig } from '../config/env.js';
 import { sendPasswordResetLink, sendTwoFactorCode } from '../services/emailService.js';
 import {
   buildRateLimitKey,
@@ -64,7 +64,8 @@ export const signup = async (req: Request, res: Response) => {
     );
 
     const user = result.rows[0];
-    const challenge = await createEmailVerificationChallenge(user);
+    const appConfig = getRequestConfig(req);
+    const challenge = await createEmailVerificationChallenge(user, 'email_verification', appConfig);
     await recordAuthEvent({
       userId: user.id,
       eventType: 'signup_created',
@@ -144,7 +145,8 @@ export const login = async (req: Request, res: Response) => {
     await clearRateLimit(rateLimitKey);
 
     if (!user.email_verified_at) {
-      const challenge = await createEmailVerificationChallenge(user);
+      const appConfig = getRequestConfig(req);
+      const challenge = await createEmailVerificationChallenge(user, 'email_verification', appConfig);
 
       return res.json({
         message: 'Email verification required. Check your email for your verification code.',
@@ -158,8 +160,8 @@ export const login = async (req: Request, res: Response) => {
       const method = getLoginTwoFactorMethod(user);
       const challenge =
         method === 'email'
-          ? await createEmailVerificationChallenge(user, 'two_factor')
-          : createTotpChallenge(user);
+          ? await createEmailVerificationChallenge(user, 'two_factor', getRequestConfig(req))
+          : createTotpChallenge(user, getRequestConfig(req));
 
       return res.json({
         message:
@@ -172,7 +174,7 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    const emailChallenge = await createEmailVerificationChallenge(user, 'two_factor');
+    const emailChallenge = await createEmailVerificationChallenge(user, 'two_factor', getRequestConfig(req));
     return res.json({
       message: 'Two-factor verification required. Check your email for your verification code.',
       requiresTwoFactor: true,
@@ -188,7 +190,8 @@ export const login = async (req: Request, res: Response) => {
 export const continueWithGoogle = async (req: Request, res: Response) => {
   try {
     const { credential, mode = 'login', terms_accepted = false } = req.body;
-    const googleUser = await verifyGoogleCredential(credential);
+    const appConfig = getRequestConfig(req);
+    const googleUser = await verifyGoogleCredential(credential, appConfig);
 
     let userResult = await query('SELECT * FROM users WHERE email = $1', [googleUser.email]);
 
@@ -254,7 +257,7 @@ export const continueWithGoogle = async (req: Request, res: Response) => {
       id: user.id,
       email: user.email,
       role: user.role,
-    });
+    }, appConfig);
 
     res.json({
       message: user.password_setup_required
@@ -279,7 +282,8 @@ export const verifyTwoFactor = async (req: Request, res: Response) => {
       throw new AppError(429, 'Too many verification attempts. Please try again later.');
     }
 
-    const decoded = verifyToken(two_factor_token);
+    const appConfig = getRequestConfig(req);
+    const decoded = verifyToken(two_factor_token, appConfig);
 
     if (decoded.purpose !== 'two_factor' && decoded.purpose !== 'email_verification') {
       throw new AppError(400, 'Invalid two-factor token');
@@ -331,7 +335,7 @@ export const verifyTwoFactor = async (req: Request, res: Response) => {
         throw new AppError(400, 'Two-factor authentication is not enabled');
       }
 
-      const secret = decryptSecret(user.two_factor_secret_encrypted);
+      const secret = decryptSecret(user.two_factor_secret_encrypted, appConfig);
       const isValidCode = verifyTotpCode(secret, code) || (await useRecoveryCode(user.id, code));
 
       if (!isValidCode) {
@@ -359,7 +363,7 @@ export const verifyTwoFactor = async (req: Request, res: Response) => {
       id: user.id,
       email: user.email,
       role: user.role,
-    });
+    }, appConfig);
 
     res.json({
       message: 'Login successful',
@@ -377,7 +381,8 @@ export const verifyTwoFactor = async (req: Request, res: Response) => {
 export const resendTwoFactorCode = async (req: Request, res: Response) => {
   try {
     const { two_factor_token } = req.body;
-    const decoded = verifyToken(two_factor_token);
+    const appConfig = getRequestConfig(req);
+    const decoded = verifyToken(two_factor_token, appConfig);
 
     if (decoded.purpose !== 'email_verification' && decoded.method !== 'email') {
       throw new AppError(400, 'This verification flow cannot resend codes');
@@ -397,7 +402,8 @@ export const resendTwoFactorCode = async (req: Request, res: Response) => {
     const user = result.rows[0];
     const challenge = await createEmailVerificationChallenge(
       user,
-      decoded.purpose === 'email_verification' ? 'email_verification' : 'two_factor'
+      decoded.purpose === 'email_verification' ? 'email_verification' : 'two_factor',
+      appConfig
     );
 
     await recordAuthEvent({
@@ -507,7 +513,7 @@ export const setupTwoFactor = async (req: Request, res: Response) => {
     }
 
     const secret = generateTotpSecret();
-    const encryptedSecret = encryptSecret(secret);
+    const encryptedSecret = encryptSecret(secret, getRequestConfig(req));
 
     await query(
       `UPDATE users
@@ -562,7 +568,7 @@ export const enableTwoFactor = async (req: Request, res: Response) => {
       throw new AppError(401, 'Invalid password');
     }
 
-    const secret = decryptSecret(result.rows[0].two_factor_secret_encrypted);
+    const secret = decryptSecret(result.rows[0].two_factor_secret_encrypted, getRequestConfig(req));
 
     if (!verifyTotpCode(secret, code)) {
       await recordAuthEvent({
@@ -633,7 +639,7 @@ export const disableTwoFactor = async (req: Request, res: Response) => {
         throw new AppError(400, 'Two-factor code is required to disable 2FA');
       }
 
-      const secret = decryptSecret(user.two_factor_secret_encrypted);
+      const secret = decryptSecret(user.two_factor_secret_encrypted, getRequestConfig(req));
       const isValidCode = verifyTotpCode(secret, code) || (await useRecoveryCode(userId, code));
 
       if (!isValidCode) {
@@ -681,11 +687,11 @@ export const forgotPassword = async (req: Request, res: Response) => {
         [userResult.rows[0].id, tokenHash]
       );
 
-      await sendPasswordResetLink(email, resetCode);
+      await sendPasswordResetLink(email, resetCode, getRequestConfig(req));
 
       return res.json({
         message: 'If an account exists, a password reset email has been sent.',
-        ...(shouldExposeDevSecrets() ? { reset_token: resetCode } : {}),
+        ...(shouldExposeDevSecrets(getRequestConfig(req)) ? { reset_token: resetCode } : {}),
       });
     }
 
@@ -697,13 +703,18 @@ export const forgotPassword = async (req: Request, res: Response) => {
   }
 };
 
-function shouldExposeDevSecrets() {
-  return process.env.NODE_ENV !== 'production' && config.email.provider === 'console';
+function getRequestConfig(req: Request): AppConfig {
+  return req.config || config;
+}
+
+function shouldExposeDevSecrets(appConfig: AppConfig = config) {
+  return appConfig.server.env !== 'production' && appConfig.email.provider === 'console';
 }
 
 async function createEmailVerificationChallenge(
   user: { id: string; email: string; role: string },
-  purpose: 'email_verification' | 'two_factor' = 'email_verification'
+  purpose: 'email_verification' | 'two_factor' = 'email_verification',
+  appConfig: AppConfig = config
 ) {
   const code = generateNumericCode();
   const codeHash = await hashPassword(code);
@@ -716,7 +727,7 @@ async function createEmailVerificationChallenge(
     [codeHash, user.id]
   );
 
-  await sendTwoFactorCode(user.email, code);
+  await sendTwoFactorCode(user.email, code, appConfig);
 
   const twoFactorToken = generateToken({
     id: user.id,
@@ -724,23 +735,23 @@ async function createEmailVerificationChallenge(
     role: user.role,
     purpose,
     method: 'email',
-  });
+  }, appConfig);
 
-  if (shouldExposeDevSecrets()) {
+  if (shouldExposeDevSecrets(appConfig)) {
     console.log(`Dev email 2FA code for ${user.email}: ${code}`);
   }
 
   return { twoFactorToken };
 }
 
-function createTotpChallenge(user: { id: string; email: string; role: string }) {
+function createTotpChallenge(user: { id: string; email: string; role: string }, appConfig: AppConfig = config) {
   const twoFactorToken = generateToken({
     id: user.id,
     email: user.email,
     role: user.role,
     purpose: 'two_factor',
     method: 'totp',
-  });
+  }, appConfig);
 
   return { twoFactorToken };
 }
@@ -814,8 +825,8 @@ function getProfilePhotoUrl(profilePhoto: unknown) {
   }
 }
 
-async function verifyGoogleCredential(credential: string) {
-  if (!config.google.clientId) {
+async function verifyGoogleCredential(credential: string, appConfig: AppConfig = config) {
+  if (!appConfig.google.clientId) {
     console.error('Google auth configuration missing: GOOGLE_CLIENT_ID is not set');
     throw new AppError(500, 'Google login is not configured');
   }
@@ -852,9 +863,9 @@ async function verifyGoogleCredential(credential: string) {
     picture?: string;
   };
 
-  if (payload.aud !== config.google.clientId) {
+  if (payload.aud !== appConfig.google.clientId) {
     console.error('Google credential audience mismatch', {
-      expectedClientIdPrefix: config.google.clientId.slice(0, 12),
+      expectedClientIdPrefix: appConfig.google.clientId.slice(0, 12),
       receivedAudiencePrefix: payload.aud?.slice(0, 12),
     });
     throw new AppError(401, 'Google credential audience mismatch');

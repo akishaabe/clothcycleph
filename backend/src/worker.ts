@@ -94,6 +94,7 @@ import {
   updatePartnerRuleChangeRequestStatusD1,
 } from './services/d1DssService.js';
 import { listPartnerLocationsD1 } from './services/d1GisService.js';
+import { getConfig } from './config/env.js';
 
 type WorkerFile = {
   arrayBuffer: () => Promise<ArrayBuffer>;
@@ -170,16 +171,19 @@ app.onError((error, c) => {
   }, status as any);
 });
 
-const getAuthOptions = (c: any) => ({
-  jwtSecret: requireWorkerSecret(c, 'JWT_SECRET'),
-  totpEncryptionKey: requireWorkerSecret(c, 'TWO_FACTOR_ENCRYPTION_KEY'),
-  emailProvider: c.env.EMAIL_PROVIDER,
-  emailApiKey: c.env.BREVO_API_KEY || c.env.SENDGRID_API_KEY,
-  emailFrom: c.env.EMAIL_FROM,
-  appUrl: c.env.APP_URL,
-  googleClientId: c.env.GOOGLE_CLIENT_ID,
-  exposeDevSecrets: Boolean(!c.env.EMAIL_PROVIDER),
-});
+const getAuthOptions = (c: any) => {
+  const appConfig = getConfig(c.env);
+  return {
+    jwtSecret: requireWorkerSecret(c, 'JWT_SECRET'),
+    totpEncryptionKey: requireWorkerSecret(c, 'TWO_FACTOR_ENCRYPTION_KEY'),
+    emailProvider: appConfig.email.provider as EmailProvider,
+    emailApiKey: appConfig.email.brevoApiKey || appConfig.email.sendgridApiKey,
+    emailFrom: appConfig.email.from,
+    appUrl: c.env.APP_URL,
+    googleClientId: appConfig.google.clientId,
+    exposeDevSecrets: Boolean(!c.env.EMAIL_PROVIDER),
+  };
+};
 
 const requireWorkerSecret = (c: any, key: keyof CloudflareEnv) => {
   const value = c.env[key];
