@@ -1,9 +1,10 @@
 import crypto from 'crypto';
-import { config } from '../config/env.js';
+import { config, getConfig, type AppConfig, type EnvRecord } from '../config/env.js';
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const DEFAULT_PERIOD_SECONDS = 30;
 const DEFAULT_DIGITS = 6;
+type ConfigSource = AppConfig | EnvRecord;
 
 export function generateTotpSecret(length = 20): string {
   const bytes = crypto.randomBytes(length);
@@ -55,8 +56,8 @@ export function verifyTotpCode(secret: string, code: string, window = 1): boolea
   return false;
 }
 
-export function encryptSecret(secret: string): string {
-  const key = getEncryptionKey();
+export function encryptSecret(secret: string, source?: ConfigSource): string {
+  const key = getEncryptionKey(source);
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   const ciphertext = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
@@ -65,8 +66,8 @@ export function encryptSecret(secret: string): string {
   return [iv.toString('base64url'), tag.toString('base64url'), ciphertext.toString('base64url')].join('.');
 }
 
-export function decryptSecret(encryptedSecret: string): string {
-  const key = getEncryptionKey();
+export function decryptSecret(encryptedSecret: string, source?: ConfigSource): string {
+  const key = getEncryptionKey(source);
   const [ivPart, tagPart, ciphertextPart] = encryptedSecret.split('.');
 
   if (!ivPart || !tagPart || !ciphertextPart) {
@@ -123,8 +124,11 @@ function decodeBase32(value: string): Buffer {
   return Buffer.from(bytes);
 }
 
-function getEncryptionKey(): Buffer {
-  const configuredKey = config.security.twoFactorEncryptionKey || config.jwt.secret;
+function getEncryptionKey(source?: ConfigSource): Buffer {
+  const resolvedConfig = source
+    ? 'jwt' in source ? source as AppConfig : getConfig(source as EnvRecord)
+    : config;
+  const configuredKey = resolvedConfig.security.twoFactorEncryptionKey || resolvedConfig.jwt.secret;
 
   if (!configuredKey) {
     throw new Error('TWO_FACTOR_ENCRYPTION_KEY or JWT_SECRET is required');

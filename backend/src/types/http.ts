@@ -1,3 +1,5 @@
+import type { AppConfig } from '../config/env.js';
+
 export type UserRole = 'user' | 'partner' | 'admin';
 
 export type AuthUser = {
@@ -25,6 +27,7 @@ export type HttpRequest = {
   protocol?: string;
   user?: AuthUser;
   file?: UploadedFile;
+  config?: AppConfig;
   get?: (name: string) => string | undefined;
 };
 

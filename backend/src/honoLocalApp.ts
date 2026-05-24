@@ -4,7 +4,7 @@ import { secureHeaders } from 'hono/secure-headers';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { ZodError, type ZodSchema } from 'zod';
-import { config } from './config/env.js';
+import { config, getConfig, type EnvRecord } from './config/env.js';
 import { query } from './config/database.js';
 import { verifyToken } from './utils/auth.js';
 import { AppError } from './utils/errorHandler.js';
@@ -126,6 +126,8 @@ type Variables = {
   user?: AuthUser;
 };
 
+type Bindings = EnvRecord;
+
 type HandlerOptions = {
   auth?: boolean;
   bodySchema?: ZodSchema;
@@ -177,7 +179,7 @@ type CompatResponse = {
   send: (body: string | Buffer | Uint8Array | object) => Response;
 };
 
-const app = new Hono<{ Variables: Variables }>();
+const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 let localDatabaseStatus: 'starting' | 'connected' | 'error' = 'starting';
 
 export function setLocalDatabaseStatus(status: 'starting' | 'connected' | 'error') {
@@ -388,7 +390,7 @@ app.onError((error, c) => {
 app.all('*', (c) => c.json({ error: 'Route not found' }, 404));
 
 function controller(handler: (req: any, res: any) => unknown, options: HandlerOptions = {}) {
-  return async (c: Context<{ Variables: Variables }>) => {
+  return async (c: Context<{ Bindings: Bindings; Variables: Variables }>) => {
     try {
       const req = await buildCompatRequest(c, options);
       const res = createCompatResponse();
@@ -417,7 +419,7 @@ function controller(handler: (req: any, res: any) => unknown, options: HandlerOp
   };
 }
 
-async function buildCompatRequest(c: Context<{ Variables: Variables }>, options: HandlerOptions) {
+async function buildCompatRequest(c: Context<{ Bindings: Bindings; Variables: Variables }>, options: HandlerOptions) {
   const headers = Object.fromEntries(c.req.raw.headers.entries());
   const user = options.auth ? await getAuthenticatedUser(c) : undefined;
   const params = options.paramsSchema ? options.paramsSchema.parse(c.req.param()) : c.req.param();
@@ -436,6 +438,7 @@ async function buildCompatRequest(c: Context<{ Variables: Variables }>, options:
     protocol: new URL(c.req.url).protocol.replace(':', ''),
     user,
     file,
+    config: getConfig(c.env),
     get(name: string) {
       return c.req.header(name);
     },
@@ -478,14 +481,14 @@ function createCompatResponse(): CompatResponse {
   return res;
 }
 
-async function getAuthenticatedUser(c: Context<{ Variables: Variables }>) {
+async function getAuthenticatedUser(c: Context<{ Bindings: Bindings; Variables: Variables }>) {
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
   if (!token) {
     throw new AppError(401, 'Unauthorized');
   }
 
   try {
-    const user = verifyToken(token) as AuthUser;
+    const user = verifyToken(token, getConfig(c.env)) as AuthUser;
     const result = await query('SELECT status FROM users WHERE id = $1', [user.id]);
 
     if (result.rows.length === 0) {

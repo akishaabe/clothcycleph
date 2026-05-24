@@ -1,4 +1,4 @@
-import { config } from '../config/env.js';
+import { config, type AppConfig } from '../config/env.js';
 
 interface SendEmailOptions {
   to: string;
@@ -7,24 +7,24 @@ interface SendEmailOptions {
   text: string;
 }
 
-export async function sendEmail(options: SendEmailOptions) {
-  if (config.email.provider === 'resend') {
-    return sendResendEmail(options);
+export async function sendEmail(options: SendEmailOptions, appConfig: AppConfig = config) {
+  if (appConfig.email.provider === 'resend') {
+    return sendResendEmail(options, appConfig);
   }
 
-  if (config.email.provider === 'brevo') {
-    return sendBrevoEmail(options);
+  if (appConfig.email.provider === 'brevo') {
+    return sendBrevoEmail(options, appConfig);
   }
 
-  if (config.email.provider === 'sendgrid') {
-    return sendSendGridEmail(options);
+  if (appConfig.email.provider === 'sendgrid') {
+    return sendSendGridEmail(options, appConfig);
   }
 
   console.log('Dev email:', options);
   return { delivered: false, provider: 'console' };
 }
 
-export async function sendTwoFactorCode(to: string, code: string) {
+export async function sendTwoFactorCode(to: string, code: string, appConfig: AppConfig = config) {
   return sendEmail({
     to,
     subject: 'Your ClothCycle PH verification code',
@@ -37,10 +37,10 @@ export async function sendTwoFactorCode(to: string, code: string) {
         <p>This code expires in 10 minutes. If this was not you, ignore this email.</p>
       </div>
     `,
-  });
+  }, appConfig);
 }
 
-export async function sendPasswordResetLink(to: string, resetCode: string) {
+export async function sendPasswordResetLink(to: string, resetCode: string, appConfig: AppConfig = config) {
   return sendEmail({
     to,
     subject: 'Reset your ClothCycle PH password',
@@ -53,22 +53,22 @@ export async function sendPasswordResetLink(to: string, resetCode: string) {
         <p>This code expires in 30 minutes. If this was not you, ignore this email.</p>
       </div>
     `,
-  });
+  }, appConfig);
 }
 
-async function sendResendEmail(options: SendEmailOptions) {
-  if (!config.email.resendApiKey) {
+async function sendResendEmail(options: SendEmailOptions, appConfig: AppConfig) {
+  if (!appConfig.email.resendApiKey) {
     throw new Error('RESEND_API_KEY is required when EMAIL_PROVIDER=resend');
   }
 
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${config.email.resendApiKey}`,
+      Authorization: `Bearer ${appConfig.email.resendApiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: config.email.from,
+      from: appConfig.email.from,
       to: options.to,
       subject: options.subject,
       html: options.html,
@@ -97,17 +97,17 @@ function parseEmailAddress(value: string) {
   };
 }
 
-async function sendBrevoEmail(options: SendEmailOptions) {
-  if (!config.email.brevoApiKey) {
+async function sendBrevoEmail(options: SendEmailOptions, appConfig: AppConfig) {
+  if (!appConfig.email.brevoApiKey) {
     throw new Error('BREVO_API_KEY is required when EMAIL_PROVIDER=brevo');
   }
 
-  const sender = parseEmailAddress(config.email.from);
+  const sender = parseEmailAddress(appConfig.email.from);
   const response = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: {
       accept: 'application/json',
-      'api-key': config.email.brevoApiKey,
+      'api-key': appConfig.email.brevoApiKey,
       'content-type': 'application/json',
     },
     body: JSON.stringify({
@@ -127,16 +127,16 @@ async function sendBrevoEmail(options: SendEmailOptions) {
   return { delivered: true, provider: 'brevo' };
 }
 
-async function sendSendGridEmail(options: SendEmailOptions) {
-  if (!config.email.sendgridApiKey) {
+async function sendSendGridEmail(options: SendEmailOptions, appConfig: AppConfig) {
+  if (!appConfig.email.sendgridApiKey) {
     throw new Error('SENDGRID_API_KEY is required when EMAIL_PROVIDER=sendgrid');
   }
 
-  const sender = parseEmailAddress(config.email.from);
+  const sender = parseEmailAddress(appConfig.email.from);
   const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${config.email.sendgridApiKey}`,
+      Authorization: `Bearer ${appConfig.email.sendgridApiKey}`,
       'content-type': 'application/json',
     },
     body: JSON.stringify({
