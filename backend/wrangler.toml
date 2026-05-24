@@ -1,7 +1,6 @@
 name = "clothcycleph-api"
 main = "src/worker.ts"
-compatibility_date = "2026-05-13"
-
+compatibility_date = "2026-05-24"
 compatibility_flags = ["nodejs_compat"]
 
 # Cloudflare Pages / Workers deployment configuration
