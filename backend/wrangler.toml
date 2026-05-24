@@ -6,22 +6,16 @@ compatibility_date = "2026-05-13"
 [build]
 command = "npm run worker:build"
 
-[env.production]
-name = "clothcycle-api"
-routes = [
-  { pattern = "api.clothcycleph.com/*", zone_id = "replace-with-zone-id" }
-]
-
 [env.staging]
 name = "clothcycle-api-staging"
 
 [vars]
 # Non-secret runtime configuration. Put secrets with `wrangler secret put`.
-EMAIL_PROVIDER = "sendgrid"
+EMAIL_PROVIDER = "brevo"
 EMAIL_FROM = "ClothCycle PH <noreply@clothcycleph.com>"
-CORS_ORIGIN = "http://localhost:5173,https://clothcycleph.com"
+CORS_ORIGIN = "http://localhost:5173,https://clothcycleph.com,https://clothcycleph.pages.dev"
 APP_URL = "https://clothcycleph.com"
-GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_ID = "99753216090-5n5dtora33uuav8nkn8ntp8e0tfiojjs.apps.googleusercontent.com"
 
 # R2 (Object Storage)
 R2_BUCKET_NAME = "clothcycle-uploads"
@@ -30,14 +24,13 @@ R2_PUBLIC_BASE_URL = "https://api.clothcycleph.com"
 # D1 Database - Update database_id after creating database
 [[d1_databases]]
 binding = "DB"
-database_name = "clothcycle"
-database_id = "replace-with-d1-database-id"
+database_name = "clothcycleph-db"
+database_id = "5891b2ed-8709-41e3-8372-f7164e4d9c2c"
 
 # R2 Bucket
 [[r2_buckets]]
 binding = "R2_BUCKET"
 bucket_name = "clothcycle-uploads"
-jurisdiction = "eu"
 
 # Queues (optional - for async tasks)
 # [[queues.producers]]
