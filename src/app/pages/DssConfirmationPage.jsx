@@ -491,6 +491,9 @@ export function DssConfirmationPage() {
   const [selectedPartnerId, setSelectedPartnerId] = useState("");
   const [userLocation, setUserLocation] = useState(null);
   const [locationMessage, setLocationMessage] = useState("");
+  const [manualLocationInput, setManualLocationInput] = useState("");
+  const [isResolvingManualLocation, setIsResolvingManualLocation] = useState(false);
+  const [partnerAddressCoordinates, setPartnerAddressCoordinates] = useState({});
   const [brief, setBrief] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
@@ -551,7 +554,7 @@ export function DssConfirmationPage() {
         setLocationMessage(
           browserLocation
             ? "Partners are ranked by distance from your current location."
-            : "Location access is off. Partners are ranked by verification and rating.",
+            : "Location access is off. Enter your address to rank partners by distance.",
         );
         setSelectedPathway(initialPathway || "");
         const initialBuybackPreference = nextPreview.submission?.buyback_interest ? "yes" : "no";
@@ -636,13 +639,34 @@ export function DssConfirmationPage() {
     }
 
     return partners.filter((partner) =>
-      `${partner.service_types || ""} ${partner.description || ""}`
+      `${partner.service_types || ""} ${partner.accepted_service_types || ""} ${partner.description || ""}`
         .toLowerCase()
         .includes(selectedPathway),
     );
   }, [partners, selectedPathway]);
 
-  const partnerOptions = matchingPartners.length > 0 ? matchingPartners : partners;
+  const partnerOptions = useMemo(() => {
+    const sourcePartners = matchingPartners.length > 0 ? matchingPartners : partners;
+
+    return sourcePartners
+      .map((partner) => enrichPartnerDistance(partner, userLocation, partnerAddressCoordinates[partner.id]))
+      .sort((first, second) => {
+        if (first.distance_km != null && second.distance_km != null) {
+          return Number(first.distance_km) - Number(second.distance_km);
+        }
+
+        if (first.distance_km != null) {
+          return -1;
+        }
+
+        if (second.distance_km != null) {
+          return 1;
+        }
+
+        return 0;
+      });
+  }, [matchingPartners, partners, partnerAddressCoordinates, userLocation]);
+
   const selectedPartner = partnerOptions.find((partner) => partner.id === selectedPartnerId) || null;
   const selectedDistanceKm = selectedPartner?.distance_km == null ? null : Number(selectedPartner.distance_km);
   const selectedCarbonKg = estimateCarbonKg(
@@ -688,6 +712,50 @@ export function DssConfirmationPage() {
     }));
   }, [selectedPartnerId, selectedCarbonKg, selectedPathway, buybackPreference, preview]);
 
+  useEffect(() => {
+    if (!userLocation || partners.length === 0) {
+      return;
+    }
+
+    let isCancelled = false;
+    const missingCoordinatePartners = partners.filter((partner) => {
+      const hasCoordinates = partner.latitude != null && partner.longitude != null;
+      return !hasCoordinates && partner.address && !partnerAddressCoordinates[partner.id];
+    });
+
+    if (missingCoordinatePartners.length === 0) {
+      return;
+    }
+
+    async function resolvePartnerAddresses() {
+      const resolvedEntries = [];
+
+      for (const partner of missingCoordinatePartners) {
+        try {
+          const coordinates = await resolveManualLocation(partner.address);
+          if (coordinates) {
+            resolvedEntries.push([partner.id, coordinates]);
+          }
+        } catch {
+          // Keep this quiet per-partner; the card badge will show Distance unavailable.
+        }
+      }
+
+      if (!isCancelled && resolvedEntries.length > 0) {
+        setPartnerAddressCoordinates((current) => ({
+          ...current,
+          ...Object.fromEntries(resolvedEntries),
+        }));
+      }
+    }
+
+    resolvePartnerAddresses();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [partnerAddressCoordinates, partners, userLocation]);
+
   const refreshNearbyPartners = async () => {
     setError("");
     try {
@@ -703,10 +771,53 @@ export function DssConfirmationPage() {
       setLocationMessage(
         browserLocation
           ? "Partners are ranked by distance from your current location."
-          : "Location access is off. Partners are ranked by verification and rating.",
+          : "Location access is off. Enter your address to rank partners by distance.",
       );
     } catch (locationError) {
-      setError(locationError.message || "Unable to refresh nearby partners.");
+      setLocationMessage(
+        locationError.message ||
+          "Location permission was denied or unavailable. Enter your address to rank partners by distance.",
+      );
+    }
+  };
+
+  const rankPartnersFromLocation = async (location, message) => {
+    setUserLocation(location);
+    const response = await dssService.listPartners({
+      lat: location.lat,
+      lng: location.lng,
+      pathway: selectedPathway,
+      radiusKm: 120,
+    });
+    setPartners(response.data);
+    setLocationMessage(message);
+  };
+
+  const handleManualLocationSubmit = async (event) => {
+    event.preventDefault();
+    const address = manualLocationInput.trim();
+
+    if (!address) {
+      setLocationMessage("Enter an address to rank partners by distance.");
+      return;
+    }
+
+    setIsResolvingManualLocation(true);
+    setError("");
+
+    try {
+      const location = await resolveManualLocation(address);
+      await rankPartnersFromLocation(
+        location,
+        "Partners are ranked by distance from your entered location.",
+      );
+    } catch (manualLocationError) {
+      setLocationMessage(
+        manualLocationError.message ||
+          "We could not find that address. Try a city and province, or enter coordinates.",
+      );
+    } finally {
+      setIsResolvingManualLocation(false);
     }
   };
 
@@ -1075,6 +1186,31 @@ export function DssConfirmationPage() {
                   {locationMessage}
                 </div>
               )}
+              {!userLocation && (
+                <form
+                  onSubmit={handleManualLocationSubmit}
+                  className="mb-4 flex flex-col gap-2 sm:flex-row"
+                >
+                  <input
+                    value={manualLocationInput}
+                    onChange={(event) => setManualLocationInput(event.target.value)}
+                    className="min-w-0 flex-1 rounded-xl border border-[#dce4da] bg-white px-3 py-2 text-sm text-[#19221d] outline-none transition focus:border-[#336158] focus:ring-2 focus:ring-[#336158]/10 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-zinc-500"
+                    placeholder="Enter your city, province, or coordinates"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isResolvingManualLocation}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#dce4da] px-3 py-2 text-sm font-semibold text-[#336158] hover:bg-[#f3f5f2] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:text-emerald-300 dark:hover:bg-white/10"
+                  >
+                    {isResolvingManualLocation ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <MapPin className="h-4 w-4" />
+                    )}
+                    Use address
+                  </button>
+                </form>
+              )}
               <PartnerMap
                 partners={partnerOptions}
                 selectedPartnerId={selectedPartnerId}
@@ -1093,14 +1229,19 @@ export function DssConfirmationPage() {
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <div className="font-semibold text-[#19221d] dark:text-white">
+                      <div className="min-w-0 font-semibold text-[#19221d] dark:text-white">
                         {partner.name}
                       </div>
-                      {selectedPartnerId === partner.id && (
-                        <span className="rounded-full bg-[#336158] px-2 py-1 text-xs font-semibold text-white dark:bg-emerald-300 dark:text-[#07110d]">
-                          Selected
+                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                        <span className="rounded-full border border-[#dce4da] bg-[#fbfcfa] px-2.5 py-1 text-xs font-semibold text-[#336158] dark:border-white/10 dark:bg-white/[0.06] dark:text-emerald-300">
+                          {formatDistanceIndicator(partner, userLocation)}
                         </span>
-                      )}
+                        {selectedPartnerId === partner.id && (
+                          <span className="rounded-full bg-[#336158] px-2 py-1 text-xs font-semibold text-white dark:bg-emerald-300 dark:text-[#07110d]">
+                            Selected
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <p className="mt-1 line-clamp-2 text-sm text-[#5f6f67] dark:text-zinc-300">
                       {partner.description || partner.service_types || partner.email}
@@ -1119,9 +1260,7 @@ export function DssConfirmationPage() {
 
                     <div className="mt-2 flex items-center gap-2 text-sm text-[#5f6f67] dark:text-zinc-300">
                       <MapPin className="h-4 w-4 text-[#336158] dark:text-emerald-300" />
-                      {partner.distance_km != null
-                        ? `${partner.distance_km} km away`
-                        : partner.address || "Location pending"}
+                      {partner.address || "Address unavailable"}
                     </div>
                     {partner.gis_rank_reason && (
                       <div className="mt-2 text-xs text-[#6d7c73] dark:text-zinc-400">
@@ -1366,6 +1505,119 @@ function getBrowserLocation(force = false) {
       { enableHighAccuracy: false, timeout: 5000, maximumAge: 10 * 60 * 1000 },
     );
   });
+}
+
+function formatDistanceKm(value) {
+  const distance = Number(value);
+  if (!Number.isFinite(distance)) {
+    return "";
+  }
+
+  return `${distance.toFixed(distance < 10 ? 1 : 0)} km`;
+}
+
+function formatDistanceIndicator(partner, userLocation) {
+  if (partner.distance_km != null) {
+    return `Approx. ${formatDistanceKm(partner.distance_km)} away`;
+  }
+
+  return "Distance unavailable";
+}
+
+function enrichPartnerDistance(partner, userLocation, fallbackCoordinates) {
+  if (partner.distance_km != null || !userLocation) {
+    return partner;
+  }
+
+  const partnerLat =
+    partner.latitude == null ? fallbackCoordinates?.lat : Number(partner.latitude);
+  const partnerLng =
+    partner.longitude == null ? fallbackCoordinates?.lng : Number(partner.longitude);
+
+  if (!isValidCoordinate(partnerLat, partnerLng)) {
+    return partner;
+  }
+
+  const distanceKm = calculateDistanceKm(
+    Number(userLocation.lat),
+    Number(userLocation.lng),
+    partnerLat,
+    partnerLng,
+  );
+
+  return {
+    ...partner,
+    latitude: partner.latitude ?? partnerLat,
+    longitude: partner.longitude ?? partnerLng,
+    distance_km: distanceKm,
+    gis_rank_reason: partner.gis_rank_reason || `${distanceKm} km from your location`,
+  };
+}
+
+function calculateDistanceKm(fromLatitude, fromLongitude, toLatitude, toLongitude) {
+  const earthRadiusKm = 6371;
+  const dLat = toRadians(toLatitude - fromLatitude);
+  const dLng = toRadians(toLongitude - fromLongitude);
+  const startLat = toRadians(fromLatitude);
+  const endLat = toRadians(toLatitude);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(startLat) * Math.cos(endLat) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return Number((earthRadiusKm * c).toFixed(2));
+}
+
+function toRadians(value) {
+  return (value * Math.PI) / 180;
+}
+
+async function resolveManualLocation(value) {
+  const coordinateMatch = value.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+
+  if (coordinateMatch) {
+    const lat = Number(coordinateMatch[1]);
+    const lng = Number(coordinateMatch[2]);
+    if (isValidCoordinate(lat, lng)) {
+      return { lat, lng };
+    }
+  }
+
+  const params = new URLSearchParams({
+    format: "jsonv2",
+    limit: "1",
+    q: value,
+  });
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    throw new Error("We could not check that address right now. Try coordinates or allow browser location.");
+  }
+
+  const results = await response.json();
+  const firstResult = Array.isArray(results) ? results[0] : null;
+  const lat = Number(firstResult?.lat);
+  const lng = Number(firstResult?.lon);
+
+  if (!isValidCoordinate(lat, lng)) {
+    throw new Error("We could not find that address. Try a city and province, or enter coordinates.");
+  }
+
+  return { lat, lng };
+}
+
+function isValidCoordinate(lat, lng) {
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
 }
 
 function PartnerMap({ partners, selectedPartnerId, onSelect, userLocation }) {

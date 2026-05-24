@@ -14,7 +14,8 @@ export async function listPartnerLocationsD1(db: D1Database, options: PartnerSea
     db,
     `SELECT
        id, name, description, logo_url, email, phone, address, website,
-       service_types, contact_person, rating, verified, latitude, longitude
+       service_types, accepted_service_types, accepts_clean_only, capacity_notes,
+       pickup_areas, contact_person, rating, verified, latitude, longitude
      FROM partners
      WHERE COALESCE(status, 'active') IN ('active', 'pending')
      ORDER BY verified DESC, rating DESC, name ASC`
@@ -68,7 +69,7 @@ export function calculateDistanceKm(
 }
 
 export function partnerMatchesPathway(partner: any, pathway: string) {
-  const haystack = `${partner.service_types || ''} ${partner.description || ''}`.toLowerCase();
+  const haystack = `${partner.service_types || ''} ${partner.accepted_service_types || ''} ${partner.description || ''}`.toLowerCase();
   return haystack.includes(pathway.toLowerCase());
 }
 

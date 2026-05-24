@@ -5,6 +5,7 @@ import type { HttpRequest as AuthRequest } from '../types/http.js';
 import { AppError } from '../utils/errorHandler.js';
 import { enqueueNotification } from '../services/jobQueue.js';
 import { analyzeBurnTest, buildPathwayRecommendations, DSS_ENGINE_VERSION } from '../services/dssEngine.js';
+import { listPartnerLocations } from '../services/gisService.js';
 
 const statusLabels: Record<string, string> = {
   pending: 'Pending',
@@ -62,6 +63,25 @@ function titleCase(value?: string | null) {
 function csvCell(value: unknown) {
   const normalized = value === null || value === undefined ? '' : String(value);
   return `"${normalized.replace(/"/g, '""')}"`;
+}
+
+function parseOptionalNumber(value?: string | string[] | null) {
+  const rawValue = Array.isArray(value) ? value[0] : value;
+  if (!rawValue) {
+    return undefined;
+  }
+
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function getPartnerSearchOptions(req: AuthRequest) {
+  return {
+    latitude: parseOptionalNumber(req.query?.lat),
+    longitude: parseOptionalNumber(req.query?.lng),
+    pathway: typeof req.query?.pathway === 'string' ? req.query.pathway : undefined,
+    radiusKm: parseOptionalNumber(req.query?.radius_km),
+  };
 }
 
 function buildBrief(submission: any, recommendation: any) {
@@ -148,19 +168,10 @@ async function getSubmissionForUser(submissionId: string, userId: string, role?:
   return result.rows[0];
 }
 
-export const listPartners = async (_req: AuthRequest, res: Response) => {
+export const listPartners = async (req: AuthRequest, res: Response) => {
   try {
-    const result = await query(
-      `SELECT
-         id, name, description, logo_url, email, phone, address, website,
-         service_types, contact_person, rating, verified,
-         capacity_notes, accepted_service_types, accepts_clean_only, pickup_areas
-       FROM partners
-       WHERE COALESCE(status, 'active') IN ('active', 'pending')
-       ORDER BY verified DESC, rating DESC, name ASC`
-    );
-
-    res.json({ data: result.rows, count: result.rows.length });
+    const partners = await listPartnerLocations(getPartnerSearchOptions(req));
+    res.json({ data: partners, count: partners.length });
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
   }
