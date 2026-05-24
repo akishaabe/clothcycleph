@@ -1,7 +1,7 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Recycle, Package, Clock, CheckCircle, XCircle, Bell, User, BarChart3, Settings, LogOut, MessageSquare, Eye, Loader2, RefreshCw, X, Search } from "lucide-react";
+import { Recycle, Package, Clock, CheckCircle, XCircle, Bell, User, BarChart3, Settings, LogOut, MessageSquare, Eye, Loader2, RefreshCw, X, Search, ChevronDown } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { dssService, messageService, notificationService, uploadService } from "../../services/api";
 import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
@@ -62,13 +62,17 @@ const decisionStatusStyles = {
   },
 };
 
-const normalizeStatus = (status) => {
-  if (status === "declined" || status === "rejected") return "rejected";
-  if (status === "in_progress") return "accepted";
-  if (status === "completed") return "completed";
-  if (status === "accepted") return "accepted";
-  return "pending";
+const normalizeStatus = (value) => {
+  const status = String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
+  if (["declined", "rejected", "cancelled", "canceled"].includes(status)) return "rejected";
+  if (["approved", "accepted", "in_progress"].includes(status)) return "accepted";
+  if (["completed", "processed", "complete"].includes(status)) return "completed";
+  if (status === "pending") return "pending";
+  return status;
 };
+
+const getRequestLifecycleStatus = (request) =>
+  normalizeStatus(request?.status ?? request?.request_status ?? request?.submission_status ?? request?.status_label);
 
 const formatStatusLabel = (status) =>
   String(status || "")
@@ -175,6 +179,7 @@ export function PartnerDashboard() {
   const [requestError, setRequestError] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [requestSort, setRequestSort] = useState("newest");
   const [badgeCounts, setBadgeCounts] = useState({ messages: 0, notifications: 0 });
   const [ruleRequests, setRuleRequests] = useState([]);
   const [isLoadingRuleRequests, setIsLoadingRuleRequests] = useState(false);
@@ -281,8 +286,8 @@ export function PartnerDashboard() {
   }, [selectedRequest]);
 
   const metrics = useMemo(() => {
-    const pending = requests.filter((request) => normalizeStatus(request.status) === "pending").length;
-    const accepted = requests.filter((request) => normalizeStatus(request.status) === "accepted").length;
+    const pending = requests.filter((request) => getRequestLifecycleStatus(request) === "pending").length;
+    const accepted = requests.filter((request) => getRequestLifecycleStatus(request) === "accepted").length;
 
     return [
       { icon: Package, label: "Active Requests", value: String(accepted), filter: "accepted", color: "#8aa6c8" },
@@ -291,12 +296,12 @@ export function PartnerDashboard() {
     ];
   }, [requests]);
 
-  const filteredRequests = useMemo(() => {
+  const visiblePartnerRequests = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
+    const selectedStatus = normalizeStatus(activeFilter);
 
-    return requests.filter((request) => {
-      const status = normalizeStatus(request.status);
-      const statusMatch = activeFilter === "all" || status === activeFilter;
+    const searchedRequests = requests.filter((request) => {
+      const status = getRequestLifecycleStatus(request);
       const queryMatch =
         !query ||
         [
@@ -311,9 +316,31 @@ export function PartnerDashboard() {
           .toLowerCase()
           .includes(query);
 
-      return statusMatch && queryMatch;
-    }).sort((first, second) => getRequestActivityTime(second) - getRequestActivityTime(first));
-  }, [requests, activeFilter, searchQuery]);
+      return queryMatch;
+    });
+
+    const statusFilteredRequests = searchedRequests.filter((request) => {
+      const status = getRequestLifecycleStatus(request);
+      if (selectedStatus === "all") return true;
+      return status === selectedStatus;
+    });
+
+    return statusFilteredRequests.sort((first, second) => {
+      if (requestSort === "oldest") {
+        return getRequestActivityTime(first) - getRequestActivityTime(second);
+      }
+      if (requestSort === "status") {
+        const order = { pending: 0, accepted: 1, completed: 2, rejected: 3 };
+        return (order[getRequestLifecycleStatus(first)] ?? 9) - (order[getRequestLifecycleStatus(second)] ?? 9);
+      }
+      if (requestSort === "pathway") {
+        return String(pathwayLabels[first.type] || first.type || "").localeCompare(String(pathwayLabels[second.type] || second.type || ""));
+      }
+      return getRequestActivityTime(second) - getRequestActivityTime(first);
+    });
+  }, [requests, activeFilter, searchQuery, requestSort]);
+
+  const filteredRequests = visiblePartnerRequests;
 
   const filteredRuleRequests = useMemo(() => {
     const query = ruleRequestSearch.trim().toLowerCase();
@@ -647,7 +674,7 @@ export function PartnerDashboard() {
                 </p>
               </div>
               <span className="rounded-full bg-[#eff6ff] px-3 py-1 text-sm font-semibold text-[#41668f] dark:bg-white/10 dark:text-[#9fc5f8]">
-                {filteredRequests.length} shown
+                {visiblePartnerRequests.length} shown
               </span>
             </summary>
             <div className="p-6 pt-5">
@@ -661,7 +688,7 @@ export function PartnerDashboard() {
               </button>
             </div>
 
-          <div className="mb-5 grid gap-3 lg:grid-cols-[1fr_auto]">
+          <div className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px_auto]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#41668f]" />
               <input
@@ -670,6 +697,19 @@ export function PartnerDashboard() {
                 className="w-full rounded-xl border border-[#d6e6f8] bg-[#fbfdff] py-3 pl-10 pr-4 text-sm text-[#10233f] outline-none focus:border-[#4f6f9f] dark:border-white/10 dark:bg-black/20 dark:text-white"
                 placeholder="Search requester, item, pathway, or status"
               />
+            </label>
+            <label className="relative block">
+              <select
+                value={requestSort}
+                onChange={(event) => setRequestSort(event.target.value)}
+                className="w-full appearance-none rounded-xl border border-[#d6e6f8] bg-[#fbfdff] py-3 pl-4 pr-10 text-sm font-semibold text-[#41668f] outline-none focus:border-[#4f6f9f] dark:border-white/10 dark:bg-black/20 dark:text-[#9fc5f8]"
+              >
+                <option value="newest">Newest activity</option>
+                <option value="oldest">Oldest activity</option>
+                <option value="status">Status order</option>
+                <option value="pathway">Pathway A-Z</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#41668f] dark:text-[#9fc5f8]" />
             </label>
             <div className="flex flex-wrap gap-2">
               {["all", "pending", "accepted", "completed", "rejected"].map(
@@ -719,7 +759,7 @@ export function PartnerDashboard() {
                   </tr>
                 )}
 
-                {!isLoadingRequests && filteredRequests.length === 0 && (
+                {!isLoadingRequests && visiblePartnerRequests.length === 0 && (
                   <tr>
                     <td colSpan={7} className="py-10 text-center text-[#41668f] dark:text-[#9fc5f8]">
                       No requests match this view.
@@ -727,21 +767,24 @@ export function PartnerDashboard() {
                   </tr>
                 )}
 
-                {!isLoadingRequests && filteredRequests.map((request) => (
+                {!isLoadingRequests && visiblePartnerRequests.map((request) => {
+                  const lifecycleStatus = getRequestLifecycleStatus(request);
+
+                  return (
                   <tr key={request.id} className="border-b border-[#d6e6f8] transition-colors hover:bg-[#eff6ff] dark:border-white/10 dark:hover:bg-white/[0.04]">
                     <td className="py-3 px-4 text-sm text-[#10233f] dark:text-white">{request.id.slice(0, 8)}</td>
                     <td className="py-3 px-4 text-sm text-[#10233f] dark:text-white">{request.user_name}</td>
                     <td className="py-3 px-4 text-sm text-[#41668f] dark:text-[#cfe1ff]">{pathwayLabels[request.type] || request.type}</td>
                     <td className="py-3 px-4 text-sm text-[#41668f] dark:text-[#cfe1ff]">
-                      {request.quantity || "Quantity not specified"} · {request.submission_name || request.item_type}
+                      {request.quantity || "Quantity not specified"} | {request.submission_name || request.item_type}
                     </td>
                     <td className="py-3 px-4">
                       <span
                         className={`px-3 py-1 rounded-full text-xs ${
-                          statusStyles[normalizeStatus(request.status)] || statusStyles.pending
+                          statusStyles[lifecycleStatus] || statusStyles.pending
                         }`}
                       >
-                        {request.status_label || formatStatusLabel(normalizeStatus(request.status))}
+                        {formatStatusLabel(lifecycleStatus)}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm text-[#41668f] dark:text-[#cfe1ff]">{formatDate(request.created_at)}</td>
@@ -757,7 +800,7 @@ export function PartnerDashboard() {
                         >
                           <Eye className="w-4 h-4 text-[#41668f]" />
                         </button>
-                        {normalizeStatus(request.status) === "pending" ? (
+                        {lifecycleStatus === "pending" ? (
                           <>
                             <button
                               onClick={() => updateRequestStatus(request, "accepted", "")}
@@ -782,7 +825,8 @@ export function PartnerDashboard() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1248,30 +1292,29 @@ export function PartnerDashboard() {
                     )}
                   </div>
                   {selectedRequest.tracking_updates?.length > 0 ? (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {selectedRequest.tracking_updates.map((update) => (
                         <div
                           key={update.id}
-                          className="rounded-xl border border-[#d6e6f8] bg-[#fbfdff] px-4 py-3 text-sm text-[#41668f] dark:border-white/10 dark:bg-black/20 dark:text-[#cfe1ff]"
+                          className="rounded-2xl border border-[#d6e6f8] bg-[#fbfdff] p-5 text-sm text-[#41668f] dark:border-white/10 dark:bg-black/20 dark:text-[#cfe1ff]"
                         >
-                          <div className="font-semibold text-[#10233f] dark:text-white">
-                            {trackingStatusLabels[update.progress_status] || formatStatusLabel(update.progress_status)}
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="text-lg font-semibold text-[#10233f] dark:text-white">
+                              {trackingStatusLabels[update.progress_status] || formatStatusLabel(update.progress_status)}
+                            </div>
+                            <div className="text-xs text-[#6b93b8] dark:text-[#9fc5f8]">
+                              {formatDateTime(update.created_at)}
+                            </div>
                           </div>
-                          <div className="mt-1 text-xs text-[#6b93b8] dark:text-[#9fc5f8]">
-                            {formatDateTime(update.created_at)}
+                          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                            <div><span className="font-semibold text-[#10233f] dark:text-white">Method:</span> {fulfillmentMethodLabels[update.fulfillment_method] || formatStatusLabel(update.fulfillment_method)}</div>
+                            {update.contact_name && <div><span className="font-semibold text-[#10233f] dark:text-white">Contact name:</span> {update.contact_name}</div>}
+                            {update.logistics_company && <div><span className="font-semibold text-[#10233f] dark:text-white">Courier:</span> {update.logistics_company}</div>}
+                            {update.tracking_number && <div><span className="font-semibold text-[#10233f] dark:text-white">Tracking Number:</span> {update.tracking_number}</div>}
+                            {update.dropoff_scheduled_at && <div><span className="font-semibold text-[#10233f] dark:text-white">Drop-off:</span> {formatDateTime(update.dropoff_scheduled_at)}</div>}
+                            {update.dropoff_location && <div><span className="font-semibold text-[#10233f] dark:text-white">Location:</span> {update.dropoff_location}</div>}
                           </div>
-                          <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                            <span className="rounded-full bg-[#eff6ff] px-2 py-1 dark:bg-white/10">
-                              {fulfillmentMethodLabels[update.fulfillment_method] || formatStatusLabel(update.fulfillment_method)}
-                            </span>
-                            {update.logistics_company && (
-                              <span className="rounded-full bg-[#eff6ff] px-2 py-1 dark:bg-white/10">{update.logistics_company}</span>
-                            )}
-                            {update.tracking_number && (
-                              <span className="rounded-full bg-[#eff6ff] px-2 py-1 dark:bg-white/10">#{update.tracking_number}</span>
-                            )}
-                          </div>
-                          {update.notes && <p className="mt-2 leading-6">{update.notes}</p>}
+                          {update.notes && <p className="mt-4 rounded-xl bg-[#eff6ff] px-3 py-2 leading-6 dark:bg-white/10"><span className="font-semibold text-[#10233f] dark:text-white">Notes:</span> {update.notes}</p>}
                         </div>
                       ))}
                     </div>

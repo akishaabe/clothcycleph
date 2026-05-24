@@ -91,7 +91,10 @@ export const createTrackingUpdateSchema = z.object({
   request_id: z.string().uuid().nullable().optional(),
   progress_status: z.enum(['request_sent', 'scheduled', 'in_transit', 'dropoff_completed', 'completed']),
   fulfillment_method: z.enum(['drop_off', 'shipping', 'pickup', 'other']).default('drop_off').optional(),
+  contact_name: z.string().trim().max(120).nullable().optional(),
   logistics_company: z.string().trim().max(160).nullable().optional(),
   tracking_number: z.string().trim().max(160).nullable().optional(),
+  dropoff_scheduled_at: z.coerce.date().nullable().optional(),
+  dropoff_location: z.string().trim().max(500).nullable().optional(),
   notes: z.string().trim().max(1000).nullable().optional(),
 });

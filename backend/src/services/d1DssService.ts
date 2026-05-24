@@ -518,6 +518,7 @@ export async function getUserDssRequestsD1(db: D1Database, userId: string) {
        t.*,
        p.name AS partner_name,
        p.email AS partner_email,
+       p.address AS partner_address,
        p.latitude AS partner_latitude,
        p.longitude AS partner_longitude,
        s.item_type,
@@ -749,7 +750,15 @@ export async function updateDssRequestStatusD1(
     body: outcomeTitle
       ? outcomeCelebration
       : `Your ${titleCase(transaction.type)} request is now ${statusLabels[normalizedStatus] || normalizedStatus}.`,
-    data: { submissionId: transaction.submission_id, transactionId: transaction.id, status: normalizedStatus },
+    data: {
+      submissionId: transaction.submission_id,
+      transactionId: transaction.id,
+      status: normalizedStatus,
+      action_url:
+        normalizedStatus === 'accepted'
+          ? `/my-requests?status=accepted&request=${transaction.id}`
+          : `/dss-requests?request=${transaction.id}`,
+    },
   });
 
   return result.results?.[0] ?? null;

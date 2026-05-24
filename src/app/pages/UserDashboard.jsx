@@ -1,6 +1,6 @@
-import { useLocation, useNavigate } from "react-router-dom";
+﻿import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   Recycle,
   PackageOpen,
@@ -20,6 +20,7 @@ import {
   Leaf,
   Camera,
   Sparkles,
+  ChevronDown,
 } from "lucide-react";
 import { dssService, messageService, notificationService, submissionService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
@@ -82,18 +83,14 @@ const requestStatusClass = {
 };
 
 const trackingStatusOptions = [
-  { value: "request_sent", label: "Request sent" },
   { value: "scheduled", label: "Scheduled" },
   { value: "in_transit", label: "Shipped / In transit" },
   { value: "dropoff_completed", label: "Drop-off completed" },
-  { value: "completed", label: "Completed" },
 ];
 
 const fulfillmentMethodOptions = [
+  { value: "shipping", label: "Ship via logistics/courier" },
   { value: "drop_off", label: "Direct drop-off" },
-  { value: "shipping", label: "Shipping" },
-  { value: "pickup", label: "Pickup" },
-  { value: "other", label: "Other" },
 ];
 
 const trackingStatusLabels = trackingStatusOptions.reduce((acc, option) => {
@@ -105,6 +102,13 @@ const fulfillmentMethodLabels = fulfillmentMethodOptions.reduce((acc, option) =>
   acc[option.value] = option.label;
   return acc;
 }, {});
+
+const fieldClass =
+  "w-full rounded-2xl border border-[#dce4da] bg-white px-4 py-3 text-sm text-[#19221d] outline-none transition focus:border-[#336158] focus:ring-2 focus:ring-[#336158]/10 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-zinc-500";
+
+const selectClass = `${fieldClass} appearance-none pr-11`;
+
+const trackingLabelClass = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.06em] text-[#5f6f67] dark:text-zinc-400";
 
 const pathwayLabels = {
   recycle: "Recycle",
@@ -124,9 +128,18 @@ const formatStatusLabel = (status) =>
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
+const normalizeStatus = (value) => {
+  const status = String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
+  if (["declined", "rejected", "cancelled", "canceled"].includes(status)) return "rejected";
+  if (["approved", "accepted", "in_progress"].includes(status)) return "accepted";
+  if (["completed", "processed", "complete"].includes(status)) return "completed";
+  if (status === "pending") return "pending";
+  return status;
+};
+
 const dashboardStatusFromSubmission = (submission, latestPartnerRequest) => {
   if (latestPartnerRequest?.status) {
-    return latestPartnerRequest.status;
+    return normalizeStatus(latestPartnerRequest.status);
   }
 
   if (submission.status === "processed") {
@@ -183,12 +196,18 @@ export function UserDashboard() {
   const [requestError, setRequestError] = useState("");
   const [requestFilter, setRequestFilter] = useState("all");
   const [requestSearch, setRequestSearch] = useState("");
+  const [outcomeFilter, setOutcomeFilter] = useState("all");
+  const [outcomeSort, setOutcomeSort] = useState("newest");
+  const [isOutcomeStoriesOpen, setIsOutcomeStoriesOpen] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [trackingForm, setTrackingForm] = useState({
-    progress_status: "request_sent",
-    fulfillment_method: "drop_off",
+    progress_status: "scheduled",
+    fulfillment_method: "shipping",
+    contact_name: "",
     logistics_company: "",
     tracking_number: "",
+    dropoff_scheduled_at: "",
+    dropoff_location: "",
     notes: "",
   });
   const [trackingMessage, setTrackingMessage] = useState("");
@@ -299,14 +318,56 @@ export function UserDashboard() {
     setTrackingMessage("");
 
     try {
+      if (selectedRequest.status !== "accepted") {
+        setTrackingMessage("Delivery details can be updated after the partner accepts the request.");
+        setIsSavingTracking(false);
+        return;
+      }
+      if (!trackingForm.contact_name.trim()) {
+        setTrackingMessage("Please add a contact name for this delivery update.");
+        setIsSavingTracking(false);
+        return;
+      }
+      if (!trackingForm.notes.trim()) {
+        setTrackingMessage("Please add delivery notes for the partner.");
+        setIsSavingTracking(false);
+        return;
+      }
+      if (
+        trackingForm.fulfillment_method === "shipping" &&
+        (!trackingForm.logistics_company.trim() || !trackingForm.tracking_number.trim())
+      ) {
+        setTrackingMessage("Please add both the courier and tracking number.");
+        setIsSavingTracking(false);
+        return;
+      }
+      if (
+        trackingForm.fulfillment_method === "drop_off" &&
+        (!trackingForm.dropoff_scheduled_at ||
+          (!trackingForm.dropoff_location.trim() && !selectedRequest.latestPartnerRequest?.partner_address))
+      ) {
+        setTrackingMessage("Please add the drop-off date/time and location.");
+        setIsSavingTracking(false);
+        return;
+      }
+
       const response = await submissionService.createTrackingUpdate(selectedRequest.submission.id, {
         request_id: selectedRequest.latestPartnerRequest?.id || null,
         progress_status: trackingForm.progress_status,
         fulfillment_method: trackingForm.fulfillment_method,
+        contact_name: trackingForm.contact_name.trim() || null,
         logistics_company:
           trackingForm.fulfillment_method === "shipping" ? trackingForm.logistics_company.trim() || null : null,
         tracking_number:
           trackingForm.fulfillment_method === "shipping" ? trackingForm.tracking_number.trim() || null : null,
+        dropoff_scheduled_at:
+          trackingForm.fulfillment_method === "drop_off" && trackingForm.dropoff_scheduled_at
+            ? new Date(trackingForm.dropoff_scheduled_at).toISOString()
+            : null,
+        dropoff_location:
+          trackingForm.fulfillment_method === "drop_off"
+            ? trackingForm.dropoff_location.trim() || selectedRequest.latestPartnerRequest?.partner_address || null
+            : null,
         notes: trackingForm.notes.trim() || null,
       });
 
@@ -338,11 +399,13 @@ export function UserDashboard() {
       );
       setTrackingForm((current) => ({
         ...current,
+        contact_name: "",
         logistics_company: "",
         tracking_number: "",
+        dropoff_scheduled_at: "",
         notes: "",
       }));
-      setTrackingMessage("Tracking update recorded and sent to the partner.");
+      setTrackingMessage("Delivery details saved and sent to the partner.");
       const notificationsResponse = await notificationService.getUnreadCount();
       setBadgeCounts((current) => ({
         ...current,
@@ -389,10 +452,21 @@ export function UserDashboard() {
     ];
   }, [submittedRequests]);
 
-  const completedOutcomes = useMemo(
-    () => submittedRequests.filter((request) => request.outcomeTitle).slice(0, 3),
-    [submittedRequests],
-  );
+  const completedOutcomes = useMemo(() => {
+    const rows = submittedRequests.filter((request) => {
+      const pathway = request.selectedPathway || request.recommendedPathway;
+      return request.outcomeTitle && (outcomeFilter === "all" || pathway === outcomeFilter);
+    });
+
+    return rows.sort((first, second) => {
+      if (outcomeSort === "photos") {
+        return Number(second.outcomePhotos?.length || 0) - Number(first.outcomePhotos?.length || 0);
+      }
+      const firstTime = new Date(first.latestPartnerRequest?.completed_at || first.updatedAt || first.submittedAt || 0).getTime();
+      const secondTime = new Date(second.latestPartnerRequest?.completed_at || second.updatedAt || second.submittedAt || 0).getTime();
+      return outcomeSort === "oldest" ? firstTime - secondTime : secondTime - firstTime;
+    });
+  }, [outcomeFilter, outcomeSort, submittedRequests]);
 
   const monthlyData = useMemo(() => {
     const grouped = submissions.reduce((acc, submission) => {
@@ -432,9 +506,10 @@ export function UserDashboard() {
 
   const filteredRequests = useMemo(() => {
     const query = requestSearch.trim().toLowerCase();
+    const selectedStatus = normalizeStatus(requestFilter);
 
-    return submittedRequests.filter((request) => {
-      const statusMatch = requestFilter === "all" || request.status === requestFilter;
+    const searchedRequests = submittedRequests.filter((request) => {
+      const status = normalizeStatus(request.status);
       const queryMatch =
         !query ||
         [
@@ -449,7 +524,12 @@ export function UserDashboard() {
           .toLowerCase()
           .includes(query);
 
-      return statusMatch && queryMatch;
+      return queryMatch;
+    });
+
+    return searchedRequests.filter((request) => {
+      const status = normalizeStatus(request.status);
+      return selectedStatus === "all" || status === selectedStatus;
     });
   }, [submittedRequests, requestFilter, requestSearch]);
 
@@ -628,14 +708,19 @@ export function UserDashboard() {
           ))}
         </section>
 
-        {completedOutcomes.length > 0 && (
+        {submittedRequests.some((request) => request.outcomeTitle) && (
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35 }}
             className="mb-8 overflow-hidden rounded-[28px] border border-[#d9e8cf] bg-[linear-gradient(135deg,#f7fbef,#edf7ed,#fff8e8)] p-6 shadow-[0_18px_48px_rgba(51,97,88,0.13)] md:p-8"
           >
-            <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <button
+              type="button"
+              onClick={() => setIsOutcomeStoriesOpen((current) => !current)}
+              className="mb-5 flex w-full cursor-pointer flex-col gap-4 text-left md:flex-row md:items-end md:justify-between"
+              aria-expanded={isOutcomeStoriesOpen}
+            >
               <div>
                 <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-sm font-semibold text-[#336158]">
                   <Sparkles className="h-4 w-4" />
@@ -644,18 +729,65 @@ export function UserDashboard() {
                 <h2 className="font-gloock text-3xl text-[#19221d]">
                   Your textiles are becoming something new
                 </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5f6f67]">
+                  Completed partner reports are grouped here so the stories stay easy to scan as they grow.
+                </p>
               </div>
+              <div className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-sm font-semibold text-[#336158]">
+                <ChevronDown className={`h-4 w-4 transition-transform duration-300 ${isOutcomeStoriesOpen ? "rotate-180" : ""}`} />
+                {completedOutcomes.length} shown
+              </div>
+            </button>
+
+            <AnimatePresence initial={false}>
+            {isOutcomeStoriesOpen && (
+            <motion.div
+              key="textile-stories"
+              initial={{ height: 0, opacity: 0, y: -8 }}
+              animate={{ height: "auto", opacity: 1, y: 0 }}
+              exit={{ height: 0, opacity: 0, y: -8 }}
+              transition={{ duration: 0.28, ease: "easeOut" }}
+              className="overflow-hidden"
+            >
+            <div className="mb-5 grid gap-3 md:grid-cols-[1fr_auto_auto]">
+              <label className="relative block">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5f6f67]" />
+                <select
+                  value={outcomeFilter}
+                  onChange={(event) => setOutcomeFilter(event.target.value)}
+                  className="w-full appearance-none rounded-xl border border-[#cfe2cf] bg-white/80 py-3 pl-10 pr-10 text-sm font-semibold text-[#336158] outline-none focus:border-[#336158]"
+                >
+                  <option value="all">All pathways</option>
+                  <option value="donate">Donation stories</option>
+                  <option value="upcycle">Upcycle stories</option>
+                  <option value="recycle">Recycle stories</option>
+                  <option value="buyback">Buyback stories</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5f6f67]" />
+              </label>
+              <label className="relative block">
+                <select
+                  value={outcomeSort}
+                  onChange={(event) => setOutcomeSort(event.target.value)}
+                  className="w-full appearance-none rounded-xl border border-[#cfe2cf] bg-white/80 py-3 pl-4 pr-10 text-sm font-semibold text-[#336158] outline-none focus:border-[#336158] md:w-48"
+                >
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                  <option value="photos">With photos first</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5f6f67]" />
+              </label>
               <button
                 type="button"
                 onClick={() => navigate("/my-requests?status=completed")}
-                className="rounded-xl border border-[#cfe2cf] bg-white/80 px-4 py-2 text-sm font-semibold text-[#336158] hover:bg-white"
+                className="rounded-xl border border-[#cfe2cf] bg-white/80 px-4 py-3 text-sm font-semibold text-[#336158] hover:bg-white"
               >
                 View completed
               </button>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-3">
-              {completedOutcomes.map((request) => (
+              {completedOutcomes.slice(0, 6).map((request) => (
                 <article key={request.id} className="rounded-2xl border border-white/80 bg-white/85 p-5 shadow-[0_10px_28px_rgba(25,34,29,0.08)]">
                   <div className="mb-3 flex items-center gap-3">
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#edf7ed] text-[#336158]">
@@ -696,6 +828,14 @@ export function UserDashboard() {
                 </article>
               ))}
             </div>
+            {completedOutcomes.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-[#cfe2cf] bg-white/70 px-4 py-6 text-center text-sm text-[#5f6f67]">
+                No completed stories match this filter yet.
+              </div>
+            )}
+            </motion.div>
+            )}
+            </AnimatePresence>
           </motion.section>
         )}
 
@@ -898,7 +1038,7 @@ export function UserDashboard() {
               >
                 <div>
                   <div className="font-semibold text-[#19221d]">
-                    {request.submission_name || request.item_type} · {pathwayLabels[request.type] || request.type}
+                    {request.submission_name || request.item_type} | {pathwayLabels[request.type] || request.type}
                   </div>
                   <div className="mt-1 text-sm text-[#5f6f67]">
                     Sent to {request.partner_name || "partner"}
@@ -1009,14 +1149,14 @@ export function UserDashboard() {
               </div>
             )}
 
-            {requests.slice(0, 3).map((request) => (
+            {filteredRequests.slice(0, 3).map((request) => (
               <div
                 key={request.id}
                 className="flex flex-col gap-3 rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4 md:flex-row md:items-center md:justify-between"
               >
                 <div>
                   <div className="font-semibold text-[#19221d]">
-                    {request.submission_name || request.item_type} · {pathwayLabels[request.type] || request.type}
+                    {request.submission_name || request.item_type} | {pathwayLabels[request.type] || request.type}
                   </div>
                   <div className="mt-1 text-sm text-[#5f6f67]">
                     Sent to {request.partner_name || "partner"}
@@ -1041,7 +1181,7 @@ export function UserDashboard() {
               </div>
             ))}
           </div>
-          {requests.length > 3 && (
+          {filteredRequests.length > 3 && (
             <button
               type="button"
               onClick={() => navigate("/dss-requests")}
@@ -1179,7 +1319,7 @@ export function UserDashboard() {
                             {pathwayLabels[request.type] || request.type} to {request.partner_name || "partner"}
                           </div>
                           <div className="mt-1">
-                            {formatStatusLabel(request.status)} · {formatManilaDate(request.created_at)}
+                            {formatStatusLabel(request.status)} | {formatManilaDate(request.created_at)}
                           </div>
                           {request.outcome_title && (
                             <div className="mt-3 rounded-2xl border border-[#cfe2cf] bg-[#edf7ed] px-4 py-3 text-[#336158]">
@@ -1211,12 +1351,13 @@ export function UserDashboard() {
                   )}
                 </div>
 
+                {selectedRequest.status === "accepted" && (
                 <div className="rounded-2xl border border-[#e1e7df] bg-[#fbfcfa] p-4">
                   <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h3 className="font-semibold text-[#19221d]">Tracking & Logistics</h3>
+                      <h3 className="font-semibold text-[#19221d]">Tracking / Delivery Details</h3>
                       <p className="mt-1 text-sm leading-6 text-[#5f6f67]">
-                        Record what happened after routing. Courier details are optional for direct drop-off.
+                        Share how the textile will reach the partner. Courier details are optional unless your team requires them.
                       </p>
                     </div>
                     {selectedRequest.latestTrackingUpdate && (
@@ -1227,63 +1368,133 @@ export function UserDashboard() {
                     )}
                   </div>
 
-                  <div className="grid gap-3">
-                    <select
-                      value={trackingForm.progress_status}
-                      onChange={(event) =>
-                        setTrackingForm((current) => ({ ...current, progress_status: event.target.value }))
-                      }
-                      className="rounded-xl border border-[#dce4da] bg-white px-4 py-3 text-sm text-[#19221d] outline-none focus:border-[#336158]"
-                    >
-                      {trackingStatusOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="grid gap-4">
+                    <label className="block">
+                      <span className={trackingLabelClass}>Fulfillment method</span>
+                      <span className="relative block">
+                        <select
+                          value={trackingForm.fulfillment_method}
+                          onChange={(event) =>
+                            setTrackingForm((current) => ({
+                              ...current,
+                              fulfillment_method: event.target.value,
+                              progress_status: event.target.value === "shipping" ? "in_transit" : "scheduled",
+                            }))
+                          }
+                          className={selectClass}
+                        >
+                          {fulfillmentMethodOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5f6f67] dark:text-zinc-400" />
+                      </span>
+                    </label>
 
-                    <select
-                      value={trackingForm.fulfillment_method}
-                      onChange={(event) =>
-                        setTrackingForm((current) => ({ ...current, fulfillment_method: event.target.value }))
-                      }
-                      className="rounded-xl border border-[#dce4da] bg-white px-4 py-3 text-sm text-[#19221d] outline-none focus:border-[#336158]"
-                    >
-                      {fulfillmentMethodOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    <label className="block">
+                      <span className={trackingLabelClass}>Delivery status</span>
+                      <span className="relative block">
+                        <select
+                          value={trackingForm.progress_status}
+                          onChange={(event) =>
+                            setTrackingForm((current) => ({ ...current, progress_status: event.target.value }))
+                          }
+                          className={selectClass}
+                        >
+                          {trackingStatusOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5f6f67] dark:text-zinc-400" />
+                      </span>
+                    </label>
+
+                    <label className="block">
+                      <span className={trackingLabelClass}>Contact name</span>
+                      <input
+                        required
+                        value={trackingForm.contact_name}
+                        onChange={(event) =>
+                          setTrackingForm((current) => ({ ...current, contact_name: event.target.value }))
+                        }
+                        className={fieldClass}
+                        placeholder="Name to show with this update"
+                      />
+                    </label>
 
                     {trackingForm.fulfillment_method === "shipping" && (
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <input
-                          value={trackingForm.logistics_company}
-                          onChange={(event) =>
-                            setTrackingForm((current) => ({ ...current, logistics_company: event.target.value }))
-                          }
-                          className="rounded-xl border border-[#dce4da] bg-white px-4 py-3 text-sm text-[#19221d] outline-none focus:border-[#336158]"
-                          placeholder="Logistics company / courier"
-                        />
-                        <input
-                          value={trackingForm.tracking_number}
-                          onChange={(event) =>
-                            setTrackingForm((current) => ({ ...current, tracking_number: event.target.value }))
-                          }
-                          className="rounded-xl border border-[#dce4da] bg-white px-4 py-3 text-sm text-[#19221d] outline-none focus:border-[#336158]"
-                          placeholder="Tracking number"
-                        />
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <label className="block">
+                          <span className={trackingLabelClass}>Courier</span>
+                          <input
+                            required
+                            value={trackingForm.logistics_company}
+                            onChange={(event) =>
+                              setTrackingForm((current) => ({ ...current, logistics_company: event.target.value }))
+                            }
+                            className={fieldClass}
+                            placeholder="Example: LBC, J&T, JRS"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className={trackingLabelClass}>Tracking number</span>
+                          <input
+                            required
+                            value={trackingForm.tracking_number}
+                            onChange={(event) =>
+                              setTrackingForm((current) => ({ ...current, tracking_number: event.target.value }))
+                            }
+                            className={fieldClass}
+                            placeholder="Example: 123456789"
+                          />
+                        </label>
                       </div>
                     )}
 
-                    <textarea
-                      value={trackingForm.notes}
-                      onChange={(event) => setTrackingForm((current) => ({ ...current, notes: event.target.value }))}
-                      rows={3}
-                      className="resize-none rounded-xl border border-[#dce4da] bg-white px-4 py-3 text-sm leading-6 text-[#19221d] outline-none focus:border-[#336158]"
-                      placeholder="Optional notes"
-                    />
+                    {trackingForm.fulfillment_method === "drop_off" && (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <label className="block">
+                          <span className={trackingLabelClass}>Drop-off date/time</span>
+                          <input
+                            required
+                            type="datetime-local"
+                            value={trackingForm.dropoff_scheduled_at}
+                            onChange={(event) =>
+                              setTrackingForm((current) => ({ ...current, dropoff_scheduled_at: event.target.value }))
+                            }
+                            className={fieldClass}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className={trackingLabelClass}>Drop-off location</span>
+                          <input
+                            required
+                            value={trackingForm.dropoff_location}
+                            onChange={(event) =>
+                              setTrackingForm((current) => ({ ...current, dropoff_location: event.target.value }))
+                            }
+                            className={fieldClass}
+                            placeholder={selectedRequest.latestPartnerRequest?.partner_address || "Drop-off location"}
+                          />
+                        </label>
+                      </div>
+                    )}
+
+                    <label className="block">
+                      <span className={trackingLabelClass}>Notes</span>
+                      <textarea
+                        required
+                        value={trackingForm.notes}
+                        onChange={(event) => setTrackingForm((current) => ({ ...current, notes: event.target.value }))}
+                        rows={3}
+                        className={`${fieldClass} resize-none leading-6`}
+                        placeholder="Add handoff reminders or delivery context"
+                      />
+                    </label>
 
                     {trackingMessage && (
                       <div className="rounded-xl border border-[#dce4da] bg-white px-4 py-3 text-sm text-[#5f6f67]">
@@ -1297,32 +1508,31 @@ export function UserDashboard() {
                       disabled={isSavingTracking}
                       className="rounded-xl bg-[#336158] px-4 py-3 text-sm font-semibold text-white hover:bg-[#2a4c48] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {isSavingTracking ? "Saving update..." : "Save tracking update"}
+                      {isSavingTracking ? "Saving update..." : "Update delivery details"}
                     </button>
                   </div>
 
-                  <div className="mt-5 border-t border-[#e1e7df] pt-4">
+                  <div className="mt-6 border-t border-[#e1e7df] pt-5">
                     <h4 className="mb-3 text-sm font-semibold text-[#19221d]">Tracking history</h4>
                     {(selectedRequest.trackingUpdates || []).length > 0 ? (
                       <div className="space-y-3">
                         {selectedRequest.trackingUpdates.map((update) => (
-                          <div key={update.id} className="rounded-xl border border-[#e1e7df] bg-white px-4 py-3 text-sm text-[#5f6f67]">
-                            <div className="font-semibold text-[#19221d]">
-                              {trackingStatusLabels[update.progress_status] || formatStatusLabel(update.progress_status)}
+                          <div key={update.id} className="rounded-2xl border border-[#e1e7df] bg-white p-4 text-sm text-[#5f6f67]">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="text-base font-semibold text-[#19221d]">
+                                {trackingStatusLabels[update.progress_status] || formatStatusLabel(update.progress_status)}
+                              </div>
+                              <div className="text-xs text-[#7c8c84]">{formatManilaDate(update.created_at)}</div>
                             </div>
-                            <div className="mt-1 text-xs">{formatManilaDate(update.created_at)}</div>
-                            <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                              <span className="rounded-full bg-[#f3f5f2] px-2 py-1">
-                                {fulfillmentMethodLabels[update.fulfillment_method] || formatStatusLabel(update.fulfillment_method)}
-                              </span>
-                              {update.logistics_company && (
-                                <span className="rounded-full bg-[#f3f5f2] px-2 py-1">{update.logistics_company}</span>
-                              )}
-                              {update.tracking_number && (
-                                <span className="rounded-full bg-[#f3f5f2] px-2 py-1">#{update.tracking_number}</span>
-                              )}
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                              <div><span className="font-semibold text-[#19221d]">Method:</span> {fulfillmentMethodLabels[update.fulfillment_method] || formatStatusLabel(update.fulfillment_method)}</div>
+                              {update.contact_name && <div><span className="font-semibold text-[#19221d]">Contact name:</span> {update.contact_name}</div>}
+                              {update.logistics_company && <div><span className="font-semibold text-[#19221d]">Courier:</span> {update.logistics_company}</div>}
+                              {update.tracking_number && <div><span className="font-semibold text-[#19221d]">Tracking Number:</span> {update.tracking_number}</div>}
+                              {update.dropoff_scheduled_at && <div><span className="font-semibold text-[#19221d]">Drop-off:</span> {formatManilaDate(update.dropoff_scheduled_at)}</div>}
+                              {update.dropoff_location && <div><span className="font-semibold text-[#19221d]">Location:</span> {update.dropoff_location}</div>}
                             </div>
-                            {update.notes && <p className="mt-2 leading-6">{update.notes}</p>}
+                            {update.notes && <p className="mt-3 rounded-xl bg-[#f7faf6] px-3 py-2 leading-6"><span className="font-semibold text-[#19221d]">Notes:</span> {update.notes}</p>}
                           </div>
                         ))}
                       </div>
@@ -1333,6 +1543,7 @@ export function UserDashboard() {
                     )}
                   </div>
                 </div>
+                )}
               </section>
             </div>
 
@@ -1408,3 +1619,4 @@ function DetailItem({ label, value }) {
     </div>
   );
 }
+

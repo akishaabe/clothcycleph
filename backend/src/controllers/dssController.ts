@@ -393,6 +393,7 @@ export const getUserDssRequests = async (req: AuthRequest, res: Response) => {
          t.*,
          p.name AS partner_name,
          p.email AS partner_email,
+         p.address AS partner_address,
          s.item_type,
          s.submission_name,
          s.quantity,
@@ -632,7 +633,15 @@ export const updateDssRequestStatus = async (req: AuthRequest, res: Response) =>
       status === 'completed' && req.body.outcome_title
         ? outcomeCelebration
         : `Your ${titleCase(transaction.type)} request is now ${statusLabels[status] || status}.`,
-      { submissionId: transaction.submission_id, transactionId: transaction.id, status }
+      {
+        submissionId: transaction.submission_id,
+        transactionId: transaction.id,
+        status,
+        action_url:
+          status === 'accepted'
+            ? `/my-requests?status=accepted&request=${transaction.id}`
+            : `/dss-requests?request=${transaction.id}`,
+      }
     );
 
     res.json({

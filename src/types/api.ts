@@ -150,8 +150,11 @@ export interface RequestTrackingUpdate {
   partner_id?: string | null;
   progress_status: TrackingProgressStatus;
   fulfillment_method?: 'drop_off' | 'shipping' | 'pickup' | 'other';
+  contact_name?: string | null;
   logistics_company?: string | null;
   tracking_number?: string | null;
+  dropoff_scheduled_at?: string | null;
+  dropoff_location?: string | null;
   notes?: string | null;
   created_at: string;
   updated_at?: string;
@@ -161,8 +164,11 @@ export interface CreateTrackingUpdatePayload {
   request_id?: string | null;
   progress_status: TrackingProgressStatus;
   fulfillment_method?: 'drop_off' | 'shipping' | 'pickup' | 'other';
+  contact_name?: string | null;
   logistics_company?: string | null;
   tracking_number?: string | null;
+  dropoff_scheduled_at?: string | null;
+  dropoff_location?: string | null;
   notes?: string | null;
 }
 
@@ -306,6 +312,7 @@ export interface DssRequest {
   notes?: string;
   partner_name?: string;
   partner_email?: string;
+  partner_address?: string;
   user_name?: string;
   user_email?: string;
   submission_name?: string;
@@ -341,6 +348,8 @@ export interface DssRequest {
   outcome_description?: string | null;
   outcome_photos?: SubmissionPhotoValue[];
   outcome_reported_at?: string | null;
+  tracking_updates?: RequestTrackingUpdate[];
+  latest_tracking_update?: RequestTrackingUpdate | null;
   created_at: string;
   updated_at: string;
 }

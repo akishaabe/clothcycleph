@@ -204,8 +204,11 @@ export async function createTrackingUpdateD1(
     request_id?: string | null;
     progress_status: string;
     fulfillment_method?: string | null;
+    contact_name?: string | null;
     logistics_company?: string | null;
     tracking_number?: string | null;
+    dropoff_scheduled_at?: string | Date | null;
+    dropoff_location?: string | null;
     notes?: string | null;
   }
 ) {
@@ -219,7 +222,7 @@ export async function createTrackingUpdateD1(
 
   const request = await queryD1First<any>(
     db,
-    `SELECT t.*, p.name AS partner_name, u.id AS partner_message_user_id
+    `SELECT t.*, p.name AS partner_name, p.address AS partner_address, u.id AS partner_message_user_id
      FROM transactions t
      LEFT JOIN partners p ON p.id = t.to_partner_id
      LEFT JOIN users u ON u.id = p.user_id OR lower(u.email) = lower(p.email)
@@ -230,16 +233,39 @@ export async function createTrackingUpdateD1(
      LIMIT 1`,
     [submissionId, user.id, payload.request_id || null, payload.request_id || null]
   );
+  if (!request) {
+    throw new Error('Accepted partner request not found');
+  }
+  if (request.status !== 'accepted') {
+    throw new Error('Delivery details can only be updated after the partner accepts the request.');
+  }
 
   const id = generateD1UUID();
   const fulfillmentMethod = payload.fulfillment_method || 'drop_off';
+  const isShipping = fulfillmentMethod === 'shipping';
+  const dropoffLocation = isShipping ? null : payload.dropoff_location || request.partner_address || null;
+
+  if (!payload.contact_name) {
+    throw new Error('Contact name is required for delivery updates.');
+  }
+  if (!payload.notes) {
+    throw new Error('Notes are required for delivery updates.');
+  }
+  if (isShipping && (!payload.logistics_company || !payload.tracking_number)) {
+    throw new Error('Courier and tracking number are required for courier delivery updates.');
+  }
+  if (!isShipping && (!payload.dropoff_scheduled_at || !dropoffLocation)) {
+    throw new Error('Drop-off date/time and location are required for direct drop-off updates.');
+  }
+
   const update = await queryD1First(
     db,
     `INSERT INTO request_tracking_updates (
        id, submission_id, request_id, user_id, partner_id, progress_status,
-       fulfillment_method, logistics_company, tracking_number, notes
+       fulfillment_method, contact_name, logistics_company, tracking_number,
+       dropoff_scheduled_at, dropoff_location, notes
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      RETURNING *`,
     [
       id,
@@ -249,33 +275,68 @@ export async function createTrackingUpdateD1(
       request?.to_partner_id || null,
       payload.progress_status,
       fulfillmentMethod,
-      payload.logistics_company || null,
-      payload.tracking_number || null,
+      payload.contact_name || null,
+      isShipping ? payload.logistics_company || null : null,
+      isShipping ? payload.tracking_number || null : null,
+      !isShipping ? payload.dropoff_scheduled_at || null : null,
+      dropoffLocation,
       payload.notes || null,
     ]
   );
 
   const statusLabel = trackingStatusLabel(payload.progress_status);
-  const messageParts = [`The user updated the request status to ${statusLabel}.`];
-  if (payload.logistics_company) messageParts.push(`Courier: ${payload.logistics_company}.`);
-  if (payload.tracking_number) messageParts.push(`Tracking Number: ${payload.tracking_number}.`);
+  const methodLabel = trackingMethodLabel(fulfillmentMethod);
+  const messageParts = [
+    'The user updated delivery details for this request.',
+    `Method: ${methodLabel}.`,
+    `Status: ${statusLabel}.`,
+  ];
+  if (payload.contact_name) messageParts.push(`Contact name: ${payload.contact_name}.`);
+  if (isShipping && payload.logistics_company) messageParts.push(`Courier: ${payload.logistics_company}.`);
+  if (isShipping && payload.tracking_number) messageParts.push(`Tracking Number: ${payload.tracking_number}.`);
+  if (!isShipping && payload.dropoff_scheduled_at) messageParts.push(`Drop-off date/time: ${payload.dropoff_scheduled_at}.`);
+  if (!isShipping && dropoffLocation) messageParts.push(`Drop-off location: ${dropoffLocation}.`);
   if (payload.notes) messageParts.push(`Notes: ${payload.notes}`);
 
   if (request?.partner_message_user_id && request.partner_message_user_id !== user.id) {
-    await executeD1(db, 'INSERT INTO messages (id, from_user_id, to_user_id, content) VALUES (?, ?, ?, ?)', [
+    await executeD1(
+      db,
+      `INSERT INTO messages (
+         id, from_user_id, to_user_id, content,
+         related_submission_id, related_transaction_id, action_url, metadata
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
       generateD1UUID(),
       user.id,
       request.partner_message_user_id,
       messageParts.join(' '),
+      submissionId,
+      request.id,
+      `/partner?request=${request.id}`,
+      JSON.stringify({
+        kind: 'tracking_update',
+        submission_id: submissionId,
+        transaction_id: request.id,
+        tracking_update_id: id,
+        fulfillment_method: fulfillmentMethod,
+      }),
     ]);
 
     await executeD1(db, 'INSERT INTO notifications (id, user_id, type, title, body, data) VALUES (?, ?, ?, ?, ?, ?)', [
       generateD1UUID(),
       request.partner_message_user_id,
       'partner_update',
-      'Request tracking updated',
-      `${submission.submission_name || submission.item_type}: ${statusLabel}`,
-      JSON.stringify({ submissionId, requestId: request.id, trackingUpdateId: id, progressStatus: payload.progress_status }),
+      'Delivery details updated',
+      `${submission.submission_name || submission.item_type}: ${methodLabel} - ${statusLabel}`,
+      JSON.stringify({
+        submissionId,
+        requestId: request.id,
+        transactionId: request.id,
+        trackingUpdateId: id,
+        progressStatus: payload.progress_status,
+        action_url: `/partner?request=${request.id}`,
+      }),
     ]);
   }
 
@@ -364,6 +425,17 @@ function trackingStatusLabel(status: string) {
       completed: 'Completed',
     } as Record<string, string>
   )[status] || status;
+}
+
+function trackingMethodLabel(method: string) {
+  return (
+    {
+      drop_off: 'Direct drop-off',
+      shipping: 'Courier',
+      pickup: 'Pickup',
+      other: 'Other',
+    } as Record<string, string>
+  )[method] || method;
 }
 
 function normalizeDetails(row: any) {

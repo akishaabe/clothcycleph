@@ -317,6 +317,22 @@ export const submissionService = {
       body: JSON.stringify(payload),
     });
   },
+
+  async getTrackingUpdates(id: string): Promise<{ data: RequestTrackingUpdate[]; count: number }> {
+    return fetchWithAuth(`/submissions/${id}/tracking`, {
+      method: 'GET',
+    });
+  },
+
+  async createTrackingUpdate(
+    id: string,
+    payload: CreateTrackingUpdatePayload
+  ): Promise<{ message: string; data: RequestTrackingUpdate }> {
+    return fetchWithAuth(`/submissions/${id}/tracking`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
 };
 
 // ============= DSS ENDPOINTS =============

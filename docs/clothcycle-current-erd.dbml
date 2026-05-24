@@ -263,8 +263,11 @@ Table request_tracking_updates {
   partner_id uuid [ref: > partners.id]
   progress_status varchar [not null, note: "request_sent, scheduled, in_transit, dropoff_completed, completed"]
   fulfillment_method varchar [note: "drop_off, shipping, pickup, other. Default: drop_off"]
+  contact_name varchar [note: "Optional name/contact label provided by the user for the delivery update"]
   logistics_company varchar [note: "Optional courier/logistics company"]
   tracking_number varchar [note: "Optional shipping tracking number"]
+  dropoff_scheduled_at timestamp [note: "Optional direct drop-off date/time"]
+  dropoff_location text [note: "Optional partner-provided or user-entered drop-off location"]
   notes text
   created_at timestamp [default: `now()`]
   updated_at timestamp [default: `now()`]

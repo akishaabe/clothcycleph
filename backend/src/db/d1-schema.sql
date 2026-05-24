@@ -246,8 +246,11 @@ CREATE TABLE IF NOT EXISTS request_tracking_updates (
   partner_id TEXT REFERENCES partners(id) ON DELETE SET NULL,
   progress_status TEXT NOT NULL CHECK (progress_status IN ('request_sent', 'scheduled', 'in_transit', 'dropoff_completed', 'completed')),
   fulfillment_method TEXT DEFAULT 'drop_off' CHECK (fulfillment_method IN ('drop_off', 'shipping', 'pickup', 'other')),
+  contact_name TEXT,
   logistics_company TEXT,
   tracking_number TEXT,
+  dropoff_scheduled_at TEXT,
+  dropoff_location TEXT,
   notes TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP

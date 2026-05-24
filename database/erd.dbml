@@ -135,6 +135,24 @@ Table deleted_records {
   deleted_at timestamp
 }
 
+Table request_tracking_updates {
+  id uuid [pk]
+  submission_id uuid [not null]
+  request_id uuid
+  user_id uuid [not null]
+  partner_id uuid
+  progress_status varchar [not null]
+  fulfillment_method varchar
+  contact_name varchar
+  logistics_company varchar
+  tracking_number varchar
+  dropoff_scheduled_at timestamp
+  dropoff_location text
+  notes text
+  created_at timestamp
+  updated_at timestamp
+}
+
 Table recommendation_runs {
   id uuid [pk]
   submission_id uuid
@@ -239,6 +257,10 @@ Ref: submission_images.submission_id > submissions.id
 Ref: transactions.submission_id > submissions.id
 Ref: transactions.from_user_id > users.id
 Ref: transactions.to_partner_id > partners.id
+Ref: request_tracking_updates.submission_id > submissions.id
+Ref: request_tracking_updates.request_id > transactions.id
+Ref: request_tracking_updates.user_id > users.id
+Ref: request_tracking_updates.partner_id > partners.id
 Ref: recommendation_runs.submission_id > submissions.id
 Ref: recommendation_runs.requested_by_user_id > users.id
 Ref: recommendation_results.run_id > recommendation_runs.id

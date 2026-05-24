@@ -11,13 +11,17 @@ const statusClass = {
   rejected: "bg-red-50 text-red-700 border-red-100",
 };
 
-const normalizeStatus = (status) => {
-  if (status === "declined" || status === "rejected") return "rejected";
-  if (status === "in_progress") return "accepted";
-  if (status === "completed") return "completed";
-  if (status === "accepted") return "accepted";
-  return "pending";
+const normalizeStatus = (value) => {
+  const status = String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
+  if (["declined", "rejected", "cancelled", "canceled"].includes(status)) return "rejected";
+  if (["approved", "accepted", "in_progress"].includes(status)) return "accepted";
+  if (["completed", "processed", "complete"].includes(status)) return "completed";
+  if (status === "pending") return "pending";
+  return status;
 };
+
+const getRequestStatus = (request) =>
+  normalizeStatus(request?.status ?? request?.request_status ?? request?.submission_status ?? request?.status_label);
 
 const formatStatusLabel = (status) =>
   String(status || "")
@@ -82,10 +86,10 @@ export function DssRequestsPage() {
 
   const visibleRequests = useMemo(() => {
     const query = search.trim().toLowerCase();
+    const selectedStatus = normalizeStatus(filter);
 
-    return requests.filter((request) => {
-      const status = normalizeStatus(request.status);
-      const statusMatch = filter === "all" || status === filter;
+    const searchedRequests = requests.filter((request) => {
+      const status = getRequestStatus(request);
       const queryMatch =
         !query ||
         [
@@ -99,8 +103,15 @@ export function DssRequestsPage() {
           .toLowerCase()
           .includes(query);
 
-      return statusMatch && queryMatch;
-    }).sort((first, second) => getRequestActivityTime(second) - getRequestActivityTime(first));
+      return queryMatch;
+    });
+
+    const statusFilteredRequests = searchedRequests.filter((request) => {
+      const status = getRequestStatus(request);
+      return selectedStatus === "all" || status === selectedStatus;
+    });
+
+    return statusFilteredRequests.sort((first, second) => getRequestActivityTime(second) - getRequestActivityTime(first));
   }, [requests, filter, search]);
 
   const handleReminder = async (requestId) => {
@@ -202,7 +213,10 @@ export function DssRequestsPage() {
               </div>
             )}
 
-            {visibleRequests.map((request) => (
+            {visibleRequests.map((request) => {
+              const requestStatus = getRequestStatus(request);
+
+              return (
               <article
                 key={request.id}
                 data-request-id={request.id}
@@ -248,11 +262,11 @@ export function DssRequestsPage() {
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2 md:w-36 md:justify-end">
-                    <span className={`inline-flex min-h-8 items-center justify-center rounded-full border px-3 py-1 text-xs ${statusClass[normalizeStatus(request.status)] || statusClass.pending}`}>
-                      {formatStatusLabel(normalizeStatus(request.status))}
+                    <span className={`inline-flex min-h-8 items-center justify-center rounded-full border px-3 py-1 text-xs ${statusClass[requestStatus] || statusClass.pending}`}>
+                      {formatStatusLabel(requestStatus)}
                     </span>
-                    {normalizeStatus(request.status) === "accepted" && <CheckCircle className="h-4 w-4 text-[#336158]" />}
-                    {normalizeStatus(request.status) === "pending" && <Clock className="h-4 w-4 text-[#7a5427]" />}
+                    {requestStatus === "accepted" && <CheckCircle className="h-4 w-4 text-[#336158]" />}
+                    {requestStatus === "pending" && <Clock className="h-4 w-4 text-[#7a5427]" />}
                   </div>
                 </div>
 
@@ -263,7 +277,7 @@ export function DssRequestsPage() {
                   >
                     View recommendation
                   </button>
-                  {normalizeStatus(request.status) === "pending" && (
+                  {requestStatus === "pending" && (
                     <button
                       onClick={() => handleReminder(request.id)}
                       disabled={remindingId === request.id}
@@ -275,7 +289,8 @@ export function DssRequestsPage() {
                   )}
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         </section>
       </main>

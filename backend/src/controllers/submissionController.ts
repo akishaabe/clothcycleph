@@ -20,20 +20,31 @@ const trackingStatusLabels: Record<string, string> = {
 
 const trackingMethodLabels: Record<string, string> = {
   drop_off: 'Direct drop-off',
-  shipping: 'Shipping',
+  shipping: 'Courier',
   pickup: 'Pickup',
   other: 'Other',
 };
 
 const buildTrackingMessage = (
   status: string,
+  method?: string | null,
+  contactName?: string | null,
   logisticsCompany?: string | null,
   trackingNumber?: string | null,
+  dropoffScheduledAt?: string | Date | null,
+  dropoffLocation?: string | null,
   notes?: string | null,
 ) => {
-  const parts = [`The user updated the request status to ${trackingStatusLabels[status] || status}.`];
+  const parts = [
+    `The user updated delivery details for this request.`,
+    `Method: ${trackingMethodLabels[method || 'drop_off'] || method || 'Direct drop-off'}.`,
+    `Status: ${trackingStatusLabels[status] || status}.`,
+  ];
+  if (contactName) parts.push(`Contact name: ${contactName}.`);
   if (logisticsCompany) parts.push(`Courier: ${logisticsCompany}.`);
   if (trackingNumber) parts.push(`Tracking Number: ${trackingNumber}.`);
+  if (dropoffScheduledAt) parts.push(`Drop-off date/time: ${dropoffScheduledAt}.`);
+  if (dropoffLocation) parts.push(`Drop-off location: ${dropoffLocation}.`);
   if (notes) parts.push(`Notes: ${notes}`);
   return parts.join(' ');
 };
@@ -453,8 +464,11 @@ export const createSubmissionTrackingUpdate = async (req: Request, res: Response
       request_id,
       progress_status,
       fulfillment_method = 'drop_off',
+      contact_name,
       logistics_company,
       tracking_number,
+      dropoff_scheduled_at,
+      dropoff_location,
       notes,
     } = req.body;
 
@@ -468,7 +482,7 @@ export const createSubmissionTrackingUpdate = async (req: Request, res: Response
     }
 
     const requestResult = await query(
-      `SELECT t.*, p.name AS partner_name, u.id AS partner_message_user_id
+      `SELECT t.*, p.name AS partner_name, p.address AS partner_address, u.id AS partner_message_user_id
        FROM transactions t
        LEFT JOIN partners p ON p.id = t.to_partner_id
        LEFT JOIN users u ON u.id = p.user_id OR lower(u.email) = lower(p.email)
@@ -480,14 +494,38 @@ export const createSubmissionTrackingUpdate = async (req: Request, res: Response
       [id, userId, request_id || null]
     );
     const requestRow = requestResult.rows[0] || null;
+    if (!requestRow) {
+      throw new AppError(404, 'Accepted partner request not found');
+    }
+    if (requestRow.status !== 'accepted') {
+      throw new AppError(400, 'Delivery details can only be updated after the partner accepts the request.');
+    }
     const updateId = uuidv4();
+    const isShipping = fulfillment_method === 'shipping';
+    const finalDropoffLocation = isShipping
+      ? null
+      : dropoff_location || requestRow.partner_address || null;
+
+    if (!contact_name) {
+      throw new AppError(400, 'Contact name is required for delivery updates.');
+    }
+    if (!notes) {
+      throw new AppError(400, 'Notes are required for delivery updates.');
+    }
+    if (isShipping && (!logistics_company || !tracking_number)) {
+      throw new AppError(400, 'Courier and tracking number are required for courier delivery updates.');
+    }
+    if (!isShipping && (!dropoff_scheduled_at || !finalDropoffLocation)) {
+      throw new AppError(400, 'Drop-off date/time and location are required for direct drop-off updates.');
+    }
 
     const result = await query(
       `INSERT INTO request_tracking_updates (
          id, submission_id, request_id, user_id, partner_id, progress_status,
-         fulfillment_method, logistics_company, tracking_number, notes
+         fulfillment_method, contact_name, logistics_company, tracking_number,
+         dropoff_scheduled_at, dropoff_location, notes
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
       [
         updateId,
@@ -497,31 +535,62 @@ export const createSubmissionTrackingUpdate = async (req: Request, res: Response
         requestRow?.to_partner_id || null,
         progress_status,
         fulfillment_method,
-        logistics_company || null,
-        tracking_number || null,
+        contact_name || null,
+        isShipping ? logistics_company || null : null,
+        isShipping ? tracking_number || null : null,
+        !isShipping && dropoff_scheduled_at ? dropoff_scheduled_at : null,
+        finalDropoffLocation,
         notes || null,
       ]
     );
 
-    const messageContent = buildTrackingMessage(progress_status, logistics_company, tracking_number, notes);
+    const messageContent = buildTrackingMessage(
+      progress_status,
+      fulfillment_method,
+      contact_name,
+      isShipping ? logistics_company : null,
+      isShipping ? tracking_number : null,
+      !isShipping ? dropoff_scheduled_at : null,
+      finalDropoffLocation,
+      notes,
+    );
     if (requestRow?.partner_message_user_id && requestRow.partner_message_user_id !== userId) {
       await query(
-        `INSERT INTO messages (id, from_user_id, to_user_id, content)
-         VALUES ($1, $2, $3, $4)`,
-        [uuidv4(), userId, requestRow.partner_message_user_id, messageContent]
+        `INSERT INTO messages (
+           id, from_user_id, to_user_id, content,
+           related_submission_id, related_transaction_id, action_url, metadata
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          uuidv4(),
+          userId,
+          requestRow.partner_message_user_id,
+          messageContent,
+          id,
+          requestRow.id,
+          `/partner?request=${requestRow.id}`,
+          JSON.stringify({
+            kind: 'tracking_update',
+            submission_id: id,
+            transaction_id: requestRow.id,
+            tracking_update_id: updateId,
+            fulfillment_method,
+          }),
+        ]
       );
 
       await createNotification({
         userId: requestRow.partner_message_user_id,
         type: 'partner_update',
-        title: 'Request tracking updated',
-        body: `${submission.rows[0].submission_name || submission.rows[0].item_type}: ${trackingStatusLabels[progress_status] || progress_status}`,
+        title: 'Delivery details updated',
+        body: `${submission.rows[0].submission_name || submission.rows[0].item_type}: ${trackingMethodLabels[fulfillment_method] || fulfillment_method} - ${trackingStatusLabels[progress_status] || progress_status}`,
         data: {
           submissionId: id,
           requestId: requestRow.id,
+          transactionId: requestRow.id,
           trackingUpdateId: updateId,
           progressStatus: progress_status,
-          actionUrl: `/partner?request=${requestRow.id}`,
+          action_url: `/partner?request=${requestRow.id}`,
         },
       });
     }

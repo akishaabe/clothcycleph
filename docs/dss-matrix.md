@@ -98,7 +98,7 @@ Note: donation-specific blocking rules only run when the user's preferred pathwa
 | DSS confirmation selected pathway | User-selected pathway remains visible with full DSS confidence details | If an initial intent exists, the page asks for confirmation before sending and states whether the selected pathway matches the top DSS recommendation |
 | Partner request brief | Partner-facing summary of the chosen pathway and DSS result | Includes selected pathway, confidence, rank, score, all pathway scores, item details, textile weight, bag color guidance, DSS reasoning, matched checks, review flags, lightweight routing footprint estimate, and buyback preference when the sent pathway is Upcycle |
 | Partner request modal | Detailed partner review panel | Shows brief, recommendation summary, score, matched/missed routing checks, item details, required bag color, burn-test details, uploaded images, and partner outcome reporting fields |
-| User request tracking | Sent partner request list and dashboard detail modal | Shows bag guidance, weight, lightweight routing footprint estimate when distance is available, and partner outcome reports with photos such as bags, wallets, construction material, or other recovery results |
+| User request tracking | Sent partner request list and dashboard detail modal | Shows bag guidance, weight, lightweight routing footprint estimate when distance is available, accepted-request courier/drop-off delivery form, delivery timeline, and partner outcome reports with photos such as bags, wallets, construction material, or other recovery results |
 | Admin audit panel | DSS explanation audit | Uses `recommendation_runs` and `recommendation_results` with `engine_version`, `input_snapshot`, `rule_checks`, and selected partner context |
 | Admin editable rules | Manual DSS rule records | Saved in `dss_rules` for documentation/audit/future tuning; these records do not currently override the coded engine |
 | Admin deleted archive | Deleted Records panel | Reads `deleted_records` so admins can inspect management-deleted snapshots without showing them to users or partners |
@@ -113,6 +113,7 @@ Note: donation-specific blocking rules only run when the user's preferred pathwa
 | Sent Recycle/Donate request | Forces buyback interest to false for the request context |
 | Bag color guidance | Saved on the transaction and repeated in the brief | White = Recycle, Black = Upcycle, Green = Donation |
 | Partner outcome report | Partners can add `outcome_title`, `outcome_description`, and `outcome_photos` when marking an accepted request completed | The story is returned to the user through notification, message, request tracking, and dashboard detail views |
+| Delivery tracking update | Users can add `request_tracking_updates` only after the partner accepts a request | Courier fields are optional for shipping; direct drop-off stores optional date/time, location, and notes. Updates create partner notifications and automatic messages |
 | Audit trail | Creates a `recommendation_runs` row and selected `recommendation_results` row with `engine_version`, selected pathway, selected partner, score, confidence, checks, and output payload |
 
 ## Pathway Scoring

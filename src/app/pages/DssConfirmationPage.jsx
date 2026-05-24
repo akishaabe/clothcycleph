@@ -1,4 +1,4 @@
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+﻿import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
@@ -133,6 +133,94 @@ function formatCheckList(checks = [], expectedMatch) {
   return labels.length > 0 ? labels.join(", ") : "None";
 }
 
+const toTitleCase = (value) =>
+  String(value ?? "")
+    .replace(/[_-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const formatCriteriaLabel = (value) => toTitleCase(value);
+
+function parseSelectedPathwayReasoning(value = "") {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  const matchedIndex = text.search(/\bMatched:/i);
+  const notMatchedIndex = text.search(/\bNot matched:/i);
+  const skippedIndex = text.search(/\bSkipped as not applicable:/i);
+  const firstSectionIndex = [matchedIndex, notMatchedIndex, skippedIndex]
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b)[0];
+  const intro = firstSectionIndex >= 0 ? text.slice(0, firstSectionIndex).trim() : text;
+  const matched =
+    matchedIndex >= 0
+      ? text
+          .slice(matchedIndex + "Matched:".length, notMatchedIndex >= 0 ? notMatchedIndex : skippedIndex >= 0 ? skippedIndex : undefined)
+          .trim()
+      : "";
+  const notMatched =
+    notMatchedIndex >= 0
+      ? text
+          .slice(notMatchedIndex + "Not matched:".length, skippedIndex >= 0 ? skippedIndex : undefined)
+          .trim()
+      : "";
+  const skipped =
+    skippedIndex >= 0
+      ? text.slice(skippedIndex + "Skipped as not applicable:".length).trim()
+      : "";
+  const criteriaList = (items) =>
+    items
+      .replace(/\.$/, "")
+      .split(",")
+      .map((item) => formatCriteriaLabel(item))
+      .filter(Boolean);
+
+  return {
+    intro: intro ? intro.charAt(0).toUpperCase() + intro.slice(1) : "",
+    matched: criteriaList(matched),
+    notMatched: criteriaList(notMatched),
+    skipped: criteriaList(skipped),
+  };
+}
+
+function cleanRecommendationExplanation(value = "") {
+  return String(value)
+    .replace(/\s+Matched:.*$/i, "")
+    .replace(/\s+Not matched:.*$/i, "")
+    .replace(/\s+Skipped as not applicable:.*$/i, "")
+    .trim();
+}
+
+function buildRecommendationSummary(recommendation = {}) {
+  const pathway = normalizePathway(recommendation.recommended_pathway);
+  const matchedChecks = (recommendation.checks || [])
+    .filter((check) => check?.matched && !check?.skipped)
+    .map((check) => String(check.question || "").toLowerCase());
+  const has = (keyword) => matchedChecks.some((check) => check.includes(keyword));
+
+  const signals = [
+    has("clean") || has("cleanliness") ? "clean enough for partner handling" : "",
+    has("condition") ? "condition fit" : "",
+    has("fabric") || has("fiber") || has("material") ? "clear fabric signal" : "",
+    has("repurposing") ? "good repurposing potential" : "",
+    has("quantity") || has("batch") ? "batch size works well" : "",
+  ].filter(Boolean);
+  const signalText = signals.length > 0 ? ` Strong signals: ${signals.slice(0, 3).join(", ")}.` : "";
+
+  const summaries = {
+    donate:
+      "Best fit for extending the textile's life through donation. This route keeps usable pieces moving to people or groups that can still benefit from them.",
+    upcycle:
+      "Best fit for a creative second life. This route is ideal when the textile can become something new like bags, wallets, accessories, or other partner-made items.",
+    recycle:
+      "Best fit for material recovery. This route helps move worn or less reusable textiles toward recycling instead of letting them become waste.",
+    buyback:
+      "Best fit for a value-return pathway. This route may let the textile continue into a partner process while giving the sender a possible return.",
+  };
+
+  return `${summaries[pathway] || cleanRecommendationExplanation(recommendation.explanation) || "This route is a practical fit for the submitted textile details."}${signalText}`;
+}
+
 function formatListValue(value) {
   if (Array.isArray(value)) {
     return value.filter(Boolean).join(", ") || "Not specified";
@@ -187,28 +275,170 @@ function buildPartnerBrief(submission, pathway, recommendation, recommendations 
   ].filter(Boolean).join("\n");
 }
 
+const briefLabelMap = {
+  "Selected pathway": "Selected Pathway",
+  "Recommendation confidence": "Confidence",
+  "Recommendation rank": "Rank",
+  "Recommendation score": "Score",
+  "All pathway scores": "All Pathway Scores",
+  "Submission name": "Submission Name",
+  "Item": "Item",
+  "Quantity": "Quantity",
+  "Weight": "Weight",
+  "Shipping bag": "Shipping Bag",
+  "Routing footprint estimate": "Routing Footprint",
+  "Condition": "Condition",
+  "Cleanliness": "Cleanliness",
+  "Fabric": "Fabric",
+  "Buyback preference": "Buyback Preference",
+  "User notes": "User Notes",
+  "Upcycle/buyback request": "Upcycle / Buyback Request",
+  "Selected pathway reasoning": "Selected Pathway Reasoning",
+  "Matched routing checks": "Matched Routing Checks",
+  "Needs review": "Needs Review",
+};
+
+const compactBriefLabels = new Set([
+  "Selected pathway",
+  "Recommendation confidence",
+  "Recommendation rank",
+  "Recommendation score",
+  "Submission name",
+  "Item",
+  "Quantity",
+  "Weight",
+  "Shipping bag",
+  "Condition",
+  "Cleanliness",
+  "Fabric",
+  "Buyback preference",
+]);
+
 function BriefPreview({ brief }) {
   const lines = String(brief || "")
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
 
+  const renderValue = (label, value) => {
+    if (label === "Selected pathway reasoning") {
+      const reasoning = parseSelectedPathwayReasoning(value);
+      const sectionClass = "mt-4";
+      const headingClass = "text-xs font-bold uppercase tracking-[0.06em] text-[#336158] dark:text-emerald-300";
+      const listClass = "mt-2 grid gap-1.5 text-sm leading-6 text-[#4f6258] dark:text-zinc-300";
+
+      return (
+        <div>
+          {reasoning.intro && (
+            <p className="mt-1 leading-7 text-[#4f6258] dark:text-zinc-300">
+              {reasoning.intro}
+            </p>
+          )}
+          {reasoning.matched.length > 0 && (
+            <div className={sectionClass}>
+              <div className={headingClass}>Matched Criteria</div>
+              <ul className={listClass}>
+                {reasoning.matched.map((item) => (
+                  <li key={`matched-${item}`} className="flex gap-2">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#336158] dark:bg-emerald-300" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {reasoning.notMatched.length > 0 && (
+            <div className={sectionClass}>
+              <div className={headingClass}>Not Matched</div>
+              <ul className={listClass}>
+                {reasoning.notMatched.map((item) => (
+                  <li key={`not-matched-${item}`} className="flex gap-2">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#b7791f] dark:bg-amber-300" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {reasoning.skipped.length > 0 && (
+            <div className={sectionClass}>
+              <div className={headingClass}>Skipped as Not Applicable</div>
+              <ul className={listClass}>
+                {reasoning.skipped.map((item) => (
+                  <li key={`skipped-${item}`} className="flex gap-2">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#7c8c84] dark:bg-zinc-400" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (label === "Matched routing checks" || label === "Needs review") {
+      return (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {value.split(",").map((item) => item.trim()).filter(Boolean).map((item) => (
+            <span
+              key={`${label}-${item}`}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                label === "Matched routing checks"
+                  ? "bg-[#edf7ed] text-[#336158] dark:bg-emerald-400/10 dark:text-emerald-200"
+                  : "bg-[#fff8e8] text-[#7a5427] dark:bg-amber-400/10 dark:text-amber-200"
+              }`}
+            >
+              {item}
+            </span>
+          ))}
+        </div>
+      );
+    }
+
+    if (label === "All pathway scores") {
+      return (
+        <div className="mt-2 grid gap-2">
+          {value.split("|").map((item) => item.trim()).filter(Boolean).map((item) => (
+            <div key={item} className="rounded-xl bg-white px-3 py-2 text-sm text-[#5f6f67] dark:bg-white/[0.06] dark:text-zinc-300">
+              {item}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return <p className="mt-1 whitespace-pre-line leading-7 text-[#4f6258] dark:text-zinc-300">{value}</p>;
+  };
+
   return (
-    <div className="rounded-2xl border border-[#dce4da] bg-[#fbfcfa] p-4 text-sm leading-7 text-[#19221d] dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-100">
+    <div className="rounded-2xl border border-[#dce4da] bg-[#fbfcfa] p-4 text-sm text-[#19221d] dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-100">
       {lines.map((line, index) => {
         const separatorIndex = line.indexOf(":");
 
         if (separatorIndex <= 0) {
-          return <p key={`${line}-${index}`} className="mb-2 break-words last:mb-0">{line}</p>;
+          return <p key={`${line}-${index}`} className="mb-3 break-words leading-7 last:mb-0">{line}</p>;
         }
 
+        const rawLabel = line.slice(0, separatorIndex).trim();
+        const value = line.slice(separatorIndex + 1).trim();
+        const displayLabel = briefLabelMap[rawLabel] || rawLabel.replace(/\b\w/g, (letter) => letter.toUpperCase());
+        const compact = compactBriefLabels.has(rawLabel);
+
         return (
-          <p key={`${line}-${index}`} className="mb-2 break-words last:mb-0">
-            <span className="font-semibold dark:text-white">
-              {line.slice(0, separatorIndex + 1)}
-            </span>{" "}
-            {line.slice(separatorIndex + 1).trim()}
-          </p>
+          <div
+            key={`${line}-${index}`}
+            className={`mb-3 break-words rounded-xl border border-[#e1e7df] bg-white px-4 py-3 last:mb-0 dark:border-white/10 dark:bg-white/[0.04] ${
+              compact ? "sm:flex sm:items-start sm:justify-between sm:gap-4" : ""
+            }`}
+          >
+            <div className="text-xs font-bold uppercase tracking-[0.06em] text-[#336158] dark:text-emerald-300">
+              {displayLabel}
+            </div>
+            <div className={compact ? "mt-1 font-semibold text-[#19221d] dark:text-white sm:mt-0 sm:text-right" : ""}>
+              {compact ? value : renderValue(rawLabel, value)}
+            </div>
+          </div>
         );
       })}
     </div>
@@ -764,9 +994,9 @@ export function DssConfirmationPage() {
                               : "border-[#e1e7df] bg-white hover:border-[#9bb39c] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-emerald-300/50"
                           }`}
                         >
-                          <div className="flex items-center justify-between gap-4">
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2 text-lg font-semibold text-[#19221d] dark:text-white">
+                          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_120px] md:items-start">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2 text-xl font-semibold text-[#19221d] dark:text-white">
                                 <span>#{recommendation.rank} {pathwayLabels[recommendation.recommended_pathway]}</span>
                                 {isSelected && (
                                   <span className="rounded-full bg-[#336158] px-2 py-0.5 text-xs font-semibold text-white dark:bg-emerald-300 dark:text-[#07110d]">
@@ -774,19 +1004,19 @@ export function DssConfirmationPage() {
                                   </span>
                                 )}
                               </div>
-                              <p className="mt-1 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
-                                {recommendation.explanation}
+                              <p className="mt-3 max-w-3xl text-base leading-7 text-[#4f6258] dark:text-zinc-300">
+                                {buildRecommendationSummary(recommendation)}
                               </p>
                               {recommendation.checks?.length > 0 && (
-                                <details className="mt-3 rounded-xl border border-[#e1e7df] bg-white/80 px-4 py-3 text-sm text-[#5f6f67] dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300">
-                                  <summary className="cursor-pointer font-semibold text-[#336158] dark:text-emerald-300">
+                                <details className="group mt-4 rounded-2xl border border-[#e1e7df] bg-white/80 px-4 py-3 text-sm text-[#5f6f67] dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300">
+                                  <summary className="cursor-pointer select-none py-1 text-base font-semibold text-[#336158] dark:text-emerald-300">
                                     Why this was recommended
                                   </summary>
-                                  <div className="mt-3 flex flex-wrap gap-2">
+                                  <div className="mt-4 grid origin-top gap-2 transition-all duration-300 ease-out group-open:animate-[accordion-down_260ms_ease-out] sm:grid-cols-2">
                                     {recommendation.checks.map((check) => (
                                       <span
                                         key={`${recommendation.recommended_pathway}-${check.question}`}
-                                        className={`rounded-full px-3 py-1 text-xs ${
+                                        className={`rounded-xl px-3 py-2 text-xs leading-5 ${
                                           check.matched
                                             ? "bg-[#edf7ed] text-[#336158] dark:bg-emerald-400/10 dark:text-emerald-200"
                                             : "bg-[#fff8e8] text-[#7a5427] dark:bg-amber-400/10 dark:text-amber-200"
@@ -799,8 +1029,8 @@ export function DssConfirmationPage() {
                                 </details>
                               )}
                             </div>
-                            <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-center text-sm text-[#336158] dark:bg-white/10 dark:text-emerald-200">
-                              <div className="font-bold">
+                            <div className="rounded-2xl bg-white px-4 py-3 text-center text-sm text-[#336158] shadow-sm dark:bg-white/10 dark:text-emerald-200">
+                              <div className="text-2xl font-bold">
                                 {Math.round(recommendation.confidence * 100)}%
                               </div>
                               <div>confidence</div>
@@ -908,12 +1138,12 @@ export function DssConfirmationPage() {
             <ShippingReminderCard pathway={selectedPathway} />
 
             <div className="rounded-2xl border border-[#e1e7df] bg-white/90 p-6 shadow-[0_12px_34px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_12px_34px_rgba(0,0,0,0.3)]">
-              <h2 className="mb-3 text-xl font-semibold">Partner brief</h2>
+              <h2 className="mb-3 text-xl font-semibold">Partner Brief</h2>
               <BriefPreview brief={brief} />
               {selectedRecommendation && (
                 <div className="mt-3 rounded-xl bg-[#f7faf5] px-4 py-3 text-sm text-[#5f6f67] dark:bg-white/[0.05] dark:text-zinc-300">
                   <div>Average recommendation score: {dssAverageScore?.toFixed(1) || "N/A"} / 100</div>
-                  Recommendation score: {selectedRecommendation.score.toFixed(1)} / 100 · Rank #{selectedRecommendation.rank}
+                  Recommendation score: {selectedRecommendation.score.toFixed(1)} / 100 | Rank #{selectedRecommendation.rank}
                 </div>
               )}
               <div className="mt-3 rounded-xl border border-[#dce4da] bg-[#fbfcfa] px-4 py-3 text-sm leading-6 text-[#5f6f67] dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300">
@@ -1208,3 +1438,4 @@ function PartnerMap({ partners, selectedPartnerId, onSelect, userLocation }) {
     </div>
   );
 }
+

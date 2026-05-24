@@ -38,7 +38,7 @@ flowchart TD
 
 | Layer | Component | Responsibility |
 |---|---|---|
-| Presentation Layer | React + Vite frontend | Login, registration, dashboards, textile submission with weight capture, DSS confirmation, partner outcome reports, messages, notifications, settings |
+| Presentation Layer | React + Vite frontend | Login, registration, dashboards, textile submission with weight capture, DSS confirmation, accepted-request delivery tracking, partner outcome reports, messages, notifications, settings |
 | API Layer | Hono backend | Handles REST API requests, authentication checks, role checks, validation, and service orchestration |
 | Decision Support Layer | DSS Engine | Evaluates textile details and burn-test answers, ranks Recycle / Donate / Upcycle, records audit trail |
 | Data Layer | Neon PostgreSQL / D1-compatible schema | Stores users, partners, submissions, DSS runs/results, transactions, outcome reports, messages, notifications, admin logs, and deleted-record snapshots |
@@ -54,8 +54,9 @@ flowchart TD
 5. DSS confirmation page shows ranked Recycle / Donate / Upcycle recommendations.
 6. User selects the final pathway and sends the request to a partner.
 7. Partner views the request, DSS explanation, required bag color, images, and user brief.
-8. Partner accepts or declines the request. After acceptance, the partner can mark it completed with a narrative outcome report and photos describing what the textile became.
-9. User receives notification and can track status, bag guidance, lightweight routing footprint estimate, and partner story from request pages.
+8. Partner accepts or declines the request. Acceptance notifies the user and links to My Requests where delivery details can be added.
+9. After acceptance, the user records courier or direct drop-off details, which notify and message the partner.
+10. Partner can later mark the accepted request completed with a narrative outcome report and photos describing what the textile became.
 
 ## Partner Flow
 
@@ -63,9 +64,10 @@ flowchart TD
 2. Partner views assigned textile requests.
 3. Partner reviews item details, DSS reasoning, user brief, and uploaded images.
 4. Partner updates the request status.
-5. When completing an accepted request, partner can report the textile outcome with title, notes, and photos, such as bag, wallet, construction material, or other recovered product.
-6. System notifies the user.
-7. Partner may submit rule/preference change requests to admin.
+5. Partner views user-submitted courier tracking or direct drop-off details inside the request detail panel.
+6. When completing an accepted request, partner can report the textile outcome with title, notes, and photos, such as bag, wallet, construction material, or other recovered product.
+7. System notifies the user.
+8. Partner may submit rule/preference change requests to admin.
 
 ## Admin Flow
 
@@ -103,7 +105,7 @@ The DSS engine currently scores Recycle, Donate, and Upcycle. Buyback is not a s
 | Partner Management | `partners`, `partner_rule_change_requests` |
 | Textile Submission | `submissions`, `submission_details`, `burn_tests`, `submission_images`; weight is stored on `submission_details.weight_value` and `submission_details.weight_unit` |
 | DSS Audit | `recommendation_runs`, `recommendation_results`, `recommendation_feedback`, `dss_rules` |
-| Transactions | `transactions`, `request_tracking_updates`; includes bag color, lightweight distance/carbon estimate metadata, user-side logistics/progress tracking, and partner outcome report fields including photo URLs |
+| Transactions | `transactions`, `request_tracking_updates`; includes bag color, lightweight distance/carbon estimate metadata, accepted-request courier/drop-off tracking, and partner outcome report fields including photo URLs |
 | Communication | `conversations`, `messages`, `message_attachments`, `notifications` |
 | Administration | `activity_logs`, `deleted_records`, `schema_migrations` |
 
