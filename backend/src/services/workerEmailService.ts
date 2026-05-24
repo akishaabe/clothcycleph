@@ -45,8 +45,9 @@ async function sendWithSendGrid(params: SendEmailParams) {
 }
 
 async function sendWithBrevo(params: SendEmailParams) {
+  const sender = parseEmailAddress(params.fromEmail);
   const body = {
-    sender: { email: params.fromEmail },
+    sender,
     to: [{ email: params.toEmail }],
     subject: params.subject,
     htmlContent: params.html,
@@ -65,6 +66,19 @@ async function sendWithBrevo(params: SendEmailParams) {
     const errorBody = await response.text();
     throw new Error(`Brevo email failed: ${response.status} ${errorBody}`);
   }
+}
+
+function parseEmailAddress(value: string) {
+  const match = value.match(/^(.*?)\s*<(.+)>$/);
+
+  if (!match) {
+    return { email: value };
+  }
+
+  return {
+    name: match[1].trim(),
+    email: match[2].trim(),
+  };
 }
 
 export async function sendTwoFactorCode(
