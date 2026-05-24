@@ -2,6 +2,8 @@ name = "clothcycle-api"
 main = "src/worker.ts"
 compatibility_date = "2026-05-13"
 
+compatibility_flags = ["nodejs_compat"]
+
 # Cloudflare Pages / Workers deployment configuration
 [build]
 command = "npm run worker:build"
