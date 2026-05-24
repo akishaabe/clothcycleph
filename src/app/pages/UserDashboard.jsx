@@ -131,7 +131,7 @@ const formatStatusLabel = (status) =>
 const normalizeStatus = (value) => {
   const status = String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
   if (["declined", "rejected", "cancelled", "canceled"].includes(status)) return "rejected";
-  if (["approved", "accepted", "in_progress"].includes(status)) return "accepted";
+  if (["approved", "accepted"].includes(status)) return "accepted";
   if (["completed", "processed", "complete"].includes(status)) return "completed";
   if (status === "pending") return "pending";
   return status;

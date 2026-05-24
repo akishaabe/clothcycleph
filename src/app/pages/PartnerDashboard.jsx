@@ -65,7 +65,7 @@ const decisionStatusStyles = {
 const normalizeStatus = (value) => {
   const status = String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
   if (["declined", "rejected", "cancelled", "canceled"].includes(status)) return "rejected";
-  if (["approved", "accepted", "in_progress"].includes(status)) return "accepted";
+  if (["approved", "accepted"].includes(status)) return "accepted";
   if (["completed", "processed", "complete"].includes(status)) return "completed";
   if (status === "pending") return "pending";
   return status;
@@ -125,6 +125,19 @@ const getDssRecommendation = (request) =>
     explanation: request?.explanation,
     checks: request?.output_payload?.rule_checks || [],
   };
+
+const getRequestRowKey = (request, index) =>
+  [
+    request?.id,
+    getRequestLifecycleStatus(request),
+    request?.updated_at,
+    request?.created_at,
+    request?.submission_id,
+    request?.user_id,
+    index,
+  ]
+    .filter(Boolean)
+    .join("-");
 
 function DecisionStatusIndicator({ status, compact = false }) {
   const normalizedStatus = normalizeStatus(status);
@@ -285,22 +298,62 @@ export function PartnerDashboard() {
     };
   }, [selectedRequest]);
 
+  const uniquePartnerRequests = useMemo(() => {
+    const seen = new Set();
+
+    return requests.filter((request) => {
+      const identity = [
+        request?.id,
+        getRequestLifecycleStatus(request),
+        request?.updated_at,
+        request?.created_at,
+        request?.submission_id,
+        request?.user_id,
+      ]
+        .map((value) => String(value ?? "").trim())
+        .join("|");
+
+      if (seen.has(identity)) {
+        return false;
+      }
+
+      seen.add(identity);
+      return true;
+    });
+  }, [requests]);
+
   const metrics = useMemo(() => {
-    const pending = requests.filter((request) => getRequestLifecycleStatus(request) === "pending").length;
-    const accepted = requests.filter((request) => getRequestLifecycleStatus(request) === "accepted").length;
+    const pending = uniquePartnerRequests.filter((request) => getRequestLifecycleStatus(request) === "pending").length;
+    const accepted = uniquePartnerRequests.filter((request) => getRequestLifecycleStatus(request) === "accepted").length;
 
     return [
       { icon: Package, label: "Active Requests", value: String(accepted), filter: "accepted", color: "#8aa6c8" },
       { icon: Clock, label: "Pending Requests", value: String(pending), filter: "pending", color: "#3f5f8f" },
-      { icon: BarChart3, label: "Total Requests", value: String(requests.length), filter: "all", color: "#6b93b8" }
+      { icon: BarChart3, label: "Total Requests", value: String(uniquePartnerRequests.length), filter: "all", color: "#6b93b8" }
     ];
-  }, [requests]);
+  }, [uniquePartnerRequests]);
 
-  const visiblePartnerRequests = useMemo(() => {
+  const requestStatusCounts = useMemo(
+    () =>
+      uniquePartnerRequests.reduce(
+        (counts, request) => {
+          const status = getRequestLifecycleStatus(request);
+          return {
+            ...counts,
+            all: counts.all + 1,
+            [status]: (counts[status] || 0) + 1,
+          };
+        },
+        { all: 0, pending: 0, accepted: 0, completed: 0, rejected: 0 },
+      ),
+    [uniquePartnerRequests],
+  );
+
+  const filteredPartnerRequests = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const selectedStatus = normalizeStatus(activeFilter);
 
-    const searchedRequests = requests.filter((request) => {
+    const searchedRequests = uniquePartnerRequests.filter((request) => {
       const status = getRequestLifecycleStatus(request);
       const queryMatch =
         !query ||
@@ -338,9 +391,7 @@ export function PartnerDashboard() {
       }
       return getRequestActivityTime(second) - getRequestActivityTime(first);
     });
-  }, [requests, activeFilter, searchQuery, requestSort]);
-
-  const filteredRequests = visiblePartnerRequests;
+  }, [uniquePartnerRequests, activeFilter, searchQuery, requestSort]);
 
   const filteredRuleRequests = useMemo(() => {
     const query = ruleRequestSearch.trim().toLowerCase();
@@ -674,7 +725,7 @@ export function PartnerDashboard() {
                 </p>
               </div>
               <span className="rounded-full bg-[#eff6ff] px-3 py-1 text-sm font-semibold text-[#41668f] dark:bg-white/10 dark:text-[#9fc5f8]">
-                {visiblePartnerRequests.length} shown
+                {filteredPartnerRequests.length} shown
               </span>
             </summary>
             <div className="p-6 pt-5">
@@ -716,14 +767,17 @@ export function PartnerDashboard() {
                 (status) => (
                   <button
                     key={status}
-                    onClick={() => setActiveFilter(status)}
-                    className={`rounded-xl px-4 py-2 text-sm capitalize transition-colors ${
-                      activeFilter === status
+                    onClick={() => setActiveFilter(normalizeStatus(status))}
+                    className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm capitalize transition-colors ${
+                      normalizeStatus(activeFilter) === status
                         ? "bg-[#4f6f9f] text-white"
                         : "bg-[#eff6ff] text-[#41668f] hover:bg-[#dbeafe] dark:bg-white/10 dark:text-[#9fc5f8] dark:hover:bg-white/15"
                     }`}
                   >
-                    {formatStatusLabel(status)}
+                    <span>{formatStatusLabel(status)}</span>
+                    <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs text-[#41668f] dark:bg-white/15 dark:text-[#cfe1ff]">
+                      {requestStatusCounts[status] || 0}
+                    </span>
                   </button>
                 ),
               )}
@@ -759,7 +813,7 @@ export function PartnerDashboard() {
                   </tr>
                 )}
 
-                {!isLoadingRequests && visiblePartnerRequests.length === 0 && (
+                {!isLoadingRequests && filteredPartnerRequests.length === 0 && (
                   <tr>
                     <td colSpan={7} className="py-10 text-center text-[#41668f] dark:text-[#9fc5f8]">
                       No requests match this view.
@@ -767,11 +821,11 @@ export function PartnerDashboard() {
                   </tr>
                 )}
 
-                {!isLoadingRequests && visiblePartnerRequests.map((request) => {
+                {!isLoadingRequests && filteredPartnerRequests.map((request, index) => {
                   const lifecycleStatus = getRequestLifecycleStatus(request);
 
                   return (
-                  <tr key={request.id} className="border-b border-[#d6e6f8] transition-colors hover:bg-[#eff6ff] dark:border-white/10 dark:hover:bg-white/[0.04]">
+                  <tr key={getRequestRowKey(request, index)} className="border-b border-[#d6e6f8] transition-colors hover:bg-[#eff6ff] dark:border-white/10 dark:hover:bg-white/[0.04]">
                     <td className="py-3 px-4 text-sm text-[#10233f] dark:text-white">{request.id.slice(0, 8)}</td>
                     <td className="py-3 px-4 text-sm text-[#10233f] dark:text-white">{request.user_name}</td>
                     <td className="py-3 px-4 text-sm text-[#41668f] dark:text-[#cfe1ff]">{pathwayLabels[request.type] || request.type}</td>
@@ -800,7 +854,7 @@ export function PartnerDashboard() {
                         >
                           <Eye className="w-4 h-4 text-[#41668f]" />
                         </button>
-                        {lifecycleStatus === "pending" ? (
+                        {lifecycleStatus === "pending" && (
                           <>
                             <button
                               onClick={() => updateRequestStatus(request, "accepted", "")}
@@ -819,8 +873,6 @@ export function PartnerDashboard() {
                               <XCircle className="w-4 h-4 text-red-600" />
                             </button>
                           </>
-                        ) : (
-                          <DecisionStatusIndicator status={request.status} compact />
                         )}
                       </div>
                     </td>
