@@ -13,7 +13,7 @@ name = "clothcycle-api-staging"
 [vars]
 # Non-secret runtime configuration. Put secrets with `wrangler secret put`.
 EMAIL_PROVIDER = "brevo"
-EMAIL_FROM = "ClothCycle PH <noreply@clothcycleph.com>"
+EMAIL_FROM = "ClothCycle PH <clothcycleph@11207498.brevosend.com>"
 CORS_ORIGIN = "http://localhost:5173,https://clothcycleph.com,https://clothcycleph.pages.dev"
 APP_URL = "https://clothcycleph.com"
 GOOGLE_CLIENT_ID = "99753216090-5n5dtora33uuav8nkn8ntp8e0tfiojjs.apps.googleusercontent.com"
