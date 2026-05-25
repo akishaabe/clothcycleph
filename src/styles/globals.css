@@ -3,6 +3,8 @@
 body {
   margin: 0;
   min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
   background: #f8faf6;
   color: #19221d;
   font-family: 'Inter', sans-serif;
@@ -108,6 +110,120 @@ h7 {
 
 html {
   scroll-behavior: smooth;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
+input,
+textarea,
+select,
+button {
+  max-width: 100%;
+}
+
+input,
+textarea,
+select {
+  min-width: 0;
+}
+
+.app-darkable-page,
+.landing-page,
+.login-page,
+.signup-page,
+.submission-page,
+.messages-page {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.app-darkable-page *,
+.landing-page *,
+.login-page *,
+.signup-page *,
+.submission-page *,
+.messages-page * {
+  min-width: 0;
+}
+
+.app-darkable-page p,
+.app-darkable-page li,
+.app-darkable-page td,
+.app-darkable-page th,
+.app-darkable-page dd,
+.app-darkable-page dt,
+.app-darkable-page span,
+.app-darkable-page a {
+  overflow-wrap: anywhere;
+}
+
+.app-darkable-page table {
+  max-width: 100%;
+}
+
+.app-darkable-page [class*="fixed"][class*="inset-0"] {
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+@media (max-width: 767px) {
+  .app-darkable-page nav {
+    padding-inline: 1rem !important;
+  }
+
+  .app-darkable-page nav > div,
+  .app-darkable-page main,
+  .app-darkable-page main > *,
+  .app-darkable-page section,
+  .app-darkable-page article,
+  .app-darkable-page form,
+  .app-darkable-page form > *,
+  .app-darkable-page [role="dialog"] {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .app-darkable-page main {
+    padding-inline: 1rem !important;
+  }
+
+  .app-darkable-page [class*="rounded-[28px]"],
+  .app-darkable-page [class*="rounded-[32px]"],
+  .app-darkable-page [class*="rounded-[36px]"] {
+    border-radius: 1.25rem !important;
+  }
+
+  .app-darkable-page [class*="fixed"][class*="inset-0"] {
+    padding: 1rem !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .app-darkable-page h1 {
+    font-size: clamp(2rem, 10.5vw, 3rem);
+    line-height: 1.08;
+  }
+
+  .app-darkable-page h2,
+  .app-darkable-page h3 {
+    line-height: 1.12;
+  }
 }
 
 .glass {

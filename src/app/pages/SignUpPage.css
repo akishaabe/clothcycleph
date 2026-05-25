@@ -3,8 +3,51 @@
 }
 .signup-page__card {
   max-width: 1100px;
+  min-width: 0;
+  overflow-x: clip;
 }
 .signup-page input:focus,
 .signup-page textarea:focus {
   outline: none;
+}
+
+.signup-page,
+.signup-page__card > *,
+.signup-page form,
+.signup-page form > *,
+.signup-page input,
+.signup-page textarea,
+.signup-page button,
+.signup-page a {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.auth-google-button,
+.auth-google-button > div,
+.auth-google-button iframe {
+  max-width: 100% !important;
+}
+
+@media (max-width: 640px) {
+  .signup-page {
+    align-items: flex-start;
+    min-height: 100svh;
+    padding: 1rem !important;
+  }
+
+  .signup-page__card {
+    border-radius: 1.5rem !important;
+  }
+
+  .signup-page__card > div:last-child {
+    max-height: none !important;
+    overflow-y: visible;
+    padding: 1.5rem !important;
+  }
+
+  .signup-page h1 {
+    font-size: clamp(2.25rem, 11vw, 3rem) !important;
+    line-height: 1.05;
+  }
 }

@@ -41,7 +41,7 @@ export function FloatingPageControls() {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-[80] flex flex-col items-end gap-3">
+    <div className="fixed bottom-4 right-4 z-[80] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-3 sm:bottom-6 sm:right-6">
       {!hideScrollTop && showScrollTop && (
         <button
           type="button"

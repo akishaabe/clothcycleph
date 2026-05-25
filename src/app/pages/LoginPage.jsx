@@ -23,7 +23,7 @@ import {
 } from "../../services/googleIdentity";
 
 import "./LoginPage.css";
-import { isStrongPassword, PasswordChecklist } from "../../utils/passwordPolicy";
+import { isStrongPassword, PasswordChecklist, PasswordMatchHint } from "../../utils/passwordPolicy";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -49,6 +49,7 @@ export function LoginPage() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
   const [isNewPasswordFocused, setIsNewPasswordFocused] = useState(false);
+  const [isConfirmNewPasswordFocused, setIsConfirmNewPasswordFocused] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
   const googleClientId = getGoogleClientId();
   const twoFactorStorageKey = "clothcycle_pending_2fa";
@@ -171,10 +172,15 @@ export function LoginPage() {
             }
           },
         });
+        const googleButtonWidth = Math.min(
+          360,
+          Math.max(240, googleButtonRef.current.clientWidth || 360),
+        );
+
         window.google.accounts.id.renderButton(googleButtonRef.current, {
           theme: "outline",
           size: "large",
-          width: 360,
+          width: googleButtonWidth,
           text: "continue_with",
         });
       })
@@ -735,7 +741,6 @@ export function LoginPage() {
                     {isNewPasswordFocused ? (
                       <PasswordChecklist
                         password={newPassword}
-                        confirmPassword={confirmNewPassword}
                       />
                     ) : null}
                   </div>
@@ -749,6 +754,8 @@ export function LoginPage() {
                         type={showConfirmNewPassword ? "text" : "password"}
                         value={confirmNewPassword}
                         onChange={(e) => setConfirmNewPassword(e.target.value)}
+                        onFocus={() => setIsConfirmNewPasswordFocused(true)}
+                        onBlur={() => setIsConfirmNewPasswordFocused(false)}
                         placeholder="Retype new password"
                         required
                         className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-12 text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
@@ -763,6 +770,12 @@ export function LoginPage() {
                         {showConfirmNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                       </button>
                     </div>
+                    {(isConfirmNewPasswordFocused || confirmNewPassword) ? (
+                      <PasswordMatchHint
+                        password={newPassword}
+                        confirmPassword={confirmNewPassword}
+                      />
+                    ) : null}
                   </div>
                     </>
                   ) : null}
@@ -801,8 +814,8 @@ export function LoginPage() {
                   ) : null}
 
                   {googleClientId ? (
-                    <div className="flex justify-center">
-                      <div ref={googleButtonRef} />
+                    <div className="auth-google-button flex justify-center">
+                      <div ref={googleButtonRef} className="w-full max-w-[360px]" />
                     </div>
                   ) : null}
 

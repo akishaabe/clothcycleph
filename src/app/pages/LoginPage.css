@@ -16,3 +16,59 @@
 
   border-radius: 32px;
 }
+
+.login-page,
+.login-page__card {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.login-page__card > *,
+.login-page form,
+.login-page form > *,
+.login-page input,
+.login-page button,
+.login-page a {
+  min-width: 0;
+}
+
+.auth-google-button,
+.auth-google-button > div,
+.auth-google-button iframe {
+  max-width: 100% !important;
+}
+
+@media (max-width: 640px) {
+  .login-page {
+    align-items: flex-start;
+    justify-content: flex-start;
+    min-height: 100svh;
+    padding: 1rem !important;
+  }
+
+  .login-page__card {
+    border-radius: 1.5rem !important;
+  }
+
+  .login-page__card > div:last-child {
+    padding: 1.5rem !important;
+  }
+
+  .login-page h1 {
+    font-size: clamp(2.25rem, 12vw, 3rem) !important;
+    line-height: 1.05;
+  }
+
+  .login-page p {
+    font-size: 1rem !important;
+  }
+
+  .login-page a span {
+    font-size: clamp(1.35rem, 7vw, 1.75rem) !important;
+  }
+
+  .login-page input {
+    font-size: 1rem;
+  }
+}

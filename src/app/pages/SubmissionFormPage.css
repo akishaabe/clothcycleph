@@ -3,8 +3,47 @@
 }
 .submission-page .submission-panel {
   max-width: 900px;
+  min-width: 0;
 }
 .submission-page textarea:focus,
 .submission-page input:focus {
   outline: none;
+}
+
+.submission-page,
+.submission-page form,
+.submission-page form > *,
+.submission-page input,
+.submission-page textarea,
+.submission-page select,
+.submission-page button,
+.submission-page .submission-panel {
+  max-width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .submission-page {
+    align-items: flex-start;
+    min-height: 100svh;
+    padding-inline: 1rem !important;
+  }
+
+  .submission-page .submission-panel {
+    border-radius: 1.25rem !important;
+    padding: 1.25rem !important;
+  }
+
+  .submission-page nav {
+    padding-inline: 1rem !important;
+  }
+
+  .submission-page h1 {
+    font-size: clamp(2rem, 11vw, 3rem) !important;
+    line-height: 1.08;
+  }
+
+  .submission-page h2 {
+    font-size: clamp(1.4rem, 7vw, 1.75rem) !important;
+  }
 }

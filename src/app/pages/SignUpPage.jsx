@@ -92,10 +92,15 @@ export function SignUpPage() {
             }
           },
         });
+        const googleButtonWidth = Math.min(
+          360,
+          Math.max(240, googleButtonRef.current.clientWidth || 360),
+        );
+
         window.google.accounts.id.renderButton(googleButtonRef.current, {
           theme: "outline",
           size: "large",
-          width: 360,
+          width: googleButtonWidth,
           text: "signup_with",
         });
       })
@@ -386,8 +391,8 @@ export function SignUpPage() {
                 or
                 <div className="h-px flex-1 bg-[#e7ebe6]" />
               </div>
-              <div className="flex justify-center">
-                <div ref={googleButtonRef} />
+              <div className="auth-google-button flex justify-center">
+                <div ref={googleButtonRef} className="w-full max-w-[360px]" />
               </div>
               {isGoogleSubmitting ? (
                 <div className="rounded-xl border border-[#dce4da] bg-[#f8faf6] px-4 py-3 text-sm text-[#5f6f67]">
