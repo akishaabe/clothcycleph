@@ -6,6 +6,7 @@ import {
   hashPassword,
   comparePassword,
   generateNumericCode,
+  generateSecureToken,
   hashToken,
   verifyToken,
 } from '../utils/auth.js';
@@ -690,7 +691,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
 
       await query(
         `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
-         VALUES ($1, $2, NOW() + INTERVAL '30 minutes')`,
+         VALUES ($1, $2, NOW() + INTERVAL '15 minutes')`,
         [userResult.rows[0].id, tokenHash]
       );
 
@@ -904,14 +905,15 @@ export const resetPassword = async (req: Request, res: Response) => {
     const tokenResult = await client.query(
       `SELECT *
        FROM password_reset_tokens
-       WHERE token_hash = $1
+       WHERE reset_token_hash = $1
+         AND verified_at IS NOT NULL
          AND used_at IS NULL
-         AND expires_at > NOW()`,
+         AND reset_token_expires_at > NOW()`,
       [tokenHash]
     );
 
     if (tokenResult.rows.length === 0) {
-      throw new AppError(400, 'Invalid or expired reset code');
+      throw new AppError(400, 'Verify your email before resetting your password');
     }
 
     const passwordHash = await hashPassword(password);
@@ -964,7 +966,19 @@ export const verifyResetCode = async (req: Request, res: Response) => {
       throw new AppError(400, 'Invalid or expired reset code');
     }
 
-    res.json({ message: 'Reset code verified' });
+    const resetToken = generateSecureToken();
+    const resetTokenHash = hashToken(resetToken);
+
+    await query(
+      `UPDATE password_reset_tokens
+       SET verified_at = NOW(),
+           reset_token_hash = $1,
+           reset_token_expires_at = NOW() + INTERVAL '10 minutes'
+       WHERE id = $2`,
+      [resetTokenHash, tokenResult.rows[0].id]
+    );
+
+    res.json({ message: 'Reset code verified', reset_token: resetToken });
   } catch (error) {
     sendAuthError(res, error);
   }

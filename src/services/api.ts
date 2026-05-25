@@ -222,7 +222,7 @@ export const authService = {
     });
   },
 
-  async verifyResetCode(payload: { code: string }): Promise<{ message: string }> {
+  async verifyResetCode(payload: { code: string }): Promise<{ message: string; reset_token: string }> {
     return fetchWithAuth('/auth/verify-reset-code', {
       method: 'POST',
       body: JSON.stringify(payload),

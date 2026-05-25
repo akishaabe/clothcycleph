@@ -479,7 +479,7 @@ export async function forgotPasswordD1(db: D1Database, email: string, options: A
     await executeD1(
       db,
       `INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at)
-       VALUES (?, ?, ?, datetime('now', '+30 minutes'))`,
+       VALUES (?, ?, ?, datetime('now', '+15 minutes'))`,
       [generateD1UUID(), user.id, tokenHash]
     );
 
@@ -504,12 +504,16 @@ export async function resetPasswordD1(db: D1Database, token: string, password: s
   const tokenHash = await hashToken(token.trim());
   const record = await queryD1First(
     db,
-    `SELECT * FROM password_reset_tokens WHERE token_hash = ? AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP`,
+    `SELECT * FROM password_reset_tokens
+     WHERE reset_token_hash = ?
+       AND verified_at IS NOT NULL
+       AND used_at IS NULL
+       AND reset_token_expires_at > CURRENT_TIMESTAMP`,
     [tokenHash]
   );
 
   if (!record) {
-    throw new Error('Invalid or expired reset token');
+    throw new Error('Verify your email before resetting your password');
   }
 
   const passwordHash = await hashPassword(password);
@@ -539,7 +543,20 @@ export async function verifyResetCodeD1(db: D1Database, token: string) {
     throw new Error('Invalid or expired reset code');
   }
 
-  return { message: 'Reset code is valid' };
+  const resetToken = generateSecureToken();
+  const resetTokenHash = await hashToken(resetToken);
+
+  await executeD1(
+    db,
+    `UPDATE password_reset_tokens
+     SET verified_at = CURRENT_TIMESTAMP,
+         reset_token_hash = ?,
+         reset_token_expires_at = datetime('now', '+10 minutes')
+     WHERE id = ?`,
+    [resetTokenHash, record.id]
+  );
+
+  return { message: 'Reset code verified', reset_token: resetToken };
 }
 
 export async function getUsersD1(db: D1Database, role?: string) {

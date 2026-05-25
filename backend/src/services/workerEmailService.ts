@@ -103,7 +103,7 @@ export async function sendPasswordResetLink(
   const subject = 'Reset your ClothCycle password';
   const resetCode = extractResetCode(resetLink);
   const html = resetCode
-    ? `<p>Use this 6-digit password reset code to reset your password:</p><p style="font-size: 28px; letter-spacing: 6px; font-weight: 700;">${resetCode}</p><p>This code expires in 30 minutes. If you did not request this, ignore this email.</p>`
+    ? `<p>Use this 6-digit verification code to reset your password:</p><p style="font-size: 28px; letter-spacing: 6px; font-weight: 700;">${resetCode}</p><p>This code expires in 15 minutes. If you did not request this, ignore this email.</p>`
     : `<p>Click the link below to reset your password:</p><p><a href="${resetLink}">${resetLink}</a></p><p>If you did not request this, ignore this email.</p>`;
   return sendEmail({ provider, apiKey, fromEmail, toEmail, subject, html });
 }

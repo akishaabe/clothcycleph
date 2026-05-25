@@ -19,7 +19,7 @@ interface AuthContextType {
   verifyTwoFactor: (twoFactorToken: string, code: string, remember?: boolean) => Promise<User>;
   resendTwoFactorCode: (twoFactorToken: string) => Promise<{ message: string; requiresTwoFactor: true; two_factor_token: string; two_factor_method?: 'email' | 'totp'; dev_code?: string }>;
   forgotPassword: (email: string) => Promise<{ message: string; reset_token?: string }>;
-  verifyResetCode: (resetToken: string) => Promise<{ message: string }>;
+  verifyResetCode: (resetToken: string) => Promise<{ message: string; reset_token: string }>;
   resetPassword: (resetToken: string, password: string) => Promise<{ message: string }>;
   updateProfile: (payload: any) => Promise<User>;
   changePassword: (currentPassword: string, newPassword: string, confirmPassword: string) => Promise<{ message: string }>;
@@ -144,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const resetPassword = (resetToken: string, password: string) => {
-    return authService.resetPassword({ code: resetToken, password, confirm_password: password });
+    return authService.resetPassword({ token: resetToken, password, confirm_password: password });
   };
 
   const updateProfile = async (payload: any) => {

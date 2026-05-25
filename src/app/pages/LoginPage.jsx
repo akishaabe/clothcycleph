@@ -39,6 +39,7 @@ export function LoginPage() {
   const [authMode, setAuthMode] = useState("login");
   const [resetStep, setResetStep] = useState("code");
   const [resetToken, setResetToken] = useState("");
+  const [verifiedResetToken, setVerifiedResetToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -222,6 +223,7 @@ export function LoginPage() {
         if (response.reset_token) {
           setResetToken(response.reset_token);
         }
+        setVerifiedResetToken("");
         setAuthMode("reset");
         setResetStep("code");
         setResendCountdown(15);
@@ -231,10 +233,11 @@ export function LoginPage() {
       if (authMode === "reset") {
         if (resetStep === "code") {
           if (!/^\d{6}$/.test(resetToken)) {
-            throw new Error("Enter the 6-digit reset code first.");
+            throw new Error("Enter the 6-digit verification code first.");
           }
 
-          await verifyResetCode(resetToken);
+          const response = await verifyResetCode(resetToken);
+          setVerifiedResetToken(response.reset_token);
           setResetStep("password");
           setSuccessMessage("Code verified. Choose a new password.");
           return;
@@ -248,12 +251,17 @@ export function LoginPage() {
           throw new Error("New password does not meet the strength requirements.");
         }
 
-        const response = await resetPassword(resetToken, newPassword);
+        if (!verifiedResetToken) {
+          throw new Error("Verify your email code before choosing a new password.");
+        }
+
+        const response = await resetPassword(verifiedResetToken, newPassword);
         setSuccessMessage(response.message);
         setPassword("");
         setNewPassword("");
         setConfirmNewPassword("");
         setResetToken("");
+        setVerifiedResetToken("");
         setAuthMode("login");
         return;
       }
@@ -284,6 +292,7 @@ export function LoginPage() {
     setAuthMode("login");
     clearTwoFactorChallenge();
     setResetToken("");
+    setVerifiedResetToken("");
     setNewPassword("");
     setConfirmNewPassword("");
     setResetStep("code");
@@ -318,6 +327,7 @@ export function LoginPage() {
         if (response.reset_token) {
           setResetToken(response.reset_token);
         }
+        setVerifiedResetToken("");
         setResendCountdown(30);
       }
     } catch (resendError) {
@@ -452,7 +462,7 @@ export function LoginPage() {
                 {twoFactorToken
                   ? "Verifying Identity"
                   : authMode === "forgot"
-                    ? "Reset Password"
+                    ? "Verify Email"
                     : authMode === "reset"
                       ? "New Password"
                       : "Log In"}
@@ -464,10 +474,10 @@ export function LoginPage() {
                   ? "Enter your authenticator code"
                   : "Enter the code sent to your email"
                 : authMode === "forgot"
-                  ? "Request a password reset code"
+                  ? "Request an email verification code"
                   : authMode === "reset"
                     ? resetStep === "code"
-                      ? "Enter your 6-digit reset code first"
+                      ? "Enter the 6-digit code sent to your email"
                       : "Choose and confirm your new password"
                     : "Access your sustainable fashion account"}
             </p>
@@ -692,58 +702,60 @@ export function LoginPage() {
 
               {authMode === "reset" ? (
                 <>
-                  <div>
-                    <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
-                      Reset Code
-                    </label>
-                    <div className="relative">
-                      <KeyRound className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#5f6f67] dark:text-zinc-500" />
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={6}
-                        value={resetToken}
-                        onChange={(e) => setResetToken(e.target.value)}
-                        placeholder="123456"
-                        required
-                        className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-4 text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
-                      />
-                  </div>
-                </div>
+                  {resetStep === "code" ? (
+                    <div>
+                      <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
+                        Verification Code
+                      </label>
+                      <div className="relative">
+                        <KeyRound className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#5f6f67] dark:text-zinc-500" />
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={resetToken}
+                          onChange={(e) => setResetToken(e.target.value)}
+                          placeholder="123456"
+                          required
+                          className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-4 text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
                   {resetStep === "password" ? (
                     <>
-                  <div>
-                    <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
-                      New Password
-                    </label>
-                    <div className="relative">
-                      <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#5f6f67] dark:text-zinc-500" />
-                      <input
-                        type={showNewPassword ? "text" : "password"}
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        onFocus={() => setIsNewPasswordFocused(true)}
-                        onBlur={() => setIsNewPasswordFocused(false)}
-                        placeholder="New password"
-                        required
-                        className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-12 text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowNewPassword((current) => !current)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[#5f6f67] transition-colors hover:text-[#336158] dark:text-zinc-500 dark:hover:text-white"
-                        aria-label={showNewPassword ? "Hide password" : "Show password"}
-                        title={showNewPassword ? "Hide password" : "Show password"}
-                      >
-                        {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                      </button>
-                    </div>
-                    {isNewPasswordFocused ? (
-                      <PasswordChecklist
-                        password={newPassword}
-                      />
-                    ) : null}
-                  </div>
+                      <div>
+                        <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
+                          New Password
+                        </label>
+                        <div className="relative">
+                          <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#5f6f67] dark:text-zinc-500" />
+                          <input
+                            type={showNewPassword ? "text" : "password"}
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            onFocus={() => setIsNewPasswordFocused(true)}
+                            onBlur={() => setIsNewPasswordFocused(false)}
+                            placeholder="New password"
+                            required
+                            className="w-full rounded-xl border-2 border-[#e7ebe6] bg-white py-3 pl-12 pr-12 text-[#19221d] transition-all placeholder:text-[#8a9a91] focus:border-[#336158] focus:outline-none focus:ring-2 focus:ring-[#336158]/20 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-zinc-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPassword((current) => !current)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-[#5f6f67] transition-colors hover:text-[#336158] dark:text-zinc-500 dark:hover:text-white"
+                            aria-label={showNewPassword ? "Hide password" : "Show password"}
+                            title={showNewPassword ? "Hide password" : "Show password"}
+                          >
+                            {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                          </button>
+                        </div>
+                        {isNewPasswordFocused ? (
+                          <PasswordChecklist
+                            password={newPassword}
+                          />
+                        ) : null}
+                      </div>
                   <div>
                     <label className="block text-sm mb-2 text-[#19221d] dark:text-zinc-300">
                       Retype New Password
@@ -782,10 +794,10 @@ export function LoginPage() {
                 </>
               ) : null}
 
-              {!twoFactorToken && authMode === "reset" ? (
+              {!twoFactorToken && authMode === "reset" && resetStep === "code" ? (
                 <div className="text-sm text-[#5f6f67] dark:text-zinc-400">
                   {resendCountdown > 0
-                    ? `Didn't receive a code? You can request ${authMode === "reset" ? "a new reset code" : "another code"} again in ${resendCountdown}s.`
+                    ? `Didn't receive a code? You can request a new verification code again in ${resendCountdown}s.`
                     : `Didn't receive a code?`}
                   {resendCountdown === 0 ? (
                     <>
@@ -795,7 +807,7 @@ export function LoginPage() {
                         onClick={handleResend}
                         className="text-[#336158] transition-colors hover:text-[#2a4c48] dark:hover:text-white"
                       >
-                        Request {authMode === "reset" ? "a new reset code" : "another code"}
+                        Request a new verification code
                       </button>
                     </>
                   ) : null}
@@ -872,7 +884,7 @@ export function LoginPage() {
                   : twoFactorToken
                     ? "Verify Code"
                     : authMode === "forgot"
-                      ? "Send Reset Code"
+                      ? "Send Verification Code"
                       : authMode === "reset"
                         ? resetStep === "code"
                           ? "Continue"

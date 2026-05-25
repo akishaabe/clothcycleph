@@ -81,7 +81,7 @@ export interface ForgotPasswordPayload {
 }
 
 export interface ResetPasswordPayload {
-  code: string;
+  token: string;
   password: string;
   confirm_password?: string;
 }

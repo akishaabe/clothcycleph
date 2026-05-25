@@ -12,6 +12,14 @@
 - Pre-authentication 2FA responses do not include a dashboard token. Existing stored auth state is cleared when a login attempt returns a 2FA challenge, so dashboard access remains blocked until code verification succeeds.
 - The signed pre-authentication challenge token is kept in `sessionStorage` as `clothcycle_pending_2fa` so refresh/reload returns to the verification panel instead of bypassing 2FA.
 
+## Forgot Password
+
+- Forgot Password uses its own password reset token table and does not use the login 2FA challenge fields.
+- The user first requests an email verification code. The code is stored hashed and expires after 15 minutes.
+- Verifying the email code issues a separate short-lived reset token. The password reset endpoint accepts only that verified reset token, not the raw email code.
+- The verified reset token expires after 10 minutes and is marked used after a successful password reset.
+- Resend requests create a fresh email verification code.
+
 ## Profile Photo
 
 - Profile photo uploads are stored through the configured upload endpoint and the resulting URL is saved on the user profile.

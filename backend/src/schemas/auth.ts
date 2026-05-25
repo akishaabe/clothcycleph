@@ -51,13 +51,13 @@ export const forgotPasswordSchema = z.object({
 });
 
 export const resetPasswordSchema = z.object({
-  code: z.string().trim().regex(/^\d{6}$/, 'Reset code must be 6 digits').optional(),
-  token: z.string().trim().regex(/^\d{6}$/, 'Reset code must be 6 digits').optional(),
+  code: z.string().trim().min(32, 'Verified reset token is required').optional(),
+  token: z.string().trim().min(32, 'Verified reset token is required').optional(),
   password: strongPasswordSchema,
   confirm_password: strongPasswordSchema.optional(),
 }).refine((data) => data.code || data.token, {
-  message: 'Reset code is required',
-  path: ['code'],
+  message: 'Verify your email before resetting your password',
+  path: ['token'],
 }).refine((data) => !data.confirm_password || data.password === data.confirm_password, {
   message: 'Passwords do not match',
   path: ['confirm_password'],
