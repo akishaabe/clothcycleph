@@ -102,7 +102,7 @@ export const login = async (req: Request, res: Response) => {
     // Get user
     const result = await query('SELECT * FROM users WHERE email = $1', [email]);
     if (result.rows.length === 0) {
-      throw new AppError(401, 'Invalid credentials');
+      throw new AppError(401, 'Account doesn\'t exist');
     }
 
     const user = result.rows[0];
@@ -130,7 +130,7 @@ export const login = async (req: Request, res: Response) => {
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
       });
-      throw new AppError(401, 'Invalid credentials');
+      throw new AppError(401, 'Account doesn\'t exist');
     }
 
     assertAccountCanAuthenticate(user);

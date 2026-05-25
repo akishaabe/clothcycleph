@@ -91,7 +91,7 @@ export async function loginD1(
 }> {
   const user = await queryD1First(db, 'SELECT * FROM users WHERE email = ?', [email]);
   if (!user) {
-    throw new Error('Invalid credentials');
+    throw new Error('Account doesn\'t exist');
   }
 
   if (user.locked_until && new Date(user.locked_until).getTime() > Date.now()) {
@@ -111,7 +111,7 @@ export async function loginD1(
        WHERE id = ?`,
       [user.id]
     );
-    throw new Error('Invalid credentials');
+    throw new Error('Account doesn\'t exist');
   }
 
   assertAccountCanAuthenticate(user);
