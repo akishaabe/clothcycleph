@@ -177,7 +177,7 @@ export function SignUpPage() {
       <div className="signup-page__card w-full max-w-5xl grid md:grid-cols-2 gap-0 bg-white rounded-3xl shadow-2xl overflow-hidden">
         {/* Left side - Image */}
         <motion.div
-          initial={{ opacity: 0, x: -50 }}
+          initial={false}
           animate={{ opacity: 1, x: 0 }}
           className="hidden md:flex relative bg-gradient-to-br from-[#7d9283] to-[#336158] items-center justify-center p-12"
         >
@@ -200,7 +200,7 @@ export function SignUpPage() {
 
         {/* Right side - Form */}
         <motion.div
-          initial={{ opacity: 0, x: 50 }}
+          initial={false}
           animate={{ opacity: 1, x: 0 }}
           className="p-12 overflow-y-auto max-h-screen"
         >

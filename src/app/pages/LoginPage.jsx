@@ -363,7 +363,7 @@ export function LoginPage() {
       >
         {/* Left Side */}
         <motion.div
-          initial={{ opacity: 0, x: -50 }}
+          initial={false}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8 }}
           className="
@@ -422,7 +422,7 @@ export function LoginPage() {
 
         {/* Right Side */}
         <motion.div
-          initial={{ opacity: 0, x: 50 }}
+          initial={false}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8 }}
           className="

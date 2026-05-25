@@ -7,6 +7,8 @@ import {
   Leaf,
   Package,
   Scissors,
+  Handshake,
+  Mail,
 } from "lucide-react";
 
 import "./LandingPage.css";
@@ -110,7 +112,7 @@ export function LandingPage() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <motion.div
             className="flex items-center gap-3"
-            initial={{ opacity: 0, x: -20 }}
+            initial={false}
             animate={{ opacity: 1, x: 0 }}
           >
             <motion.div
@@ -129,11 +131,11 @@ export function LandingPage() {
             </span>
           </motion.div>
 
-          <div className="hidden md:flex items-center gap-8">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-4 md:gap-8">
 
             <Link
               to="/login"
-              className="text-[#5f6f67] dark:text-zinc-300 hover:text-[#336158] dark:hover:text-[#336158] transition-colors"
+              className="inline-flex min-h-10 items-center rounded-full px-3 text-sm font-medium text-[#5f6f67] transition-colors hover:text-[#336158] dark:text-zinc-300 dark:hover:text-[#336158] sm:px-4 md:text-base"
             >
               Log In
             </Link>
@@ -141,8 +143,11 @@ export function LandingPage() {
             <Link
               to="/signup"
               className="
-                px-6
-                py-2.5
+                inline-flex
+                min-h-10
+                items-center
+                px-4
+                py-2
                 bg-[#336158]
                 text-white
                 rounded-full
@@ -151,6 +156,11 @@ export function LandingPage() {
                 hover:shadow-2xl
                 hover:scale-105
                 font-medium
+                text-sm
+                sm:px-5
+                md:px-6
+                md:py-2.5
+                md:text-base
               "
             >
               Sign Up
@@ -165,7 +175,7 @@ export function LandingPage() {
           <div className="grid md:grid-cols-2 gap-16 items-center">
             {/* Left */}
             <motion.div
-              initial={{ opacity: 0, y: 30 }}
+              initial={false}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
             >
@@ -228,7 +238,7 @@ export function LandingPage() {
 
             {/* Right */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.92 }}
+              initial={false}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.8, delay: 0.2 }}
               className="relative"
@@ -304,7 +314,7 @@ export function LandingPage() {
       {/* SDG 12 */}
       <motion.section
         id="sdg-12"
-        className="py-24 px-6 bg-transparent"
+        className="sdg-section py-24 px-6 bg-transparent"
         initial="hidden"
         whileInView="visible"
         viewport={viewportReveal}
@@ -313,6 +323,7 @@ export function LandingPage() {
           <motion.div
             variants={revealUp}
             className="
+              sdg-layout
               grid
               gap-8
               md:grid-cols-[auto_minmax(0,1fr)]
@@ -320,16 +331,16 @@ export function LandingPage() {
               items-center
             "
           >
-            <div className="flex justify-center md:justify-start">
+            <div className="sdg-logo-wrap flex justify-center md:justify-start">
               <img
                 src="/sdg12-logo.png"
                 alt="SDG 12 Responsible Consumption and Production"
-                className="w-full max-w-[300px] md:max-w-[340px] bg-white"
+                className="sdg-logo w-full max-w-[300px] md:max-w-[340px] bg-white"
               />
             </div>
 
-            <div>
-              <h3 className="font-sans text-4xl md:text-5xl font-semibold mb-6 text-[#19221d] dark:text-white">
+            <div className="sdg-copy">
+              <h3 className="sdg-heading font-sans text-4xl md:text-5xl font-semibold mb-6 text-[#19221d] dark:text-white">
                 Aligned With SDG 12
               </h3>
 
@@ -529,6 +540,75 @@ export function LandingPage() {
                 </motion.div>
               ))}
             </motion.div>
+          </motion.div>
+        </div>
+      </motion.section>
+
+      {/* Partner CTA */}
+      <motion.section
+        id="partner-network"
+        className="py-24 px-6 bg-white dark:bg-white/[0.02]"
+        initial="hidden"
+        whileInView="visible"
+        viewport={viewportReveal}
+      >
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            variants={revealUp}
+            className="
+              partner-cta
+              overflow-hidden
+              rounded-[32px]
+              border
+              border-[#dce4da]
+              bg-[linear-gradient(135deg,#f8faf6,#edf7ed,#fff8e8)]
+              px-6
+              py-10
+              shadow-[0_18px_48px_rgba(51,97,88,0.12)]
+              dark:border-white/10
+              dark:bg-[linear-gradient(135deg,#151a18,#121821,#171410)]
+              md:px-10
+              md:py-12
+            "
+          >
+            <div className="grid gap-8 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#336158] text-white shadow-[0_14px_34px_rgba(51,97,88,0.22)] md:mx-0">
+                <Handshake className="h-8 w-8" />
+              </div>
+
+              <div className="text-center md:text-left">
+                <h3 className="font-sans text-3xl font-semibold leading-tight text-[#19221d] dark:text-white md:text-4xl">
+                  Want to become a ClothCycle PH partner?
+                </h3>
+                <p className="mt-3 text-base leading-7 text-[#5f6f67] dark:text-zinc-300 md:text-lg">
+                  Contact us to join our partner network.
+                </p>
+              </div>
+
+              <a
+                href="mailto:clothcycleph@gmail.com?subject=Become%20a%20ClothCycle%20PH%20partner"
+                className="
+                  inline-flex
+                  items-center
+                  justify-center
+                  gap-2
+                  rounded-full
+                  bg-[#336158]
+                  px-6
+                  py-3
+                  text-sm
+                  font-semibold
+                  text-white
+                  transition-all
+                  hover:bg-[#2a4c48]
+                  hover:shadow-xl
+                  md:px-7
+                "
+              >
+                <Mail className="h-4 w-4" />
+                Become a partner
+              </a>
+            </div>
           </motion.div>
         </div>
       </motion.section>

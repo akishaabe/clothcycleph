@@ -1837,7 +1837,7 @@ export function AdminDashboard() {
                 onClick={() => {
                   logout();
                   setShowLogoutConfirm(false);
-                  navigate("/login", { replace: true });
+                  navigate("/", { replace: true });
                 }}
                 className="rounded-xl bg-gray-950 px-4 py-2 text-white hover:bg-black"
               >

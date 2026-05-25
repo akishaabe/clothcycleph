@@ -175,11 +175,30 @@ select {
 
 .app-darkable-page table {
   max-width: 100%;
+  min-width: 760px;
+  table-layout: auto;
+}
+
+.app-darkable-page th,
+.app-darkable-page td {
+  vertical-align: top;
 }
 
 .app-darkable-page [class*="fixed"][class*="inset-0"] {
   max-width: 100vw;
   overflow-x: clip;
+}
+
+.app-darkable-page [class*="overflow-x-auto"] {
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-darkable-page [class*="max-w-7xl"],
+.app-darkable-page [class*="max-w-6xl"],
+.app-darkable-page [class*="max-w-5xl"],
+.app-darkable-page [class*="max-w-4xl"] {
+  width: min(100%, var(--container-max-width, 100%));
 }
 
 @media (max-width: 767px) {
@@ -211,6 +230,46 @@ select {
 
   .app-darkable-page [class*="fixed"][class*="inset-0"] {
     padding: 1rem !important;
+  }
+
+  .app-darkable-page nav > div {
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .app-darkable-page nav h1,
+  .app-darkable-page nav h2,
+  .app-darkable-page nav h3,
+  .app-darkable-page nav span {
+    max-width: 100%;
+  }
+
+  .app-darkable-page section,
+  .app-darkable-page article,
+  .app-darkable-page [class*="rounded-2xl"],
+  .app-darkable-page [class*="rounded-[28px]"],
+  .app-darkable-page [class*="rounded-[32px]"],
+  .app-darkable-page [class*="rounded-[36px]"] {
+    overflow-wrap: anywhere;
+  }
+
+  .app-darkable-page table {
+    min-width: 680px;
+  }
+
+  .app-darkable-page [class*="fixed"][class*="inset-0"] > div {
+    max-height: calc(100svh - 2rem);
+    overflow-y: auto;
+  }
+
+  .app-darkable-page button,
+  .app-darkable-page a {
+    min-height: 2.5rem;
+  }
+
+  .app-darkable-page [class*="grid"][class*="grid-cols-2"]:not([class*="sm:grid-cols"]) {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

@@ -1511,7 +1511,7 @@ export function PartnerDashboard() {
                 onClick={() => {
                   logout();
                   setShowLogoutConfirm(false);
-                  navigate("/login", { replace: true });
+                  navigate("/", { replace: true });
                 }}
                 className="rounded-xl bg-[#4f6f9f] px-4 py-2 text-white hover:bg-[#3f5f8f]"
               >

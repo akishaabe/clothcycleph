@@ -1595,7 +1595,7 @@ export function UserDashboard() {
                 onClick={() => {
                   logout();
                   setShowLogoutConfirm(false);
-                  navigate("/login", { replace: true });
+                  navigate("/", { replace: true });
                 }}
                 className="rounded-xl bg-[#336158] px-4 py-2 text-white hover:bg-[#2a4c48]"
               >
