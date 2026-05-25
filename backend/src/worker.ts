@@ -336,12 +336,10 @@ app.post('/api/auth/signup', async (c) => {
 
   const result = await signupD1(c.env.DB, email, name, password, getAuthOptions(c));
   return c.json({
-    message: 'Signup successful - please verify your email with the code sent.',
-    two_factor_token: result.twoFactorToken,
-    requiresTwoFactor: result.requiresTwoFactor,
-    two_factor_method: result.twoFactorMethod,
-    dev_code: result.devCode,
-  });
+    message: 'Signup successful',
+    token: result.token,
+    user: result.user,
+  }, 201);
 });
 
 app.post('/api/auth/login', async (c) => {

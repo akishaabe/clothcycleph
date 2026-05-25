@@ -56,16 +56,18 @@ export const signup = async (req: Request, res: Response) => {
          password_hash,
          role,
          two_factor_enabled,
+         two_factor_method,
+         email_verified_at,
+         last_login_at,
          terms_accepted_at
        )
-       VALUES ($1, $2, $3, $4, 'user', true, NOW())
-       RETURNING id, email, name, role, two_factor_enabled, two_factor_confirmed_at, email_verified_at`,
+       VALUES ($1, $2, $3, $4, 'user', true, 'email', NOW(), NOW(), NOW())
+       RETURNING id, email, name, role, two_factor_enabled, two_factor_method, two_factor_confirmed_at, email_verified_at, password_setup_required, created_at, updated_at`,
       [userId, email, name, passwordHash]
     );
 
     const user = result.rows[0];
     const appConfig = getRequestConfig(req);
-    const challenge = await createEmailVerificationChallenge(user, 'email_verification', appConfig);
     await recordAuthEvent({
       userId: user.id,
       eventType: 'signup_created',
@@ -73,11 +75,16 @@ export const signup = async (req: Request, res: Response) => {
       userAgent: req.headers['user-agent'],
     });
 
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    }, appConfig);
+
     res.status(201).json({
-      message: 'User created successfully. Check your email for your verification code.',
-      requiresTwoFactor: true,
-      two_factor_token: challenge.twoFactorToken,
-      two_factor_method: 'email',
+      message: 'Signup successful',
+      user: toAuthUser(user),
+      token,
     });
   } catch (error) {
     sendAuthError(res, error);

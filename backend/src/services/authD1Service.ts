@@ -50,7 +50,7 @@ export async function signupD1(
   name: string,
   password: string,
   options: AuthD1Options
-): Promise<{ twoFactorToken: string; requiresTwoFactor: boolean; twoFactorMethod: 'email' | 'totp'; devCode?: string }> {
+): Promise<{ user: AuthUser; token: string }> {
   const existingUser = await queryD1First(db, 'SELECT id FROM users WHERE email = ?', [email]);
   if (existingUser) {
     throw new Error('User already exists');
@@ -61,18 +61,21 @@ export async function signupD1(
 
   await executeD1(
     db,
-    `INSERT INTO users (id, email, name, password_hash, role, two_factor_enabled, terms_accepted_at)
-     VALUES (?, ?, ?, ?, 'user', 1, CURRENT_TIMESTAMP)`,
+    `INSERT INTO users (
+       id, email, name, password_hash, role, two_factor_enabled, two_factor_method,
+       email_verified_at, terms_accepted_at, last_login_at
+     )
+     VALUES (?, ?, ?, ?, 'user', 1, 'email', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
     [userId, email, name, passwordHash]
   );
 
-  const challenge = await createEmailVerificationChallenge(db, { id: userId, email, role: 'user' }, options);
-  return {
-    twoFactorToken: challenge.twoFactorToken,
-    requiresTwoFactor: true,
-    twoFactorMethod: 'email',
-    devCode: challenge.devCode,
-  };
+  const user = await queryD1First(db, 'SELECT * FROM users WHERE id = ?', [userId]);
+  if (!user) {
+    throw new Error('Signup could not create the account');
+  }
+
+  const token = await generateAuthToken({ id: user.id, email: user.email, role: user.role }, options);
+  return { user: toAuthUser(user), token };
 }
 
 export async function loginD1(
