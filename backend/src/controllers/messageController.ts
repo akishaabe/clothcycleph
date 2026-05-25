@@ -161,6 +161,18 @@ export const sendMessage = async (req: Request, res: Response) => {
           }),
         ]
       );
+
+      await query(
+        `UPDATE uploaded_files
+         SET related_entity_type = 'message',
+             related_entity_id = $1,
+             purpose = 'message_attachment',
+             updated_at = NOW()
+         WHERE url = $2`,
+        [id, attachment.url]
+      ).catch((error) => {
+        console.warn('Unable to link uploaded message attachment metadata:', error);
+      });
     }
 
     res.status(201).json({
@@ -230,6 +242,16 @@ export const uploadMessageAttachment = async (req: FileRequest, res: Response) =
       url = `${req.protocol || 'http'}://${req.get?.('host') || 'localhost:5000'}/uploads/messages/${safeName}`;
     }
 
+    await recordUploadedFile({
+      userId,
+      storageKey: key,
+      url,
+      originalName: req.file.originalname,
+      contentType: req.file.mimetype,
+      sizeBytes: req.file.size,
+      purpose: 'message_attachment',
+    });
+
     res.status(201).json({
       message: 'Attachment uploaded successfully',
       attachment: {
@@ -248,6 +270,36 @@ export const uploadMessageAttachment = async (req: FileRequest, res: Response) =
     res.status(400).json({ error: (error as Error).message });
   }
 };
+
+async function recordUploadedFile(payload: {
+  userId: string;
+  storageKey: string;
+  url: string;
+  originalName: string;
+  contentType: string;
+  sizeBytes: number;
+  purpose: string;
+}) {
+  try {
+    await query(
+      `INSERT INTO uploaded_files (
+         user_id, storage_key, url, original_name, content_type, size_bytes, purpose
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        payload.userId,
+        payload.storageKey,
+        payload.url,
+        payload.originalName,
+        payload.contentType,
+        payload.sizeBytes,
+        payload.purpose,
+      ]
+    );
+  } catch (error) {
+    console.warn('Unable to record uploaded attachment metadata:', error);
+  }
+}
 
 export const getMessages = async (req: Request, res: Response) => {
   try {

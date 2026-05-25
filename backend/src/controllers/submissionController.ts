@@ -251,6 +251,16 @@ export const createSubmission = async (req: Request, res: Response) => {
             }),
           ]
         );
+
+        await client.query(
+          `UPDATE uploaded_files
+           SET related_entity_type = 'submission',
+               related_entity_id = $1,
+               purpose = 'submission_image',
+               updated_at = NOW()
+           WHERE url = $2`,
+          [id, normalizedPhoto.url]
+        );
       }
     }
 

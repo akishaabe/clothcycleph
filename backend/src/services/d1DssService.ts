@@ -707,6 +707,21 @@ export async function updateDssRequestStatusD1(
       ? `Congratulations! Your ${transaction.submission_label || 'textile'} was turned into ${outcomeTitle}!`
       : '';
 
+  if (outcomePhotos?.length) {
+    for (const photoUrl of outcomePhotos) {
+      await executeD1(
+        db,
+        `UPDATE uploaded_files
+         SET related_entity_type = 'transaction',
+             related_entity_id = ?,
+             purpose = 'outcome_photo',
+             updated_at = CURRENT_TIMESTAMP
+         WHERE url = ?`,
+        [requestId, photoUrl]
+      );
+    }
+  }
+
   await executeD1(
     db,
     `INSERT INTO messages (

@@ -459,49 +459,31 @@ CREATE TABLE IF NOT EXISTS message_attachments (
 
 CREATE INDEX IF NOT EXISTS idx_message_attachments_message_id ON message_attachments(message_id);
 
+CREATE TABLE IF NOT EXISTS uploaded_files (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  storage_key TEXT NOT NULL,
+  url TEXT NOT NULL,
+  original_name TEXT,
+  content_type TEXT,
+  size_bytes INTEGER,
+  purpose TEXT DEFAULT 'general',
+  related_entity_type TEXT,
+  related_entity_id TEXT,
+  metadata TEXT DEFAULT '{}',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_uploaded_files_user_id ON uploaded_files(user_id);
+CREATE INDEX IF NOT EXISTS idx_uploaded_files_storage_key ON uploaded_files(storage_key);
+CREATE INDEX IF NOT EXISTS idx_uploaded_files_url ON uploaded_files(url);
+CREATE INDEX IF NOT EXISTS idx_uploaded_files_related_entity
+  ON uploaded_files(related_entity_type, related_entity_id);
+
 -- Schema migrations table
 CREATE TABLE IF NOT EXISTS schema_migrations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL UNIQUE,
   applied_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
-
-INSERT OR IGNORE INTO partners (
-  id,
-  name,
-  description,
-  email,
-  phone,
-  address,
-  service_types,
-  accepted_service_types,
-  status,
-  verified,
-  rating,
-  latitude,
-  longitude
-)
-VALUES (
-  '11111111-1111-4111-8111-111111111111',
-  'Test Partner',
-  'Test partner location for DSS and GIS distance checks.',
-  'test-partner@clothcycleph.local',
-  NULL,
-  'Metropolitan Avenue cor Zapote Street, Makati, Metro Manila',
-  'recycle, donate, upcycle',
-  'recycle, donate, upcycle',
-  'active',
-  1,
-  0,
-  14.5659,
-  121.0146
-);
-
-UPDATE partners
-SET
-  address = 'Metropolitan Avenue cor Zapote Street, Makati, Metro Manila',
-  latitude = 14.5659,
-  longitude = 121.0146,
-  updated_at = CURRENT_TIMESTAMP
-WHERE lower(name) = 'test partner'
-   OR lower(email) = 'test-partner@clothcycleph.local';

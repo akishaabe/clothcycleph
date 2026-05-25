@@ -32,7 +32,7 @@ SELECT
   'recycle, donate, upcycle',
   'recycle, donate, upcycle',
   'active',
-  TRUE,
+  1,
   0,
   14.5659,
   121.0146

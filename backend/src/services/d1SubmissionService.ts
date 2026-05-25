@@ -512,6 +512,17 @@ async function saveSubmissionImages(db: D1Database, submissionId: string, photos
         }),
       ]
     );
+
+    await executeD1(
+      db,
+      `UPDATE uploaded_files
+       SET related_entity_type = 'submission',
+           related_entity_id = ?,
+           purpose = 'submission_image',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE url = ?`,
+      [submissionId, normalized.url]
+    );
   }
 }
 

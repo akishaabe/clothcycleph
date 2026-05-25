@@ -56,7 +56,7 @@ import {
   getTransactionsByPartnerD1,
   updateTransactionStatusD1,
 } from './services/d1TransactionService.js';
-import { uploadFileToR2 } from './services/d1UploadService.js';
+import { recordUploadedFileD1, uploadFileToR2 } from './services/d1UploadService.js';
 import { generateD1UUID, type D1Database } from './config/d1.js';
 import type { EmailProvider } from './services/workerEmailService.js';
 import { createSubmissionSchema, createTrackingUpdateSchema, updateSubmissionStatusSchema } from './schemas/submissions.js';
@@ -137,6 +137,15 @@ const ALLOWED_UPLOAD_MIMETYPES = [
   'image/gif',
   'image/heic',
   'image/heif',
+];
+const MAX_MESSAGE_ATTACHMENT_SIZE = 50 * 1024 * 1024; // 50MB
+const ALLOWED_MESSAGE_ATTACHMENT_MIMETYPES = [
+  ...ALLOWED_UPLOAD_MIMETYPES,
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ];
 
 const app = new Hono<{ Bindings: CloudflareEnv; Variables: Variables }>();
@@ -267,6 +276,15 @@ const parseOptionalNumber = (value?: string) => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const isAllowedMessageAttachment = (file: WorkerFile) => {
+  if (ALLOWED_MESSAGE_ATTACHMENT_MIMETYPES.includes(file.type)) {
+    return true;
+  }
+
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  return Boolean(extension && ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(extension));
+};
+
 const getStatusCode = (error: Error) => {
   if (error instanceof z.ZodError) {
     return 400;
@@ -353,13 +371,15 @@ app.post('/api/auth/login', async (c) => {
 
 app.post('/api/auth/google', async (c) => {
   const body = await parseJsonBody(c, googleAuthSchema);
-  const { credential, role } = body;
+  const { credential, role, mode, terms_accepted } = body;
 
   const result = await continueWithGoogleD1(
     c.env.DB,
     credential,
     role,
     getAuthOptions(c),
+    mode,
+    terms_accepted,
     c.req.header('CF-Connecting-IP') || '',
     c.req.header('User-Agent') || ''
   );
@@ -373,7 +393,13 @@ app.post('/api/auth/google', async (c) => {
     });
   }
 
-  return c.json({ message: 'Login successful', token: result.token, user: result.user });
+  return c.json({
+    message: result.user?.password_setup_required
+      ? 'Google signup successful. Set a password to finish account setup.'
+      : 'Login successful',
+    token: result.token,
+    user: result.user,
+  });
 });
 
 app.post('/api/auth/2fa/verify', async (c) => {
@@ -752,7 +778,7 @@ app.get('/api/messages/:userId', requireAuth, async (c) => {
 app.post('/api/messages', requireAuth, async (c) => {
   const user = (c as any).get('user') as { id?: string };
   const body = await parseJsonBody(c, sendMessageSchema);
-  const message = await sendMessageD1(c.env.DB, user.id!, body.to_user_id, body.content);
+  const message = await sendMessageD1(c.env.DB, user.id!, body.to_user_id, body.content, body.attachments);
   return c.json({ message: 'Message sent successfully', data: message }, 201);
 });
 
@@ -766,7 +792,57 @@ app.put('/api/messages/:id/read', requireAuth, async (c) => {
   return jsonData(c, updated);
 });
 
+app.post('/api/messages/attachments', requireAuth, async (c) => {
+  const user = c.get('user');
+  if (!c.env.R2_BUCKET || typeof c.env.R2_BUCKET.put !== 'function') {
+    return c.json({ error: 'R2 bucket is not configured' }, 503);
+  }
+
+  const formData = await c.req.formData();
+  const file = formData.get('file') as WorkerFile | null;
+  if (!file || typeof file.arrayBuffer !== 'function') {
+    return c.json({ error: 'Missing file' }, 400);
+  }
+
+  if (!isAllowedMessageAttachment(file)) {
+    return c.json({ error: 'Only images, PDF, Word, and Excel files can be attached' }, 400);
+  }
+
+  if (file.size != null && file.size > MAX_MESSAGE_ATTACHMENT_SIZE) {
+    return c.json({ error: 'Message attachments must be 50MB or smaller' }, 400);
+  }
+
+  const fileData = await file.arrayBuffer();
+  if (fileData.byteLength > MAX_MESSAGE_ATTACHMENT_SIZE) {
+    return c.json({ error: 'Message attachments must be 50MB or smaller' }, 400);
+  }
+
+  const apiBaseUrl = c.env.R2_PUBLIC_BASE_URL || new URL(c.req.url).origin;
+  const upload = await uploadFileToR2(c.env.R2_BUCKET, fileData, file.name, file.type || 'application/octet-stream', apiBaseUrl);
+  await recordUploadedFileD1(c.env.DB, {
+    userId: user.id!,
+    storageKey: upload.key,
+    url: upload.url,
+    originalName: file.name,
+    contentType: file.type || 'application/octet-stream',
+    sizeBytes: fileData.byteLength,
+    purpose: 'message_attachment',
+  });
+
+  return c.json({
+    message: 'Attachment uploaded successfully',
+    attachment: {
+      filename: file.name,
+      url: upload.url,
+      key: upload.key,
+      mimetype: file.type || 'application/octet-stream',
+      size: fileData.byteLength,
+    },
+  }, 201);
+});
+
 app.post('/api/upload', requireAuth, async (c) => {
+  const user = c.get('user');
   if (!c.env.R2_BUCKET || typeof c.env.R2_BUCKET.put !== 'function') {
     return c.json({ error: 'R2 bucket is not configured' }, 503);
   }
@@ -798,6 +874,16 @@ app.post('/api/upload', requireAuth, async (c) => {
 
   const apiBaseUrl = c.env.R2_PUBLIC_BASE_URL || new URL(c.req.url).origin;
   const upload = await uploadFileToR2(c.env.R2_BUCKET, fileData, file.name, file.type, apiBaseUrl);
+  await recordUploadedFileD1(c.env.DB, {
+    userId: user.id!,
+    storageKey: upload.key,
+    url: upload.url,
+    originalName: file.name,
+    contentType: file.type,
+    sizeBytes: fileData.byteLength,
+    purpose: 'image',
+  });
+
   return c.json({ message: 'File uploaded successfully', ...upload }, 201);
 });
 

@@ -31,6 +31,8 @@ Table partners {
   status varchar
   verified boolean
   rating decimal
+  latitude decimal
+  longitude decimal
   created_at timestamp
   updated_at timestamp
 }
@@ -247,6 +249,22 @@ Table message_attachments {
   uploaded_at timestamp
 }
 
+Table uploaded_files {
+  id uuid [pk]
+  user_id uuid
+  storage_key text [not null]
+  url text [not null]
+  original_name text
+  content_type text
+  size_bytes int
+  purpose varchar
+  related_entity_type varchar
+  related_entity_id uuid
+  metadata jsonb
+  created_at timestamp
+  updated_at timestamp
+}
+
 Ref: users.partner_id > partners.id
 Ref: user_preferences.user_id > users.id
 Ref: submissions.user_id > users.id
@@ -277,4 +295,5 @@ Ref: messages.from_user_id > users.id
 Ref: messages.to_user_id > users.id
 Ref: messages.conversation_id > conversations.id
 Ref: message_attachments.message_id > messages.id
+Ref: uploaded_files.user_id > users.id
 Ref: deleted_records.deleted_by_user_id > users.id

@@ -28,6 +28,7 @@ export interface AuthUser {
   two_factor_enabled: boolean;
   two_factor_method?: 'email' | 'totp';
   email_verified_at?: string;
+  password_setup_required?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -91,7 +92,7 @@ export async function loginD1(
 }> {
   const user = await queryD1First(db, 'SELECT * FROM users WHERE email = ?', [email]);
   if (!user) {
-    throw new Error('Account doesn\'t exist');
+    throw new Error('No account found. Please sign up first before logging in.');
   }
 
   if (user.locked_until && new Date(user.locked_until).getTime() > Date.now()) {
@@ -111,7 +112,7 @@ export async function loginD1(
        WHERE id = ?`,
       [user.id]
     );
-    throw new Error('Account doesn\'t exist');
+    throw new Error('Invalid credentials');
   }
 
   assertAccountCanAuthenticate(user);
@@ -156,6 +157,8 @@ export async function continueWithGoogleD1(
   credential: string,
   _role: 'user' | 'partner' | 'admin',
   options: AuthD1Options,
+  mode: 'login' | 'signup' = 'login',
+  termsAccepted = false,
   ipAddress?: string,
   userAgent?: string
 ): Promise<{
@@ -174,14 +177,52 @@ export async function continueWithGoogleD1(
   let user = await queryD1First(db, 'SELECT * FROM users WHERE email = ?', [googleUser.email]);
 
   if (!user) {
-    throw new Error('No account found for this Google email. Please sign up first before logging in.');
+    if (mode !== 'signup') {
+      throw new Error('No account found. Please sign up first before logging in.');
+    }
+
+    if (!termsAccepted) {
+      throw new Error('Terms acceptance is required to sign up with Google');
+    }
+
+    const userId = generateD1UUID();
+    const temporaryPasswordHash = await hashPassword(`${generateSecureToken()}-${Date.now()}-google-signup`);
+    await executeD1(
+      db,
+      `INSERT INTO users (
+         id, email, name, password_hash, role, avatar_url,
+         two_factor_enabled, email_verified_at, terms_accepted_at,
+         password_setup_required, last_login_at
+       )
+       VALUES (?, ?, ?, ?, 'user', ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, CURRENT_TIMESTAMP)`,
+      [
+        userId,
+        googleUser.email,
+        googleUser.name,
+        temporaryPasswordHash,
+        googleUser.picture || null,
+      ]
+    );
+
+    user = await queryD1First(db, 'SELECT * FROM users WHERE id = ?', [userId]);
+  }
+
+  if (!user) {
+    throw new Error('Google signup could not create the account');
   }
 
   assertAccountCanAuthenticate(user);
 
   if (!user.email_verified_at) {
     await executeD1(db, `UPDATE users SET email_verified_at = CURRENT_TIMESTAMP WHERE id = ?`, [user.id]);
+    user = await queryD1First(db, 'SELECT * FROM users WHERE id = ?', [user.id]);
   }
+
+  if (!user) {
+    throw new Error('Google account could not be loaded');
+  }
+
+  await executeD1(db, `UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?`, [user.id]);
 
   const token = await generateAuthToken({ id: user.id, email: user.email, role: user.role }, options);
   return { user: toAuthUser(user), token };
@@ -469,7 +510,15 @@ export async function resetPasswordD1(db: D1Database, token: string, password: s
   }
 
   const passwordHash = await hashPassword(password);
-  await executeD1(db, `UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [passwordHash, record.user_id]);
+  await executeD1(
+    db,
+    `UPDATE users
+     SET password_hash = ?,
+         password_setup_required = 0,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [passwordHash, record.user_id]
+  );
   await executeD1(db, `UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = ?`, [record.id]);
 
   return { message: 'Password reset successfully' };
@@ -673,7 +722,7 @@ function normalizeUser(row: any) {
 export async function getProfileD1(db: D1Database, userId: string): Promise<AuthUser> {
   const user = await queryD1First(
     db,
-    'SELECT id, email, name, role, avatar_url, profile_photo, bio, phone, address, two_factor_enabled, two_factor_method, email_verified_at, created_at, updated_at FROM users WHERE id = ?',
+    'SELECT id, email, name, role, avatar_url, profile_photo, bio, phone, address, two_factor_enabled, two_factor_method, email_verified_at, password_setup_required, created_at, updated_at FROM users WHERE id = ?',
     [userId]
   );
 
@@ -698,7 +747,7 @@ export async function updateProfileD1(
   }
 ): Promise<AuthUser> {
   const { name, email, avatar_url, bio, phone, address, password } = updates;
-  const currentUser = await queryD1First(db, 'SELECT email, phone, password_hash FROM users WHERE id = ?', [userId]);
+  const currentUser = await queryD1First(db, 'SELECT email, phone, password_hash, avatar_url FROM users WHERE id = ?', [userId]);
   if (!currentUser) {
     throw new Error('User not found');
   }
@@ -736,7 +785,7 @@ export async function updateProfileD1(
          address = COALESCE(?, address),
          updated_at = CURRENT_TIMESTAMP
      WHERE id = ?
-     RETURNING id, email, name, role, avatar_url, profile_photo, bio, phone, address, two_factor_enabled, two_factor_method, email_verified_at, created_at, updated_at`,
+     RETURNING id, email, name, role, avatar_url, profile_photo, bio, phone, address, two_factor_enabled, two_factor_method, email_verified_at, password_setup_required, created_at, updated_at`,
     [
       name,
       email,
@@ -755,6 +804,30 @@ export async function updateProfileD1(
     throw new Error('User not found');
   }
 
+  if (hasAvatarUrl && avatar_url) {
+    await executeD1(
+      db,
+      `UPDATE uploaded_files
+       SET related_entity_type = 'user_profile',
+           related_entity_id = ?,
+           purpose = 'profile_photo',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = ? AND url = ?`,
+      [userId, userId, avatar_url]
+    );
+  } else if (hasAvatarUrl && !avatar_url && currentUser.avatar_url) {
+    await executeD1(
+      db,
+      `UPDATE uploaded_files
+       SET related_entity_type = NULL,
+           related_entity_id = NULL,
+           purpose = 'image',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = ? AND url = ?`,
+      [userId, currentUser.avatar_url]
+    );
+  }
+
   return toAuthUser(result);
 }
 
@@ -764,23 +837,36 @@ export async function changePasswordD1(
   currentPassword: string,
   newPassword: string
 ) {
-  const user = await queryD1First(db, 'SELECT password_hash FROM users WHERE id = ?', [userId]);
+  const user = await queryD1First(db, 'SELECT password_hash, password_setup_required FROM users WHERE id = ?', [userId]);
   if (!user) {
     throw new Error('User not found');
   }
 
-  const isValidPassword = await comparePassword(currentPassword, user.password_hash);
-  if (!isValidPassword) {
-    throw new Error('Invalid current password');
+  if (!user.password_setup_required) {
+    if (!currentPassword) {
+      throw new Error('Current password is required');
+    }
+
+    const isValidPassword = await comparePassword(currentPassword, user.password_hash);
+    if (!isValidPassword) {
+      throw new Error('Invalid current password');
+    }
   }
 
   const passwordHash = await hashPassword(newPassword);
-  await executeD1(db, 'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
-    passwordHash,
-    userId,
-  ]);
+  const updated = await queryD1First(
+    db,
+    `UPDATE users
+     SET password_hash = ?,
+         password_setup_required = 0,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?
+     RETURNING id, email, name, role, avatar_url, profile_photo, bio, phone, address, two_factor_enabled,
+               two_factor_method, email_verified_at, password_setup_required, created_at, updated_at`,
+    [passwordHash, userId]
+  );
 
-  return { message: 'Password changed successfully' };
+  return { message: 'Password changed successfully', data: toAuthUser(updated) };
 }
 
 async function createEmailVerificationChallenge(
@@ -939,6 +1025,7 @@ function toAuthUser(user: any): AuthUser {
     two_factor_enabled: isTwoFactorLoginRequired(user),
     two_factor_method: user.two_factor_method || 'email',
     email_verified_at: user.email_verified_at,
+    password_setup_required: Boolean(user.password_setup_required),
     created_at: user.created_at,
     updated_at: user.updated_at,
   };

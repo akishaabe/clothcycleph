@@ -215,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authService.logout();
     setUser(null);
     setToken(null);
+    window.location.assign('/');
   };
 
   const updateUser = (updatedUser: User) => {

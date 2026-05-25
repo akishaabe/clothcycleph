@@ -2,6 +2,7 @@ import type { HttpRequest as Request, HttpResponse as Response, UploadedFile } f
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from '../config/env.js';
+import { query } from '../config/database.js';
 import { AppError } from '../utils/errorHandler.js';
 import { uploadToR2 } from '../services/r2Service.js';
 
@@ -70,6 +71,16 @@ export const uploadFile = async (req: FileRequest, res: Response) => {
       url,
       key,
     });
+
+    await recordUploadedFile({
+      userId,
+      storageKey: key,
+      url,
+      originalName: req.file.originalname,
+      contentType: req.file.mimetype,
+      sizeBytes: req.file.size,
+      purpose: 'image',
+    });
   } catch (error) {
     if (error instanceof AppError) {
       return res.status(error.statusCode).json({ error: error.message });
@@ -77,6 +88,36 @@ export const uploadFile = async (req: FileRequest, res: Response) => {
     res.status(400).json({ error: (error as Error).message });
   }
 };
+
+async function recordUploadedFile(payload: {
+  userId: string;
+  storageKey: string;
+  url: string;
+  originalName: string;
+  contentType: string;
+  sizeBytes: number;
+  purpose: string;
+}) {
+  try {
+    await query(
+      `INSERT INTO uploaded_files (
+         user_id, storage_key, url, original_name, content_type, size_bytes, purpose
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        payload.userId,
+        payload.storageKey,
+        payload.url,
+        payload.originalName,
+        payload.contentType,
+        payload.sizeBytes,
+        payload.purpose,
+      ]
+    );
+  } catch (error) {
+    console.warn('Unable to record uploaded file metadata:', error);
+  }
+}
 
 function mimeToExtension(mimetype: string) {
   if (mimetype === 'image/png') return '.png';

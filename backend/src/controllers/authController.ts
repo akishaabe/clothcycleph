@@ -102,7 +102,7 @@ export const login = async (req: Request, res: Response) => {
     // Get user
     const result = await query('SELECT * FROM users WHERE email = $1', [email]);
     if (result.rows.length === 0) {
-      throw new AppError(401, 'Account doesn\'t exist');
+      throw new AppError(404, 'No account found. Please sign up first before logging in.');
     }
 
     const user = result.rows[0];
@@ -130,7 +130,7 @@ export const login = async (req: Request, res: Response) => {
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
       });
-      throw new AppError(401, 'Account doesn\'t exist');
+      throw new AppError(401, 'Invalid credentials');
     }
 
     assertAccountCanAuthenticate(user);
@@ -197,7 +197,7 @@ export const continueWithGoogle = async (req: Request, res: Response) => {
 
     if (userResult.rows.length === 0) {
       if (mode !== 'signup') {
-        throw new AppError(404, 'No account found for this Google email. Please sign up first before logging in.');
+        throw new AppError(404, 'No account found. Please sign up first before logging in.');
       }
 
       if (!terms_accepted) {
@@ -972,7 +972,7 @@ export const getProfile = async (req: Request, res: Response) => {
     }
 
     const result = await query(
-      'SELECT id, email, name, role, avatar_url, profile_photo, bio, phone, address, two_factor_enabled, email_verified_at, created_at, updated_at FROM users WHERE id = $1',
+      'SELECT id, email, name, role, avatar_url, profile_photo, bio, phone, address, two_factor_enabled, two_factor_method, email_verified_at, password_setup_required, created_at, updated_at FROM users WHERE id = $1',
       [userId]
     );
 
@@ -1047,6 +1047,32 @@ export const updateProfile = async (req: Request, res: Response) => {
         address,
       ]
     );
+
+    if (hasAvatarUrl && avatar_url) {
+      await query(
+        `UPDATE uploaded_files
+         SET related_entity_type = 'user_profile',
+             related_entity_id = $1,
+             purpose = 'profile_photo',
+             updated_at = NOW()
+         WHERE user_id = $1 AND url = $2`,
+        [userId, avatar_url]
+      ).catch((error) => {
+        console.warn('Unable to link uploaded profile photo metadata:', error);
+      });
+    } else if (hasAvatarUrl && !avatar_url && currentUser.avatar_url) {
+      await query(
+        `UPDATE uploaded_files
+         SET related_entity_type = NULL,
+             related_entity_id = NULL,
+             purpose = 'image',
+             updated_at = NOW()
+         WHERE user_id = $1 AND url = $2`,
+        [userId, currentUser.avatar_url]
+      ).catch((error) => {
+        console.warn('Unable to clear uploaded profile photo metadata:', error);
+      });
+    }
 
     res.json({
       message: 'Profile updated successfully',

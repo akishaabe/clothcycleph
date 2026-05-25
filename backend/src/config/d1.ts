@@ -77,7 +77,8 @@ export async function executeD1<T = any>(
 }
 
 function bindParams(statement: D1PreparedStatement, params: any[]) {
-  return params.length > 0 ? statement.bind(...params) : statement;
+  const safeParams = params.map((param) => (param === undefined ? null : param));
+  return safeParams.length > 0 ? statement.bind(...safeParams) : statement;
 }
 
 const timestampFieldPattern = /(?:^|_)(?:created_at|updated_at|submitted_at|scheduled_at|expires_at|locked_until|last_message_time|email_verified_at|read_at)$/;

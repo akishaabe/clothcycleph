@@ -320,6 +320,22 @@ Table message_attachments {
   uploaded_at timestamp [default: `now()`]
 }
 
+Table uploaded_files {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [ref: > users.id]
+  storage_key text [not null]
+  url text [not null]
+  original_name text
+  content_type text
+  size_bytes int
+  purpose varchar [note: "general, image, profile_photo, submission_image, message_attachment, outcome_photo"]
+  related_entity_type varchar [note: "Optional logical owner such as user_profile, submission, message, transaction"]
+  related_entity_id uuid
+  metadata jsonb [default: `'{}'`]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
 Table notifications {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null, note: "References users.id"]

@@ -31,7 +31,21 @@ export async function getMessageContactsD1(db: D1Database, userId: string, role:
   );
 }
 
-export async function sendMessageD1(db: D1Database, fromUserId: string, toUserId: string, content: string) {
+type MessageAttachmentInput = {
+  filename: string;
+  url: string;
+  key?: string | null;
+  mimetype?: string | null;
+  size?: number | null;
+};
+
+export async function sendMessageD1(
+  db: D1Database,
+  fromUserId: string,
+  toUserId: string,
+  content: string,
+  attachments: MessageAttachmentInput[] = []
+) {
   const sender = await getMessageUserD1(db, fromUserId);
   const recipient = await getMessageUserD1(db, toUserId);
   if (!recipient) {
@@ -55,7 +69,41 @@ export async function sendMessageD1(db: D1Database, fromUserId: string, toUserId
     [id, fromUserId, toUserId, content.trim()]
   );
 
-  return normalizeMessage(result?.results?.[0]);
+  for (const attachment of attachments) {
+    if (!attachment?.url) {
+      continue;
+    }
+
+    await executeD1(
+      db,
+      `INSERT INTO message_attachments (id, message_id, filename, url, metadata)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        generateD1UUID(),
+        id,
+        attachment.filename || 'Attachment',
+        attachment.url,
+        JSON.stringify({
+          key: attachment.key || null,
+          mimetype: attachment.mimetype || null,
+          size: attachment.size ?? null,
+        }),
+      ]
+    );
+
+    await executeD1(
+      db,
+      `UPDATE uploaded_files
+       SET related_entity_type = 'message',
+           related_entity_id = ?,
+           purpose = 'message_attachment',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE url = ?`,
+      [id, attachment.url]
+    );
+  }
+
+  return hydrateMessage(db, normalizeMessage(result?.results?.[0]));
 }
 
 export async function createSystemMessageD1(
@@ -121,7 +169,7 @@ export async function getMessagesD1(db: D1Database, currentUserId: string, userI
   );
   return {
     ...result,
-    results: result.results?.map(normalizeMessage),
+    results: await Promise.all((result.results || []).map((row) => hydrateMessage(db, normalizeMessage(row)))),
   };
 }
 
@@ -210,6 +258,34 @@ function normalizeMessage(row: any) {
     ...row,
     read: Boolean(row.read),
     metadata: parseJsonObject(row.metadata),
+  };
+}
+
+async function hydrateMessage(db: D1Database, message: any) {
+  if (!message) {
+    return null;
+  }
+
+  const attachments = await queryD1(
+    db,
+    'SELECT id, filename, url, metadata, uploaded_at FROM message_attachments WHERE message_id = ? ORDER BY uploaded_at ASC',
+    [message.id]
+  );
+
+  return {
+    ...message,
+    attachments: (attachments.results || []).map(normalizeAttachment),
+  };
+}
+
+function normalizeAttachment(row: any) {
+  const metadata = parseJsonObject(row.metadata);
+  return {
+    id: row.id,
+    filename: row.filename || 'Attachment',
+    url: row.url,
+    uploaded_at: row.uploaded_at,
+    metadata,
   };
 }
 
