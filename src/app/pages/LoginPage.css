@@ -39,6 +39,20 @@
   max-width: 100% !important;
 }
 
+.auth-google-button {
+  width: 100%;
+}
+
+.auth-google-button > div {
+  display: flex;
+  justify-content: center;
+  margin-inline: auto;
+}
+
+.auth-google-button iframe {
+  margin-inline: auto !important;
+}
+
 @media (max-width: 640px) {
   .login-page {
     align-items: flex-start;
