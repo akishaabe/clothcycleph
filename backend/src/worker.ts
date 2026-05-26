@@ -184,23 +184,38 @@ app.onError((error, c) => {
 const getAuthOptions = (c: any) => {
   const appConfig = getConfig(c.env);
   const provider = String(appConfig.email.provider || 'console').toLowerCase() as EmailProvider;
-  const emailApiKey =
-    provider === 'brevo'
-      ? appConfig.email.brevoApiKey
-      : provider === 'sendgrid'
-        ? appConfig.email.sendgridApiKey
-        : undefined;
 
   return {
     jwtSecret: requireWorkerSecret(c, 'JWT_SECRET'),
     totpEncryptionKey: requireWorkerSecret(c, 'TWO_FACTOR_ENCRYPTION_KEY'),
     emailProvider: provider,
-    emailApiKey,
+    emailApiKey: getEmailApiKey(provider, appConfig.email),
     emailFrom: appConfig.email.from,
     appUrl: c.env.APP_URL,
     googleClientId: appConfig.google.clientId,
     exposeDevSecrets: provider === 'console' && c.env.NODE_ENV !== 'production',
   };
+};
+
+const getEmailApiKey = (
+  provider: string,
+  emailConfig: ReturnType<typeof getConfig>['email']
+) => {
+  if (provider === 'brevo') {
+    if (!emailConfig.brevoApiKey) {
+      throw new Error('BREVO_API_KEY is required when EMAIL_PROVIDER=brevo');
+    }
+    return emailConfig.brevoApiKey;
+  }
+
+  if (provider === 'sendgrid') {
+    if (!emailConfig.sendgridApiKey) {
+      throw new Error('SENDGRID_API_KEY is required when EMAIL_PROVIDER=sendgrid');
+    }
+    return emailConfig.sendgridApiKey;
+  }
+
+  return undefined;
 };
 
 const requireWorkerSecret = (c: any, key: keyof CloudflareEnv) => {
