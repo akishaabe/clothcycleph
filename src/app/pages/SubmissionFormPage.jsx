@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { getDashboardPathForRole } from "../../utils/roleRoutes";
 import { useFileUpload } from "../../hooks/useFileUpload";
 import { useSubmissions } from "../../hooks/useSubmissions";
 import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
@@ -375,7 +376,7 @@ const analyzeBurnTestAnswers = (formData) =>
 export function SubmissionFormPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { createSubmission, isLoading: isSubmitting } = useSubmissions();
   const {
     uploadMultipleFiles,
@@ -887,7 +888,10 @@ export function SubmissionFormPage() {
               <ArrowLeft className="w-5 h-5 text-[#5a6f5a]" />
             </button>
 
-            <Link to="/" className="flex items-center gap-2">
+            <Link
+              to={isAuthenticated && user ? getDashboardPathForRole(user.role) : "/"}
+              className="flex items-center gap-2"
+            >
               <Recycle className="w-6 h-6 text-[#6b8e6b]" />
               <span className="text-xl text-[#2d4a2d] font-gloock">
                 ClothCycle PH
@@ -2118,12 +2122,12 @@ function RadioOption({ name, label, checked, onChange, disabled = false }) {
     <label
       aria-disabled={disabled}
       style={disabled ? { cursor: "not-allowed" } : undefined}
-      className={`flex min-h-12 items-center gap-3 rounded-xl border-2 px-4 py-3 text-[#2d4a2d] transition-all ${
+      className={`flex min-h-12 items-center gap-3 rounded-xl border-2 px-4 py-3 text-[#2d4a2d] transition-all dark:text-zinc-100 ${
         disabled
-          ? "cursor-not-allowed border-[#d4d8d0] bg-[#f1f3ef] opacity-60"
+          ? "cursor-not-allowed border-[#d4d8d0] bg-[#f1f3ef] opacity-60 dark:border-white/10 dark:bg-white/[0.03]"
           : checked
-          ? "border-[#6b8e6b] bg-[#6b8e6b]/10"
-          : "cursor-pointer border-[#d4d8d0] hover:border-[#6b8e6b]"
+          ? "border-[#6b8e6b] bg-[#6b8e6b]/10 ring-2 ring-[#6b8e6b]/15 dark:border-emerald-300 dark:bg-emerald-300/20 dark:text-white dark:ring-emerald-300/25"
+          : "cursor-pointer border-[#d4d8d0] hover:border-[#6b8e6b] dark:border-white/15 dark:bg-white/[0.04] dark:text-zinc-300 dark:hover:border-emerald-300/70"
       }`}
     >
       <input

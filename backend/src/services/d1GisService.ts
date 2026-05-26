@@ -13,7 +13,9 @@ export async function listPartnerLocationsD1(db: D1Database, options: PartnerSea
   const result = await queryD1(
     db,
     `SELECT
-       id, name, description, logo_url, email, phone, address, website,
+       id, name, description, logo_url, email, phone,
+       COALESCE(NULLIF(trim(address), ''), 'Mapúa Makati') AS address,
+       website,
        service_types, accepted_service_types, accepts_clean_only, capacity_notes,
        pickup_areas, contact_person, rating, verified, latitude, longitude
      FROM partners

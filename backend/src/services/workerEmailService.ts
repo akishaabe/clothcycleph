@@ -1,4 +1,4 @@
-export type EmailProvider = 'sendgrid' | 'brevo';
+export type EmailProvider = 'sendgrid' | 'brevo' | 'console';
 
 interface SendEmailParams {
   provider: EmailProvider;
@@ -10,6 +10,20 @@ interface SendEmailParams {
 }
 
 export async function sendEmail(params: SendEmailParams) {
+  if (params.provider === 'console') {
+    console.log('Dev email:', {
+      to: params.toEmail,
+      subject: params.subject,
+    });
+    return;
+  }
+
+  if (!params.apiKey) {
+    const requiredKey = params.provider === 'brevo' ? 'BREVO_API_KEY' : 'SENDGRID_API_KEY';
+    console.warn(`Email delivery skipped: EMAIL_PROVIDER=${params.provider} requires ${requiredKey}.`);
+    throw new Error(`Email delivery is not configured. Missing ${requiredKey}.`);
+  }
+
   if (params.provider === 'sendgrid') {
     await sendWithSendGrid(params);
     return;

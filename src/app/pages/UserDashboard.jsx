@@ -713,7 +713,7 @@ export function UserDashboard() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35 }}
-            className="mb-8 overflow-hidden rounded-[28px] border border-[#d9e8cf] bg-[linear-gradient(135deg,#f7fbef,#edf7ed,#fff8e8)] p-6 shadow-[0_18px_48px_rgba(51,97,88,0.13)] md:p-8"
+            className="mb-8 overflow-hidden rounded-[28px] border border-[#d9e8cf] bg-[linear-gradient(135deg,#f7fbef,#edf7ed,#fff8e8)] p-6 shadow-[0_18px_48px_rgba(51,97,88,0.13)] md:p-8 dark:border-white/10 dark:bg-[linear-gradient(135deg,#111827,#18231d,#101418)] dark:shadow-[0_18px_48px_rgba(0,0,0,0.35)]"
           >
             <button
               type="button"
@@ -722,18 +722,18 @@ export function UserDashboard() {
               aria-expanded={isOutcomeStoriesOpen}
             >
               <div>
-                <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-sm font-semibold text-[#336158]">
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-sm font-semibold text-[#336158] dark:bg-emerald-300/15 dark:text-emerald-200">
                   <Sparkles className="h-4 w-4" />
                   Textile wins
                 </div>
-                <h2 className="font-gloock text-3xl text-[#19221d]">
+                <h2 className="font-gloock text-3xl text-[#19221d] dark:text-white">
                   Your textiles are becoming something new
                 </h2>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5f6f67]">
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
                   Completed partner reports are grouped here so the stories stay easy to scan as they grow.
                 </p>
               </div>
-              <div className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-sm font-semibold text-[#336158]">
+              <div className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-sm font-semibold text-[#336158] dark:bg-white/10 dark:text-emerald-200">
                 <ChevronDown className={`h-4 w-4 transition-transform duration-300 ${isOutcomeStoriesOpen ? "rotate-180" : ""}`} />
                 {completedOutcomes.length} shown
               </div>
@@ -755,7 +755,7 @@ export function UserDashboard() {
                 <select
                   value={outcomeFilter}
                   onChange={(event) => setOutcomeFilter(event.target.value)}
-                  className="w-full appearance-none rounded-xl border border-[#cfe2cf] bg-white/80 py-3 pl-10 pr-10 text-sm font-semibold text-[#336158] outline-none focus:border-[#336158]"
+                  className="w-full appearance-none rounded-xl border border-[#cfe2cf] bg-white/80 py-3 pl-10 pr-10 text-sm font-semibold text-[#336158] outline-none focus:border-[#336158] dark:border-white/10 dark:bg-white/[0.06] dark:text-white"
                 >
                   <option value="all">All pathways</option>
                   <option value="donate">Donation stories</option>
@@ -769,7 +769,7 @@ export function UserDashboard() {
                 <select
                   value={outcomeSort}
                   onChange={(event) => setOutcomeSort(event.target.value)}
-                  className="w-full appearance-none rounded-xl border border-[#cfe2cf] bg-white/80 py-3 pl-4 pr-10 text-sm font-semibold text-[#336158] outline-none focus:border-[#336158] md:w-48"
+                  className="w-full appearance-none rounded-xl border border-[#cfe2cf] bg-white/80 py-3 pl-4 pr-10 text-sm font-semibold text-[#336158] outline-none focus:border-[#336158] md:w-48 dark:border-white/10 dark:bg-white/[0.06] dark:text-white"
                 >
                   <option value="newest">Newest first</option>
                   <option value="oldest">Oldest first</option>
@@ -780,7 +780,7 @@ export function UserDashboard() {
               <button
                 type="button"
                 onClick={() => navigate("/my-requests?status=completed")}
-                className="rounded-xl border border-[#cfe2cf] bg-white/80 px-4 py-3 text-sm font-semibold text-[#336158] hover:bg-white"
+                className="rounded-xl border border-[#cfe2cf] bg-white/80 px-4 py-3 text-sm font-semibold text-[#336158] hover:bg-white dark:border-white/10 dark:bg-white/[0.06] dark:text-emerald-200 dark:hover:bg-white/10"
               >
                 View completed
               </button>
@@ -788,21 +788,21 @@ export function UserDashboard() {
 
             <div className="grid gap-4 lg:grid-cols-3">
               {completedOutcomes.slice(0, 6).map((request) => (
-                <article key={request.id} className="rounded-2xl border border-white/80 bg-white/85 p-5 shadow-[0_10px_28px_rgba(25,34,29,0.08)]">
+                <article key={request.id} className="rounded-2xl border border-white/80 bg-white/85 p-5 shadow-[0_10px_28px_rgba(25,34,29,0.08)] dark:border-white/10 dark:bg-white/[0.06] dark:shadow-none">
                   <div className="mb-3 flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#edf7ed] text-[#336158]">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#edf7ed] text-[#336158] dark:bg-emerald-300/15 dark:text-emerald-200">
                       <Sparkles className="h-5 w-5" />
                     </div>
                     <div>
-                      <div className="text-sm font-semibold text-[#336158]">Congratulations!</div>
-                      <div className="text-xs text-[#5f6f67]">{request.partnerName || "Partner update"}</div>
+                      <div className="text-sm font-semibold text-[#336158] dark:text-emerald-200">Congratulations!</div>
+                      <div className="text-xs text-[#5f6f67] dark:text-zinc-400">{request.partnerName || "Partner update"}</div>
                     </div>
                   </div>
-                  <p className="text-lg font-semibold leading-7 text-[#19221d]">
+                  <p className="text-lg font-semibold leading-7 text-[#19221d] dark:text-white">
                     Your {request.title} was turned into {request.outcomeTitle}!
                   </p>
                   {request.outcomeDescription && (
-                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-[#5f6f67]">
+                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-[#5f6f67] dark:text-zinc-300">
                       {request.outcomeDescription}
                     </p>
                   )}

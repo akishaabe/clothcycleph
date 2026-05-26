@@ -90,6 +90,31 @@ export async function sendRecommendationToPartnerD1(
     recommendations.find((item) => item.recommended_pathway === payload.recommended_pathway) || recommendations[0];
   const selectedBuybackInterest = payload.recommended_pathway === 'upcycle' && Boolean(payload.buyback_interest);
 
+  const existingRequest = await queryD1First(
+    db,
+    `SELECT t.*, rr.id AS recommendation_result_id, rr.run_id AS recommendation_run_id
+     FROM transactions t
+     LEFT JOIN recommendation_results rr
+       ON rr.submission_id = t.submission_id
+      AND rr.partner_id = t.to_partner_id
+      AND rr.selected = 1
+     WHERE t.submission_id = ?
+       AND t.from_user_id = ?
+       AND t.to_partner_id = ?
+       AND t.type = ?
+     ORDER BY t.created_at DESC
+     LIMIT 1`,
+    [payload.submission_id, userId, payload.partner_id, payload.recommended_pathway]
+  );
+
+  if (existingRequest) {
+    return {
+      transaction: existingRequest,
+      recommendation_result_id: existingRequest.recommendation_result_id || null,
+      recommendation_run_id: existingRequest.recommendation_run_id || null,
+    };
+  }
+
   const runId = generateD1UUID();
   await executeD1(
     db,

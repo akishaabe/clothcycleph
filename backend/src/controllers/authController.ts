@@ -47,7 +47,8 @@ export const signup = async (req: Request, res: Response) => {
     // Hash password
     const passwordHash = await hashPassword(password);
 
-    // Create user
+    // Create user. Signup uses the same email-code challenge as login 2FA so
+    // release QA can verify delivery immediately.
     const userId = uuidv4();
     const result = await query(
       `INSERT INTO users (
@@ -58,11 +59,10 @@ export const signup = async (req: Request, res: Response) => {
          role,
          two_factor_enabled,
          two_factor_method,
-         email_verified_at,
          last_login_at,
          terms_accepted_at
        )
-       VALUES ($1, $2, $3, $4, 'user', true, 'email', NOW(), NOW(), NOW())
+       VALUES ($1, $2, $3, $4, 'user', true, 'email', NOW(), NOW())
        RETURNING id, email, name, role, two_factor_enabled, two_factor_method, two_factor_confirmed_at, email_verified_at, password_setup_required, created_at, updated_at`,
       [userId, email, name, passwordHash]
     );
@@ -76,16 +76,13 @@ export const signup = async (req: Request, res: Response) => {
       userAgent: req.headers['user-agent'],
     });
 
-    const token = generateToken({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-    }, appConfig);
+    const challenge = await createEmailVerificationChallenge(user, 'email_verification', appConfig);
 
     res.status(201).json({
-      message: 'Signup successful',
-      user: toAuthUser(user),
-      token,
+      message: 'Check your email for the verification code.',
+      requiresTwoFactor: true,
+      two_factor_token: challenge.twoFactorToken,
+      two_factor_method: 'email',
     });
   } catch (error) {
     sendAuthError(res, error);

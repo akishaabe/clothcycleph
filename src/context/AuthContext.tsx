@@ -7,7 +7,7 @@ import {
   TwoFactorStatusResponse,
   User,
 } from '../types/api';
-import { authService } from '../services/api';
+import { ApiRequestError, authService } from '../services/api';
 
 interface AuthContextType {
   user: User | null;
@@ -46,8 +46,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const initializeAuth = async () => {
       const storedToken = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token');
+      const cachedUser = authService.getStoredUser();
 
       if (storedToken) {
+        if (cachedUser && isMounted) {
+          setToken(storedToken);
+          setUser(cachedUser);
+        }
+
         try {
           const response = await authService.getProfile();
 
@@ -57,10 +63,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const storage = localStorage.getItem('auth_token') ? localStorage : sessionStorage;
             storage.setItem('user', JSON.stringify(response.data));
           }
-        } catch {
-          authService.logout();
+        } catch (error) {
+          const status = error instanceof ApiRequestError ? error.status : undefined;
+          const shouldClearSession = status === 401 || status === 403;
 
-          if (isMounted) {
+          if (shouldClearSession) {
+            authService.logout();
+          }
+
+          if (isMounted && shouldClearSession) {
             setToken(null);
             setUser(null);
           }

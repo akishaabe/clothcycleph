@@ -16,6 +16,8 @@ import {
   EmailProvider,
 } from './workerEmailService.js';
 
+const DEFAULT_PARTNER_LOCATION = 'Mapúa Makati';
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -50,7 +52,14 @@ export async function signupD1(
   name: string,
   password: string,
   options: AuthD1Options
-): Promise<{ user: AuthUser; token: string }> {
+): Promise<{
+  user?: AuthUser;
+  token?: string;
+  requiresTwoFactor: true;
+  twoFactorToken: string;
+  twoFactorMethod: 'email';
+  devCode?: string;
+}> {
   const existingUser = await queryD1First(db, 'SELECT id FROM users WHERE email = ?', [email]);
   if (existingUser) {
     throw new Error('User already exists');
@@ -63,9 +72,9 @@ export async function signupD1(
     db,
     `INSERT INTO users (
        id, email, name, password_hash, role, two_factor_enabled, two_factor_method,
-       email_verified_at, terms_accepted_at, last_login_at
+       terms_accepted_at, last_login_at
      )
-     VALUES (?, ?, ?, ?, 'user', 1, 'email', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+     VALUES (?, ?, ?, ?, 'user', 1, 'email', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
     [userId, email, name, passwordHash]
   );
 
@@ -74,8 +83,13 @@ export async function signupD1(
     throw new Error('Signup could not create the account');
   }
 
-  const token = await generateAuthToken({ id: user.id, email: user.email, role: user.role }, options);
-  return { user: toAuthUser(user), token };
+  const challenge = await createEmailVerificationChallenge(db, user, options, 'email_verification');
+  return {
+    requiresTwoFactor: true,
+    twoFactorToken: challenge.twoFactorToken,
+    twoFactorMethod: 'email',
+    devCode: challenge.devCode,
+  };
 }
 
 export async function loginD1(
@@ -443,7 +457,7 @@ export async function disableTwoFactorD1(db: D1Database, userId: string, passwor
     throw new Error('Invalid password');
   }
 
-  if (user.two_factor_enabled) {
+  if (user.two_factor_enabled && user.two_factor_method === 'totp' && user.two_factor_secret_encrypted) {
     if (!code) {
       throw new Error('Two-factor code is required to disable 2FA');
     }
@@ -483,9 +497,11 @@ export async function forgotPasswordD1(db: D1Database, email: string, options: A
       [generateD1UUID(), user.id, tokenHash]
     );
 
-    if (options.emailProvider && options.emailApiKey && options.emailFrom) {
+    if (options.emailProvider && options.emailFrom) {
       const resetLink = options.appUrl ? `${options.appUrl}/reset-password?token=${resetCode}` : resetCode;
-      await sendPasswordResetLink(options.emailProvider, options.emailApiKey, options.emailFrom, email, resetLink);
+      await sendPasswordResetLink(options.emailProvider, options.emailApiKey || '', options.emailFrom, email, resetLink);
+    } else {
+      console.warn('Password reset code was generated but email delivery is not configured.');
     }
   }
 
@@ -586,6 +602,7 @@ export async function createUserD1(
     status?: 'active' | 'inactive' | 'suspended';
     phone?: string | null;
     address?: string | null;
+    organization?: string | null;
     partner_id?: string | null;
     password?: string | null;
   }
@@ -595,7 +612,13 @@ export async function createUserD1(
     throw new Error('User already exists');
   }
 
+  const address = String(payload.address || '').trim();
+  if (payload.role === 'partner' && !address) {
+    throw new Error('Partner location is required');
+  }
+
   const userId = generateD1UUID();
+  const partnerId = payload.role === 'partner' ? payload.partner_id || generateD1UUID() : payload.partner_id || null;
   const passwordHash = await hashPassword(
     payload.password || generateSecureToken()
   );
@@ -611,11 +634,39 @@ export async function createUserD1(
       passwordHash,
       payload.role,
       payload.status || 'active',
-      payload.partner_id || null,
+      partnerId,
       payload.phone || null,
-      payload.address || null,
+      address || null,
     ]
   );
+
+  if (payload.role === 'partner') {
+    await executeD1(
+      db,
+      `INSERT INTO partners (
+         id, name, email, phone, address, user_id, service_types,
+         accepted_service_types, status, verified
+       )
+       VALUES (?, ?, lower(?), ?, ?, ?, ?, ?, 'active', 1)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         email = excluded.email,
+         phone = excluded.phone,
+         address = excluded.address,
+         user_id = excluded.user_id,
+         updated_at = CURRENT_TIMESTAMP`,
+      [
+        partnerId,
+        payload.organization || payload.name,
+        payload.email,
+        payload.phone || null,
+        address || DEFAULT_PARTNER_LOCATION,
+        userId,
+        'recycle, donate, upcycle',
+        'recycle, donate, upcycle',
+      ]
+    );
+  }
 
   const user = await queryD1First(
     db,
@@ -636,13 +687,23 @@ export async function updateUserD1(
     status?: 'active' | 'inactive' | 'suspended';
     phone?: string | null;
     address?: string | null;
+    organization?: string | null;
     partner_id?: string | null;
   }
 ) {
-  const existingUser = await queryD1First(db, 'SELECT id FROM users WHERE id = ?', [userId]);
+  const existingUser = await queryD1First(db, 'SELECT id, partner_id FROM users WHERE id = ?', [userId]);
   if (!existingUser) {
     throw new Error('User not found');
   }
+
+  const address = String(payload.address || '').trim();
+  if (payload.role === 'partner' && !address) {
+    throw new Error('Partner location is required');
+  }
+
+  const partnerId = payload.role === 'partner'
+    ? payload.partner_id || existingUser.partner_id || generateD1UUID()
+    : payload.partner_id || null;
 
   await executeD1(
     db,
@@ -662,11 +723,39 @@ export async function updateUserD1(
       payload.role || 'user',
       payload.status || 'active',
       payload.phone || null,
-      payload.address || null,
-      payload.partner_id || null,
+      address || null,
+      partnerId,
       userId,
     ]
   );
+
+  if (payload.role === 'partner') {
+    await executeD1(
+      db,
+      `INSERT INTO partners (
+         id, name, email, phone, address, user_id, service_types,
+         accepted_service_types, status, verified
+       )
+       VALUES (?, ?, lower(?), ?, ?, ?, ?, ?, 'active', 1)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         email = excluded.email,
+         phone = excluded.phone,
+         address = excluded.address,
+         user_id = excluded.user_id,
+         updated_at = CURRENT_TIMESTAMP`,
+      [
+        partnerId,
+        payload.organization || payload.name || 'Partner',
+        payload.email || '',
+        payload.phone || null,
+        address || DEFAULT_PARTNER_LOCATION,
+        userId,
+        'recycle, donate, upcycle',
+        'recycle, donate, upcycle',
+      ]
+    );
+  }
 
   const user = await queryD1First(
     db,
@@ -907,8 +996,10 @@ async function createEmailVerificationChallenge(
     [codeHash, user.id]
   );
 
-  if (options.emailProvider && options.emailApiKey && options.emailFrom) {
-    await sendTwoFactorCode(options.emailProvider, options.emailApiKey, options.emailFrom, user.email, code);
+  if (options.emailProvider && options.emailFrom) {
+    await sendTwoFactorCode(options.emailProvider, options.emailApiKey || '', options.emailFrom, user.email, code);
+  } else {
+    console.warn('Email verification code was generated but email delivery is not configured.');
   }
 
   if (options.exposeDevSecrets) {

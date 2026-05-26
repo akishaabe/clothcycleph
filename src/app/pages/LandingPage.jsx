@@ -44,36 +44,12 @@ const viewportReveal = { once: true, amount: 0.24 };
 const featuredPartners = [
   {
     id: "tela-cycle-hub",
-    name: "Tela Cycle Hub",
+    name: "TelaCycle",
     description: "Donation and upcycling collection center in Bulacan.",
     location: "Dona Rosa Subdivision, Subic, Baliuag, Bulacan, Philippines",
     phone: "+63 928 1500 711",
     email: "info@telacycle.com",
     website: "https://www.telacycle.com/",
-  },
-  {
-    id: "green-loom-partners",
-    name: "Green Loom Partners",
-    description: "Sustainable textile donation partner.",
-    location: "Mandaluyong City, Philippines",
-    phone: "+63 918 440 1120",
-    email: "juan@partner.com",
-  },
-  {
-    id: "circular-weaves-hub",
-    name: "Circular Weaves Hub",
-    description: "Community recycling and education partner.",
-    location: "Quezon City, Philippines",
-    phone: "+63 916 337 9012",
-    email: "lisa@partner.com",
-  },
-  {
-    id: "urban-fiber-works",
-    name: "Urban Fiber Works",
-    description: "Upcycling studio for local creatives.",
-    location: "Pasig City, Philippines",
-    phone: "+63 917 210 4411",
-    email: "contact@fiberworks.ph",
   },
 ];
 
@@ -477,7 +453,7 @@ export function LandingPage() {
             </p>
 
             <motion.div
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8"
+              className="mx-auto grid max-w-md grid-cols-1 gap-8"
               variants={staggerGroup}
             >
               {featuredPartners.map((partner) => (

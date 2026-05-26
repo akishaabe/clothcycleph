@@ -8,20 +8,50 @@ interface SendEmailOptions {
 }
 
 export async function sendEmail(options: SendEmailOptions, appConfig: AppConfig = config) {
-  if (appConfig.email.provider === 'resend') {
+  const provider = String(appConfig.email.provider || 'console').toLowerCase();
+
+  if (provider === 'resend') {
+    validateEmailConfig(provider, appConfig.email.resendApiKey);
     return sendResendEmail(options, appConfig);
   }
 
-  if (appConfig.email.provider === 'brevo') {
+  if (provider === 'brevo') {
+    validateEmailConfig(provider, appConfig.email.brevoApiKey);
     return sendBrevoEmail(options, appConfig);
   }
 
-  if (appConfig.email.provider === 'sendgrid') {
+  if (provider === 'sendgrid') {
+    validateEmailConfig(provider, appConfig.email.sendgridApiKey);
     return sendSendGridEmail(options, appConfig);
   }
 
-  console.log('Dev email:', options);
+  if (appConfig.server.env === 'production') {
+    console.warn('Email delivery skipped: EMAIL_PROVIDER is not configured for production.');
+    throw new Error('Email delivery is not configured. Please contact support.');
+  }
+
+  console.log('Dev email:', {
+    to: options.to,
+    subject: options.subject,
+    text: options.text,
+  });
   return { delivered: false, provider: 'console' };
+}
+
+function validateEmailConfig(provider: string, apiKey?: string) {
+  if (apiKey) {
+    return;
+  }
+
+  const requiredKey =
+    provider === 'brevo'
+      ? 'BREVO_API_KEY'
+      : provider === 'sendgrid'
+        ? 'SENDGRID_API_KEY'
+        : 'RESEND_API_KEY';
+
+  console.warn(`Email delivery skipped: EMAIL_PROVIDER=${provider} requires ${requiredKey}.`);
+  throw new Error(`Email delivery is not configured. Missing ${requiredKey}.`);
 }
 
 export async function sendTwoFactorCode(to: string, code: string, appConfig: AppConfig = config) {

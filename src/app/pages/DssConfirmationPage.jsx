@@ -1080,8 +1080,8 @@ export function DssConfirmationPage() {
                             onClick={() => handleBuybackPreferenceChange(value)}
                             className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
                               buybackPreference === value
-                                ? "border-[#336158] bg-[#f1f7ef] text-[#19221d] ring-2 ring-[#336158]/15 dark:border-emerald-300 dark:bg-emerald-300/15 dark:text-white"
-                                : "border-[#e1e7df] bg-white text-[#5f6f67] hover:border-[#9bb39c] dark:border-white/10 dark:bg-white/[0.03] dark:text-zinc-300"
+                                ? "border-[#336158] bg-[#f1f7ef] text-[#19221d] ring-2 ring-[#336158]/15 dark:border-emerald-300 dark:bg-emerald-300/25 dark:text-white dark:ring-emerald-300/30"
+                                : "border-[#e1e7df] bg-white text-[#5f6f67] hover:border-[#9bb39c] dark:border-white/15 dark:bg-white/[0.05] dark:text-zinc-300 dark:hover:border-emerald-300/70"
                             }`}
                           >
                             {label}

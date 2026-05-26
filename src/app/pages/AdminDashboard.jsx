@@ -73,6 +73,7 @@ const emptyForm = {
   email: "",
   phone: "",
   organization: "",
+  location: "",
   status: "active",
   password: "",
 };
@@ -226,6 +227,8 @@ const mapUserToAccount = (user) => ({
   status: user.status || 'active',
   joined: user.created_at ? user.created_at.split('T')[0] : '',
   phone: user.phone || '',
+  location: user.address || (user.role === 'partner' ? 'Mapúa Makati' : ''),
+  partner_id: user.partner_id || null,
   organization:
     user.role === 'partner'
       ? user.partner_name || 'Partner'
@@ -572,6 +575,7 @@ export function AdminDashboard() {
       email: account.email,
       phone: account.phone,
       organization: account.organization,
+      location: account.location || "",
       status: account.status,
       password: "",
     });
@@ -593,6 +597,11 @@ export function AdminDashboard() {
     setAdminError("");
 
     try {
+      if (activeRole === "Partner" && !formData.location.trim()) {
+        setAdminError("Partner location is required.");
+        return;
+      }
+
       if (editingAccount) {
         const response = await adminService.updateUser(editingAccount.id, {
           name: formData.name,
@@ -600,8 +609,9 @@ export function AdminDashboard() {
           role: activeRole.toLowerCase(),
           status: formData.status,
           phone: formData.phone,
-          address: '',
-          partner_id: null,
+          address: formData.location,
+          organization: formData.organization,
+          partner_id: editingAccount.partner_id || null,
         });
 
         setAccounts((current) =>
@@ -618,7 +628,8 @@ export function AdminDashboard() {
           role: activeRole.toLowerCase(),
           status: formData.status,
           phone: formData.phone,
-          address: '',
+          address: formData.location,
+          organization: formData.organization,
           partner_id: null,
           password: formData.password || undefined,
         });
@@ -663,8 +674,9 @@ export function AdminDashboard() {
         role: suspendTarget.role.toLowerCase(),
         status: nextStatus,
         phone: suspendTarget.phone,
-        address: '',
-        partner_id: null,
+        address: suspendTarget.location || "",
+        organization: suspendTarget.organization,
+        partner_id: suspendTarget.partner_id || null,
       });
 
       setAccounts((current) =>
@@ -2035,6 +2047,19 @@ function AccountModal({
               required
             />
           </label>
+
+          {role === "Partner" && (
+            <label className="block md:col-span-2">
+              <span className="mb-2 block text-sm text-gray-600">Partner Location</span>
+              <input
+                value={formData.location}
+                onChange={(event) => onChange("location", event.target.value)}
+                className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-gray-950 outline-none focus:border-gray-950"
+                placeholder="Mapúa Makati"
+                required
+              />
+            </label>
+          )}
 
           <label className="block">
             <span className="mb-2 block text-sm text-gray-600">

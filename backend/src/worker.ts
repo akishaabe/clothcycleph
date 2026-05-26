@@ -112,6 +112,7 @@ interface CloudflareEnv {
   CORS_ORIGIN?: string;
   R2_PUBLIC_BASE_URL?: string;
   EMAIL_PROVIDER?: EmailProvider;
+  RESEND_API_KEY?: string;
   BREVO_API_KEY?: string;
   SENDGRID_API_KEY?: string;
   EMAIL_FROM?: string;
@@ -182,15 +183,23 @@ app.onError((error, c) => {
 
 const getAuthOptions = (c: any) => {
   const appConfig = getConfig(c.env);
+  const provider = String(appConfig.email.provider || 'console').toLowerCase() as EmailProvider;
+  const emailApiKey =
+    provider === 'brevo'
+      ? appConfig.email.brevoApiKey
+      : provider === 'sendgrid'
+        ? appConfig.email.sendgridApiKey
+        : undefined;
+
   return {
     jwtSecret: requireWorkerSecret(c, 'JWT_SECRET'),
     totpEncryptionKey: requireWorkerSecret(c, 'TWO_FACTOR_ENCRYPTION_KEY'),
-    emailProvider: appConfig.email.provider as EmailProvider,
-    emailApiKey: appConfig.email.brevoApiKey || appConfig.email.sendgridApiKey,
+    emailProvider: provider,
+    emailApiKey,
     emailFrom: appConfig.email.from,
     appUrl: c.env.APP_URL,
     googleClientId: appConfig.google.clientId,
-    exposeDevSecrets: Boolean(!c.env.EMAIL_PROVIDER),
+    exposeDevSecrets: provider === 'console' && c.env.NODE_ENV !== 'production',
   };
 };
 
@@ -336,9 +345,11 @@ app.post('/api/auth/signup', async (c) => {
 
   const result = await signupD1(c.env.DB, email, name, password, getAuthOptions(c));
   return c.json({
-    message: 'Signup successful',
-    token: result.token,
-    user: result.user,
+    message: 'Check your email for the verification code.',
+    requiresTwoFactor: true,
+    two_factor_token: result.twoFactorToken,
+    two_factor_method: result.twoFactorMethod,
+    dev_code: result.devCode,
   }, 201);
 });
 
@@ -950,6 +961,7 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (c) => {
     status: body.status,
     phone: body.phone,
     address: body.address,
+    organization: body.organization,
     partner_id: body.partner_id,
     password: body.password,
   });
@@ -966,6 +978,7 @@ app.put('/api/admin/users/:id', requireAuth, requireAdmin, async (c) => {
     status: body.status,
     phone: body.phone,
     address: body.address,
+    organization: body.organization,
     partner_id: body.partner_id,
   });
   return c.json({ message: 'User updated successfully', data: user });

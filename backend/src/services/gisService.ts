@@ -12,7 +12,9 @@ const DEFAULT_RADIUS_KM = 75;
 export async function listPartnerLocations(options: PartnerSearchOptions = {}) {
   const result = await query(
     `SELECT
-       id, name, description, logo_url, email, phone, address, website,
+       id, name, description, logo_url, email, phone,
+       COALESCE(NULLIF(btrim(address), ''), 'Mapúa Makati') AS address,
+       website,
        service_types, accepted_service_types, contact_person, rating, verified,
        latitude, longitude
      FROM partners

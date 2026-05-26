@@ -33,6 +33,16 @@ import {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const REQUEST_TIMEOUT_MS = 20000;
 
+export class ApiRequestError extends Error {
+  status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+  }
+}
+
 // Helper function to get auth token
 const getAuthToken = (): string | null => {
   return localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token');
@@ -88,13 +98,13 @@ async function fetchWithAuth(
       } catch {
         errorMessage = `${errorMessage} (${response.status})`;
       }
-      throw new Error(errorMessage);
+      throw new ApiRequestError(errorMessage, response.status);
     }
 
     return response.json();
   } catch (error) {
     if ((error as Error).name === 'AbortError') {
-      throw new Error(`Request timed out while contacting ${url}. Check that the backend is running and reachable.`);
+      throw new ApiRequestError(`Request timed out while contacting ${url}. Check that the backend is running and reachable.`);
     }
 
     if (error instanceof TypeError) {
@@ -104,7 +114,7 @@ async function fetchWithAuth(
         origin: window.location.origin,
         message: error.message,
       });
-      throw new Error(`Could not reach the backend at ${API_URL}. Check VITE_API_URL, backend server status, and CORS_ORIGIN.`);
+      throw new ApiRequestError(`Could not reach the backend at ${API_URL}. Check VITE_API_URL, backend server status, and CORS_ORIGIN.`);
     }
 
     throw error;

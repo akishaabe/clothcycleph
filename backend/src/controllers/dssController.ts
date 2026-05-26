@@ -235,6 +235,34 @@ export const sendRecommendationToPartner = async (req: AuthRequest, res: Respons
       (item) => item.recommended_pathway === recommended_pathway
     ) || recommendations[0];
 
+    const existingRequest = await query(
+      `SELECT t.*, rr.id AS recommendation_result_id, rr.run_id AS recommendation_run_id
+       FROM transactions t
+       LEFT JOIN recommendation_results rr
+         ON rr.submission_id = t.submission_id
+        AND rr.partner_id = t.to_partner_id
+        AND rr.selected = true
+       WHERE t.submission_id = $1
+         AND t.from_user_id = $2
+         AND t.to_partner_id = $3
+         AND t.type = $4
+       ORDER BY t.created_at DESC
+       LIMIT 1`,
+      [submission_id, userId, partner_id, recommended_pathway]
+    );
+
+    if (existingRequest.rows.length > 0) {
+      const existing = existingRequest.rows[0];
+      return res.json({
+        message: 'Recommendation already sent to this partner',
+        data: {
+          transaction: existing,
+          recommendation_result_id: existing.recommendation_result_id || null,
+          recommendation_run_id: existing.recommendation_run_id || null,
+        },
+      });
+    }
+
     await client.query('BEGIN');
     transactionStarted = true;
 

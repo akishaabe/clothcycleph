@@ -6,6 +6,7 @@ import { AppError } from '../utils/errorHandler.js';
 
 const allowedRoles = new Set(['user', 'partner', 'admin']);
 const allowedStatuses = new Set(['active', 'inactive', 'suspended']);
+const DEFAULT_PARTNER_LOCATION = 'Mapúa Makati';
 
 function requireAdmin(req: Request) {
   if (req.user?.role !== 'admin') {
@@ -59,14 +60,24 @@ export const createAdminUser = async (req: Request, res: Response) => {
     requireAdmin(req);
     const role = normalizeRole(req.body.role);
     const status = normalizeStatus(req.body.status);
+    const address = String(req.body.address || '').trim();
 
     if (!req.body.name || !req.body.email) {
       throw new AppError(400, 'Name and email are required');
     }
 
+    if (role === 'partner' && !address) {
+      throw new AppError(400, 'Partner location is required');
+    }
+
     const password = req.body.password || `ClothCycle!${Math.random().toString(36).slice(2, 8)}`;
     const passwordHash = await hashPassword(password);
     const id = uuidv4();
+    let partnerId = req.body.partner_id || null;
+
+    if (role === 'partner' && !partnerId) {
+      partnerId = uuidv4();
+    }
 
     const result = await query(
       `INSERT INTO users (
@@ -82,12 +93,48 @@ export const createAdminUser = async (req: Request, res: Response) => {
         role,
         status,
         req.body.phone || null,
-        req.body.address || null,
-        req.body.partner_id || null,
+        address || null,
+        partnerId,
       ]
     );
 
-    res.status(201).json({ message: 'User created successfully', data: result.rows[0] });
+    if (role === 'partner') {
+      await query(
+        `INSERT INTO partners (
+           id, name, email, phone, address, user_id, service_types,
+           accepted_service_types, status, verified
+         )
+         VALUES ($1, $2, lower($3), $4, $5, $6, $7, $7, 'active', true)
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name,
+           email = EXCLUDED.email,
+           phone = EXCLUDED.phone,
+           address = EXCLUDED.address,
+           user_id = EXCLUDED.user_id,
+           updated_at = NOW()`,
+        [
+          partnerId,
+          req.body.organization || req.body.name,
+          req.body.email,
+          req.body.phone || null,
+          address || DEFAULT_PARTNER_LOCATION,
+          id,
+          'recycle, donate, upcycle',
+        ]
+      );
+    }
+
+    const created = await query(
+      `SELECT u.id, u.email, u.name, u.role, u.status, u.avatar_url, u.bio,
+              u.phone, u.address, u.partner_id, u.created_at, u.updated_at,
+              p.name AS partner_name
+       FROM users u
+       LEFT JOIN partners p ON p.id = u.partner_id
+       WHERE u.id = $1`,
+      [result.rows[0].id]
+    );
+
+    res.status(201).json({ message: 'User created successfully', data: created.rows[0] || result.rows[0] });
   } catch (error) {
     const message = (error as any).code === '23505' ? 'Email is already in use' : (error as Error).message;
     res.status((error as AppError).statusCode || 400).json({ error: message });
@@ -99,6 +146,11 @@ export const updateAdminUser = async (req: Request, res: Response) => {
     requireAdmin(req);
     const role = normalizeRole(req.body.role);
     const status = normalizeStatus(req.body.status);
+    const address = String(req.body.address || '').trim();
+
+    if (role === 'partner' && !address) {
+      throw new AppError(400, 'Partner location is required');
+    }
 
     const result = await query(
       `UPDATE users
@@ -118,7 +170,7 @@ export const updateAdminUser = async (req: Request, res: Response) => {
         role,
         status,
         req.body.phone || null,
-        req.body.address || null,
+        address || null,
         req.body.partner_id || null,
         req.params.id,
       ]
@@ -128,7 +180,49 @@ export const updateAdminUser = async (req: Request, res: Response) => {
       throw new AppError(404, 'User not found');
     }
 
-    res.json({ message: 'User updated successfully', data: result.rows[0] });
+    if (role === 'partner') {
+      let partnerId = result.rows[0].partner_id;
+      if (!partnerId) {
+        partnerId = uuidv4();
+        await query('UPDATE users SET partner_id = $1 WHERE id = $2', [partnerId, req.params.id]);
+      }
+
+      await query(
+        `INSERT INTO partners (
+           id, name, email, phone, address, user_id, service_types,
+           accepted_service_types, status, verified
+         )
+         VALUES ($1, $2, lower($3), $4, $5, $6, $7, $7, 'active', true)
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name,
+           email = EXCLUDED.email,
+           phone = EXCLUDED.phone,
+           address = EXCLUDED.address,
+           user_id = EXCLUDED.user_id,
+           updated_at = NOW()`,
+        [
+          partnerId,
+          req.body.organization || req.body.name,
+          req.body.email,
+          req.body.phone || null,
+          address || DEFAULT_PARTNER_LOCATION,
+          req.params.id,
+          'recycle, donate, upcycle',
+        ]
+      );
+    }
+
+    const updated = await query(
+      `SELECT u.id, u.email, u.name, u.role, u.status, u.avatar_url, u.bio,
+              u.phone, u.address, u.partner_id, u.created_at, u.updated_at,
+              p.name AS partner_name
+       FROM users u
+       LEFT JOIN partners p ON p.id = u.partner_id
+       WHERE u.id = $1`,
+      [req.params.id]
+    );
+
+    res.json({ message: 'User updated successfully', data: updated.rows[0] || result.rows[0] });
   } catch (error) {
     const message = (error as any).code === '23505' ? 'Email is already in use' : (error as Error).message;
     res.status((error as AppError).statusCode || 400).json({ error: message });
