@@ -510,6 +510,8 @@ export async function disableTwoFactorD1(db: D1Database, userId: string, passwor
 }
 
 export async function forgotPasswordD1(db: D1Database, email: string, options: AuthD1Options) {
+  await ensurePasswordResetTokenVerificationColumnsD1(db);
+
   const user = await queryD1First(db, 'SELECT id FROM users WHERE email = ?', [email]);
   const resetCode = generateNumericCode();
   const tokenHash = await hashToken(resetCode);
@@ -542,6 +544,8 @@ export async function forgotPasswordD1(db: D1Database, email: string, options: A
 }
 
 export async function resetPasswordD1(db: D1Database, token: string, password: string) {
+  await ensurePasswordResetTokenVerificationColumnsD1(db);
+
   const tokenHash = await hashToken(token.trim());
   const record = await queryD1First(
     db,
@@ -573,6 +577,8 @@ export async function resetPasswordD1(db: D1Database, token: string, password: s
 }
 
 export async function verifyResetCodeD1(db: D1Database, token: string) {
+  await ensurePasswordResetTokenVerificationColumnsD1(db);
+
   const tokenHash = await hashToken(token.trim());
   const record = await queryD1First(
     db,
@@ -598,6 +604,29 @@ export async function verifyResetCodeD1(db: D1Database, token: string) {
   );
 
   return { message: 'Reset code verified', reset_token: resetToken };
+}
+
+async function ensurePasswordResetTokenVerificationColumnsD1(db: D1Database) {
+  const result = await queryD1<{ name: string }>(db, 'PRAGMA table_info(password_reset_tokens)');
+  const existingColumns = new Set((result.results || []).map((column) => String(column.name)));
+  const requiredColumns = [
+    ['verified_at', 'TEXT'],
+    ['reset_token_hash', 'TEXT'],
+    ['reset_token_expires_at', 'TEXT'],
+  ] as const;
+
+  for (const [columnName, columnType] of requiredColumns) {
+    if (!existingColumns.has(columnName)) {
+      await executeD1(db, `ALTER TABLE password_reset_tokens ADD COLUMN ${columnName} ${columnType}`);
+    }
+  }
+
+  await executeD1(
+    db,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_password_reset_tokens_reset_token_hash
+     ON password_reset_tokens(reset_token_hash)
+     WHERE reset_token_hash IS NOT NULL`
+  );
 }
 
 export async function getUsersD1(db: D1Database, role?: string) {
