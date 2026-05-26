@@ -397,6 +397,11 @@ export function SettingsPage() {
     showSaveMessage("success", "Recovery codes downloaded.");
   };
 
+  const handleFinishRecoveryCodes = () => {
+    setTwoFactorRecoveryCodes([]);
+    setTwoFactorPanel("idle");
+  };
+
   const resizeProfilePhoto = (file) =>
     new Promise((resolve, reject) => {
       const image = new Image();
@@ -824,7 +829,7 @@ export function SettingsPage() {
                     </div>
 
                     {isSetupPanelOpen ? (
-                      <div className="space-y-4 rounded-xl border border-[#dce4da] bg-white/85 p-4">
+                      <div className="settings-2fa-panel space-y-4 rounded-xl border border-[#dce4da] bg-white/85 p-4">
                         <div className="flex items-start justify-between gap-4">
                           <div>
                             <div className="text-base text-[#19221d]">
@@ -862,9 +867,9 @@ export function SettingsPage() {
                                       setTwoFactorSetup(null);
                                       setTwoFactorCode("");
                                     }}
-                                    className={`rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
+                                    className={`settings-2fa-method-card rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
                                       twoFactorMethod === method
-                                        ? "border-[#336158] bg-[#edf7ed] text-[#19221d]"
+                                        ? "settings-2fa-method-card-selected border-[#336158] bg-[#edf7ed] text-[#19221d]"
                                         : "border-[#dce4da] bg-white text-[#5f6f67] hover:bg-[#f3f5f2]"
                                     }`}
                                   >
@@ -904,7 +909,15 @@ export function SettingsPage() {
                         </div>
 
                         {twoFactorSetup ? (
-                          <div className="space-y-4 rounded-xl border border-[#e7ebe6] bg-[#f8faf6] p-4">
+                          <div className="settings-2fa-auth-app space-y-4 rounded-xl border border-[#e7ebe6] bg-[#f8faf6] p-4">
+                            <div>
+                              <div className="text-base font-semibold text-[#19221d]">
+                                Connect your authenticator app
+                              </div>
+                              <p className="mt-1 text-sm text-[#5f6f67]">
+                                Scan the QR code, or enter the manual key, then type the 6-digit code from your app.
+                              </p>
+                            </div>
                             <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
                               <div className="flex justify-center">
                                 <img
@@ -919,7 +932,7 @@ export function SettingsPage() {
                                   <div className="text-sm text-[#5f6f67]">
                                     Manual Setup Key
                                   </div>
-                                  <div className="mt-1 break-all rounded-xl bg-white px-4 py-3 font-mono text-sm text-[#19221d]">
+                                  <div className="settings-2fa-secret mt-1 break-all rounded-xl bg-white px-4 py-3 font-mono text-sm text-[#19221d]">
                                     {twoFactorSetup.secret}
                                   </div>
                                 </div>
@@ -961,7 +974,11 @@ export function SettingsPage() {
                     ) : null}
 
                     {isRecoveryPanelOpen ? (
-                      <div className="space-y-4 rounded-xl border border-[#ead9a7] bg-[#fffaf0] p-4">
+                      <motion.div
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="settings-recovery-codes space-y-4 rounded-xl border border-[#ead9a7] bg-[#fffaf0] p-4"
+                      >
                         <div className="flex items-start gap-3 rounded-xl border border-[#f0e2b8] bg-white/70 px-4 py-3 text-sm text-[#7a6230]">
                           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
                           <div>
@@ -993,7 +1010,7 @@ export function SettingsPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setTwoFactorPanel("idle")}
+                            onClick={handleFinishRecoveryCodes}
                             className="inline-flex items-center gap-2 rounded-xl border border-transparent px-4 py-2.5 text-sm text-[#7a6230] transition-colors hover:bg-white/60"
                           >
                             Done
@@ -1010,7 +1027,7 @@ export function SettingsPage() {
                             </div>
                           ))}
                         </div>
-                      </div>
+                      </motion.div>
                     ) : null}
 
                   </div>

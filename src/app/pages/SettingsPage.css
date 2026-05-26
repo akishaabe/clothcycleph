@@ -154,6 +154,56 @@
   color: var(--settings-text) !important;
 }
 
+.settings-theme-partner .settings-2fa-panel,
+.settings-theme-admin .settings-2fa-panel,
+.settings-theme-partner .settings-2fa-auth-app,
+.settings-theme-admin .settings-2fa-auth-app {
+  background-color: var(--settings-card) !important;
+  border-color: var(--settings-border) !important;
+  color: var(--settings-text) !important;
+}
+
+.settings-theme-partner .settings-2fa-method-card,
+.settings-theme-admin .settings-2fa-method-card {
+  background-color: var(--settings-card) !important;
+  border-color: var(--settings-border) !important;
+  color: var(--settings-muted) !important;
+}
+
+.settings-theme-partner .settings-2fa-method-card-selected,
+.settings-theme-admin .settings-2fa-method-card-selected {
+  background-color: color-mix(in srgb, var(--settings-primary) 16%, transparent) !important;
+  border-color: var(--settings-primary) !important;
+  color: var(--settings-text) !important;
+  box-shadow: 0 0 0 2px var(--settings-ring) !important;
+}
+
+.settings-theme-partner .settings-2fa-secret,
+.settings-theme-admin .settings-2fa-secret {
+  background-color: var(--settings-subtle) !important;
+  border: 1px solid var(--settings-border);
+  color: var(--settings-text) !important;
+}
+
+.settings-theme-partner .settings-recovery-codes,
+.settings-theme-admin .settings-recovery-codes {
+  background-color: color-mix(in srgb, #f8d56b 14%, var(--settings-card)) !important;
+  border-color: color-mix(in srgb, #f8d56b 42%, var(--settings-border)) !important;
+  color: var(--settings-text) !important;
+}
+
+.settings-theme-partner .settings-recovery-codes [class*="bg-white"],
+.settings-theme-admin .settings-recovery-codes [class*="bg-white"] {
+  background-color: color-mix(in srgb, var(--settings-card) 86%, #f8d56b) !important;
+}
+
+.settings-theme-partner .settings-recovery-codes [class*="text-[#7a6230]"],
+.settings-theme-admin .settings-recovery-codes [class*="text-[#7a6230]"],
+.settings-theme-partner .settings-recovery-codes [class*="text-[#6d5420]"],
+.settings-theme-admin .settings-recovery-codes [class*="text-[#6d5420]"] {
+  color: color-mix(in srgb, var(--settings-text) 86%, #9a6a00) !important;
+}
+
 .dark .settings-theme-admin .settings-2fa-status-on,
 .dark .settings-theme-partner .settings-2fa-status-on {
   background-color: rgba(52, 211, 153, 0.14) !important;

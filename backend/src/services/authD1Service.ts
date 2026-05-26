@@ -428,6 +428,8 @@ export async function enableTwoFactorD1(db: D1Database, userId: string, password
     throw new Error('Invalid two-factor code');
   }
 
+  const recoveryCodes = await replaceRecoveryCodesD1(db, userId);
+
   await executeD1(
     db,
     `UPDATE users
@@ -442,8 +444,31 @@ export async function enableTwoFactorD1(db: D1Database, userId: string, password
 
   return {
     message: 'Two-factor authentication enabled',
-    recovery_codes: [],
+    recovery_codes: recoveryCodes,
   };
+}
+
+async function replaceRecoveryCodesD1(db: D1Database, userId: string, count = 10) {
+  const plainCodes = Array.from({ length: count }, generateRecoveryCodeD1);
+  const hashedCodes = await Promise.all(plainCodes.map((recoveryCode) => hashPassword(recoveryCode)));
+
+  await executeD1(db, 'DELETE FROM user_recovery_codes WHERE user_id = ?', [userId]);
+
+  for (const codeHash of hashedCodes) {
+    await executeD1(
+      db,
+      `INSERT INTO user_recovery_codes (id, user_id, code_hash)
+       VALUES (?, ?, ?)`,
+      [generateD1UUID(), userId, codeHash]
+    );
+  }
+
+  return plainCodes;
+}
+
+function generateRecoveryCodeD1() {
+  const compactId = generateD1UUID().replace(/-/g, '').toLowerCase();
+  return `${compactId.slice(0, 8)}-${compactId.slice(8, 16)}`;
 }
 
 export async function disableTwoFactorD1(db: D1Database, userId: string, password: string, code: string | undefined, options: AuthD1Options) {
