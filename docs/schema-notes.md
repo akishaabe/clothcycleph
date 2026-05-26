@@ -2,63 +2,53 @@
 
 ## Files Inspected
 
-- `backend/src/db/migrations/*.sql`
 - `backend/src/db/d1-schema.sql`
-- `backend/src/controllers/submissionController.ts`
-- `backend/src/controllers/dssController.ts`
-- `backend/src/controllers/transactionController.ts`
-- `backend/src/controllers/adminController.ts`
-- `backend/src/controllers/messageController.ts`
-- `backend/src/controllers/notificationController.ts`
-- `backend/src/services/dssEngine.ts`
-- `backend/src/services/d1DssService.ts`
-- `backend/src/services/d1SubmissionService.ts`
-- `backend/src/services/d1TransactionService.ts`
-- `backend/src/services/notificationService.ts`
+- `backend/src/db/migrations/*.sql`
+- `backend/src/db/d1-migrations/*.sql`
+- `backend/src/worker.ts`
 - `backend/src/honoLocalApp.ts`
+- `backend/src/services/authD1Service.ts`
+- `backend/src/services/d1SubmissionService.ts`
+- `backend/src/services/d1DssService.ts`
+- `backend/src/services/d1TransactionService.ts`
+- `backend/src/services/d1MessageService.ts`
+- `backend/src/services/d1NotificationService.ts`
+- `backend/src/services/d1UploadService.ts`
+- `backend/src/services/d1GisService.ts`
+- `backend/src/services/dssEngine.ts`
 - `src/routes.jsx`
-- `src/services/api.ts`
-- Current dashboard/request pages used to confirm active flows and displayed fields.
+- Current dashboard, submission, DSS confirmation, messages, notifications, and admin pages.
 
 ## Source Of Truth Used
 
-The DBML in `docs/clothcycle-current-schema.dbml` is based primarily on the current SQL migrations and the consolidated D1 schema:
+`docs/clothcycle-current-schema.dbml` is based primarily on `backend/src/db/d1-schema.sql`, because that file is the current consolidated Cloudflare Worker/D1 schema. The PostgreSQL migration files and D1 migration files were also checked so recent changes were not missed.
 
-- PostgreSQL migration history: `backend/src/db/migrations/*.sql`
-- Consolidated D1-compatible schema: `backend/src/db/d1-schema.sql`
-- Current runtime reads/writes in controllers and services.
+The running database was not introspected in this pass. The documentation is project-source based: schema files, migrations, Worker routes, local Hono routes, and service reads/writes.
 
-The old DBML files and uploaded ERD/process-flow images were treated only as references, not source of truth.
+## Current Schema Highlights
 
-Live database introspection was not used in this pass because the repository already contains both the migration history and the current D1 schema snapshot. Where those sources disagree, the DBML includes a note instead of guessing silently.
-
-## Noted Schema Differences Or Uncertainties
-
-- `transactions.to_partner_id` is nullable in the early PostgreSQL migration but marked `NOT NULL` in the D1 schema. The current DSS request flow requires a partner, so the DBML marks it `not null` and includes a note.
-- `recommendation_runs.audit_label` appears in PostgreSQL migration `017_admin_dss_rules.sql` but is not present in `d1-schema.sql`. The DBML includes it with a note.
-- Early notification migration history used `message` and `related_id`, while the current consolidated schema and controllers use `title`, `body`, `data`, `read`, and `read_at`. The DBML follows the current schema/controller usage.
-- `photos` on `submissions` is represented as `json[]` in PostgreSQL code and JSON text in D1. The DBML uses a JSON-like type with a note.
-- `outcome_photos` is stored as JSON/JSONB and is treated as an array by the frontend and backend.
-
-## Enum-Like Fields
-
-The schema mostly uses string fields plus CHECK constraints or application validation instead of database enum types. Enum-like values are documented in DBML notes for:
-
-- user roles and statuses
-- partner statuses
-- submission statuses
-- transaction request statuses
-- tracking progress and fulfillment method
-- DSS pathway values
-- rule-change request statuses
-- notification types
-- conversation statuses
-
-## Tables That Appear Internal, Administrative, Or Low-Touch
-
-- `schema_migrations` is internal migration tracking.
-- `rate_limits`, `auth_events`, `password_reset_tokens`, and `user_recovery_codes` support auth/security flows.
-- `activity_logs` is used for audit logging.
+- `users` stores auth profile data, role, status, password setup state, email verification fields, two-factor fields, lockout fields, and optional partner linkage.
+- `partners` stores real partner records, service-type metadata, contact/location details, active/pending status, and coordinates for GIS-style partner display.
+- `submissions`, `submission_details`, `burn_tests`, and `submission_images` store the textile intake flow.
+- `transactions` is the implemented partner request table. It stores request status, pathway type, bag color, lightweight route/carbon estimates, and partner outcome report fields.
+- `request_tracking_updates` stores user-entered courier/drop-off updates after a partner accepts a request.
+- `recommendation_runs` and `recommendation_results` store DSS audit records and selected recommendation output payloads.
+- `uploaded_files` records R2/local-upload metadata and links uploaded files to submissions, messages, or transaction outcomes.
 - `deleted_records` powers the admin deleted-records page.
-- `recommendation_feedback` exists in schema but appears less central than the active `recommendation_runs` and `recommendation_results` DSS audit flow.
-- `conversations` exists for structured message grouping, while current message sends also write direct `messages` rows with related submission/transaction links.
+
+## Noted Differences Or Uncertainties
+
+- D1 stores IDs as `TEXT`. PostgreSQL migrations use UUID defaults. The DBML follows the current D1 schema and notes that PostgreSQL migrations remain for local deployments.
+- D1 stores booleans as `INTEGER`; services normalize them to booleans for frontend use.
+- D1 stores JSON-shaped data as `TEXT`; services parse fields such as `photos`, `metadata`, `output_payload`, `outcome_photos`, and burn-test arrays.
+- `recommendation_runs.audit_label` appears in PostgreSQL migration history but not in the current D1 schema snapshot. It remains in DBML as a noted compatibility field.
+- `transactions.to_partner_id` is required by the current D1 schema and DSS send flow.
+- Some schema-supported values are broader than current UI choices. For example, tracking supports `pickup` and `other`, while the current user UI emphasizes courier shipping and direct drop-off.
+
+## Tables That Appear Internal Or Low-Touch
+
+- `schema_migrations` is migration bookkeeping.
+- `rate_limits`, `auth_events`, `password_reset_tokens`, and `user_recovery_codes` support auth/security flows.
+- `activity_logs` supports audit logging.
+- `recommendation_feedback` exists but is less central than the active DSS run/result audit flow.
+- `conversations` exists for message grouping, while active automatic and direct messages are stored in `messages` with related submission/transaction links.

@@ -1,59 +1,74 @@
-# ClothCycle PH DSS Process Flow
+# New Revised Developed DSS Process Flow
 
 ```mermaid
 flowchart TD
-  Start([DSS starts]) --> CollectInput[Collect textile submission input]
-  CollectInput --> BasicFields[Read item type, condition, cleanliness, quantity, selected action, and description]
-  CollectInput --> DetailFields[Read detailed textile fields]
-  DetailFields --> DetailList[Fabric/material, restricted category, uniform branding, wearability, repairability, contamination, damage, repurposing potential, trim removal, weight]
-  CollectInput --> BurnTestChoice{Burn test provided?}
+  Start([DSS starts]) --> LoadSubmission[Load saved submission and detail records]
+  LoadSubmission --> BasicInput[Read item type, condition, cleanliness, quantity, intended action, buyback interest, photos, and user notes]
+  LoadSubmission --> DetailInput[Read detailed textile answers]
+  DetailInput --> DetailFields[Fabric signals, material/fiber composition, restricted category, uniform branding, wearability, repairability, contamination, damage, repurposing potential, trim removal, and weight]
+  LoadSubmission --> BurnChoice{Burn test performed?}
 
-  BurnTestChoice -- Yes --> AnalyzeBurn[Analyze burn-test observations]
-  AnalyzeBurn --> FiberSignals[Rank likely fibers by flame behavior, smell, ash, and after-flame behavior]
-  BurnTestChoice -- No --> UseFormSignals[Use submitted fabric and material details only]
+  BurnChoice -- Yes --> BurnAnalysis[Compare flame moment, flame behavior, after-flame behavior, smell, and ash]
+  BurnAnalysis --> FiberRank[Rank likely fabric fibers and confidence]
+  BurnChoice -- No --> FabricFallback[Use form fabric/material signals only]
 
-  BasicFields --> EligibilityScreen[Run eligibility screening]
-  DetailList --> EligibilityScreen
-  FiberSignals --> EligibilityScreen
-  UseFormSignals --> EligibilityScreen
+  BasicInput --> Eligibility[Run eligibility screening]
+  DetailFields --> Eligibility
+  FiberRank --> Eligibility
+  FabricFallback --> Eligibility
 
-  EligibilityScreen --> RestrictedDecision{Restricted category or unsafe contamination?}
-  RestrictedDecision -- Yes --> RejectNormalFlow[Return rejected pathway with reason]
-  RejectNormalFlow --> RejectionOutput[Show safety or eligibility guidance]
+  Eligibility --> Restricted{Restricted textile or unsafe contamination?}
+  Restricted -- Yes --> Rejected[Return rejected recommendation with safety reason]
+  Rejected --> RejectedOutput[Show guidance and stop normal pathway scoring]
 
-  RestrictedDecision -- No --> DonationBlock{Donation selected but blocked?}
-  DonationBlock -- Yes --> DonationReject[Return rejected pathway for donation-only block]
-  DonationReject --> RejectionOutput
+  Restricted -- No --> DonationBlock{Donation selected but blocked?}
+  DonationBlock -- Yes --> DonationRejected[Return rejected recommendation for donation route]
+  DonationRejected --> RejectedOutput
 
-  DonationBlock -- No --> ScorePathways[Score Donate, Recycle, and Upcycle]
-  ScorePathways --> DonationRules[Donation checks: wearable condition, clean or washable, safe material, donation eligibility, low damage]
-  ScorePathways --> RecycleRules[Recycle checks: synthetic/natural material signal, damage, contamination safety, batch suitability, trim removal]
-  ScorePathways --> UpcycleRules[Upcycle checks: usable fabric sections, repurposing potential, damage, repairability, trims, user upcycle request]
+  DonationBlock -- No --> ScoreAll[Score Donate, Recycle, and Upcycle]
+  ScoreAll --> DonateScore[Donate rules: clean or washable, wearable, low damage, safe material, no identifiable uniform branding]
+  ScoreAll --> RecycleScore[Recycle rules: damaged or no longer direct-use, safe contamination level, material signal, batch suitability, removable trims]
+  ScoreAll --> UpcycleScore[Upcycle rules: usable fabric sections, repair/redesign potential, manageable damage, manageable trims, repurposing value]
 
-  DonationRules --> CriteriaResults[Create matched, not matched, and skipped criteria]
-  RecycleRules --> CriteriaResults
-  UpcycleRules --> CriteriaResults
+  DonateScore --> Criteria[Build rule-check results]
+  RecycleScore --> Criteria
+  UpcycleScore --> Criteria
+  Criteria --> CriteriaGroups[Separate matched, not matched, and skipped criteria]
+  CriteriaGroups --> PreferenceBoost[Apply small score boost if user's selected pathway matches the route]
+  PreferenceBoost --> ScoreConfidence[Compute pathway score and confidence]
+  ScoreConfidence --> Rank[Rank recommendations by raw score]
+  Rank --> Explain[Generate readable DSS explanation]
+  Explain --> BagColor[Attach shipping bag color: green donation, white recycling, black upcycling]
+  BagColor --> RouteEstimate[Attach lightweight distance/carbon estimate when partner context is available]
+  RouteEstimate --> PartnerContext[Load active or pending partners with service/location context]
+  PartnerContext --> Review[Show recommendation cards and partner choices to user]
 
-  CriteriaResults --> PreferenceBoost[Apply small boost when user selected the same pathway]
-  PreferenceBoost --> ComputeScore[Compute score and confidence]
-  ComputeScore --> RankPathways[Rank pathways by raw score, then confidence]
-  RankPathways --> Explanation[Generate pathway explanation with criteria context]
-  Explanation --> BagAndImpact[Attach bag-color reminder and route context]
-  BagAndImpact --> PartnerHandoff[Build partner brief and suggested partner context]
-
-  PartnerHandoff --> UserReview[User reviews recommendations and may choose another pathway]
-  UserReview --> SelectedResult[Selected pathway and partner are submitted]
-  SelectedResult --> SaveAudit[Save recommendation run and selected recommendation result]
-  SaveAudit --> CreateRequest[Create pending partner request]
-  CreateRequest --> NotifyPartner[Notify partner and send request message]
-  NotifyPartner --> End([DSS handoff complete])
+  Review --> UserSelect{User selects pathway and partner?}
+  UserSelect -- No --> KeepReview[Remain on DSS review page]
+  KeepReview --> Review
+  UserSelect -- Yes --> DuplicateCheck{Same submission, partner, and pathway already sent?}
+  DuplicateCheck -- Yes --> ExistingRequest[Return existing partner request]
+  DuplicateCheck -- No --> SaveRun[Save recommendation run]
+  SaveRun --> SaveResult[Save selected recommendation result and output payload]
+  SaveResult --> CreateRequest[Create pending transaction request]
+  CreateRequest --> AssignSubmission[Update submission assigned partner, service type, and buyback preference]
+  AssignSubmission --> Notify[Notify user and partner]
+  ExistingRequest --> Notify
+  Notify --> End([DSS handoff complete])
 ```
 
-## DSS Outputs
+## DSS Inputs Used By Current Code
 
-- Ranked pathway recommendations for `donate`, `recycle`, and `upcycle`
-- Possible `rejected` output for restricted or route-blocked submissions
-- Confidence and score per pathway
-- Matched, not matched, and skipped criteria
-- Partner-facing brief with item, weight, bag color, burn-test context, and user notes
-- Saved DSS audit records in `recommendation_runs` and `recommendation_results`
+- `submissions`: item type, condition, fabric, cleanliness, description, photos, service type, quantity, buyback interest, upcycle request.
+- `submission_details`: item types, fabric types, custom fabric text, fabric identification, brand visibility, restricted category, uniform branding, fiber composition, wearability, repairability, contamination level, damage classification, repurposing potential, trim removal, weight value, and weight unit.
+- `burn_tests`: performed flag, page, flame moment, flame behavior, after-flame behavior, smell, and ashes.
+- Partner/location context: active or pending partners, accepted service types, address, latitude, longitude, and capacity notes.
+
+## DSS Outputs Used By The App
+
+- Ranked recommendations for `donate`, `recycle`, and `upcycle`.
+- Possible `rejected` result for restricted or route-blocked submissions.
+- Score, confidence, rank, explanation, matched criteria, not matched criteria, and skipped criteria.
+- Partner-facing brief with item details, quantity, weight, bag color, fabric/burn-test context, user notes, and buyback preference when relevant.
+- Selected recommendation audit in `recommendation_runs` and `recommendation_results`.
+- Partner request record in `transactions`.

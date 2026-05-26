@@ -2,44 +2,38 @@
 
 ## Files And Flows Inspected
 
-- Frontend routes: `src/routes.jsx`
-- User submission flow: `src/app/pages/SubmissionFormPage.jsx`
-- Recommendation confirmation flow: `src/app/pages/DssConfirmationPage.jsx`
-- User dashboard and request history: `src/app/pages/UserDashboard.jsx`, `src/app/pages/SubmittedRequestsPage.jsx`, `src/app/pages/DssRequestsPage.jsx`
-- Partner dashboard and request handling: `src/app/pages/PartnerDashboard.jsx`
-- Admin dashboard and deleted-records page: `src/app/pages/AdminDashboard.jsx`, `src/app/pages/AdminDeletedRecordsPage.jsx`
-- Messages and notifications pages: `src/app/pages/MessagesPage.jsx`, `src/app/pages/NotificationsPage.jsx`
-- API routes: `backend/src/honoLocalApp.ts`
-- Submission and tracking controllers: `backend/src/controllers/submissionController.ts`
-- DSS request and partner rule controllers: `backend/src/controllers/dssController.ts`
-- Transaction controller: `backend/src/controllers/transactionController.ts`
-- Admin controller: `backend/src/controllers/adminController.ts`
-- DSS engine: `backend/src/services/dssEngine.ts`
-- D1 service equivalents: `backend/src/services/d1DssService.ts`, `backend/src/services/d1SubmissionService.ts`, `backend/src/services/d1TransactionService.ts`
-- Schema sources: `backend/src/db/migrations/*.sql`, `backend/src/db/d1-schema.sql`
+- Frontend routing: `src/routes.jsx`
+- User submission and DSS review pages: `src/app/pages/SubmissionFormPage.jsx`, `src/app/pages/DssConfirmationPage.jsx`
+- User dashboard/request pages: `src/app/pages/UserDashboard.jsx`, `src/app/pages/DssRequestsPage.jsx`, `src/app/pages/SubmittedRequestsPage.jsx`
+- Partner dashboard/request handling: `src/app/pages/PartnerDashboard.jsx`
+- Admin dashboard/deleted records: `src/app/pages/AdminDashboard.jsx`, `src/app/pages/AdminDeletedRecordsPage.jsx`
+- Messages and notifications: `src/app/pages/MessagesPage.jsx`, `src/app/pages/NotificationsPage.jsx`
+- Worker API routes: `backend/src/worker.ts`
+- Local Hono API routes: `backend/src/honoLocalApp.ts`
+- DSS engine and handoff: `backend/src/services/dssEngine.ts`, `backend/src/services/d1DssService.ts`
+- Submission/tracking: `backend/src/services/d1SubmissionService.ts`
+- Messages/notifications: `backend/src/services/d1MessageService.ts`, `backend/src/services/d1NotificationService.ts`
+- Uploads/storage: `backend/src/services/d1UploadService.ts`
+- Partner locations: `backend/src/services/d1GisService.ts`
+- Schema sources: `backend/src/db/d1-schema.sql`, `backend/src/db/migrations/*.sql`, `backend/src/db/d1-migrations/*.sql`
 
-## Changes Reflected Compared To The Older Flow Images
+## What Changed Compared With The Older Flow Images
 
-- The older diagram shows a more manual pathway selection and older external partner handoff. The current implementation saves a submission first, opens a DSS confirmation page, then sends a selected pathway and partner request.
-- Current DSS output is stored in `recommendation_runs` and `recommendation_results`, including the selected result and output payload.
-- Current partner handoff creates a `transactions` row used as the partner request record.
-- Partner decisions currently normalize to `pending`, `accepted`, `rejected`, or `completed`.
-- A tracking/delivery-details flow now appears after a partner accepts the request.
-- User tracking updates create both notifications and automatic messages for the partner.
-- Partner completion can include outcome title, description, and photos, then notifies/messages the user with a celebration-style update.
-- Admin flow now includes DSS rules, partner rule-change requests, DSS audit/export, user/submission management, and deleted-record review.
+- The older flow images included a more manual pathway route before persistence. The current app saves a submission first, then opens a DSS confirmation page for recommendation review.
+- The current implementation uses `transactions` as the partner request record.
+- DSS handoff now saves `recommendation_runs` and `recommendation_results`, including selected output payload data.
+- Bag color is now part of the partner request context: green for donation, white for recycling, black for upcycling.
+- Weight is now captured on `submission_details`.
+- The accepted-request logistics flow is now implemented through `request_tracking_updates`.
+- Partner completion can include narrative outcome title, description, and photos on `transactions`.
+- User and partner updates use both `notifications` and `messages` where the current service flow supports it.
+- Admin now has deleted-record review, DSS rule management, partner rule-change review, and partner-location requirements.
+- Uploaded files are tracked in `uploaded_files`, with R2 used in the Worker path.
 
-## Assumptions Made
+## Assumptions Kept Explicit
 
-- The diagrams describe implemented app behavior, not planned-only behavior.
-- `transactions` is treated as the partner request table because all current DSS partner request views and status updates use it.
-- Partner request statuses are shown using the normalized current flow: `pending`, `accepted`, `rejected`, `completed`.
-- Tracking is shown only after an accepted partner request because the current backend rejects tracking updates unless the request status is `accepted`.
-- Partner rule-change statuses include values seen in schema and controller logic. The controller currently allows `pending`, `accepted`, `declined`, and `needs_more_information`; the schema also supports `approved` and `implemented`.
-
-## Missing Or Not Shown As Completed
-
-- The system does not appear to run a fully external logistics integration. Tracking uses user-entered courier/drop-off details.
-- Carbon footprint values are stored as estimated route context on the request, not as a full audited carbon-accounting calculation.
-- The DSS is rule-based and explainable; it is not shown as an AI/ML classifier.
-- Admin DSS rule records exist, but the core `dssEngine.ts` still contains the primary rule logic used for recommendations in the inspected code path.
+- The diagrams show implemented behavior from the current codebase, not future-only ideas.
+- Lightweight route/carbon context is shown as an estimate because the code stores `estimated_distance_km` and `estimated_carbon_kg`, not a full audited carbon accounting model.
+- The DSS is shown as a rule-based decision support system, not an AI/ML classifier.
+- External courier APIs are not shown because tracking is user-entered.
+- Partner rule records exist in the admin UI/schema, but the main recommendation scoring logic currently lives in `dssEngine.ts`.

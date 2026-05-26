@@ -1,124 +1,121 @@
-# ClothCycle PH System Architecture
+# New Revised System Architecture
 
 ## Architecture Overview
 
-ClothCycle PH uses a layered web application architecture. The frontend handles role-based user interaction, the backend exposes Hono API routes and business logic, the DSS engine evaluates textile submissions, and Neon PostgreSQL stores transactional, DSS, audit, messaging, and notification data.
+ClothCycle PH is a role-based web application with a React frontend, Hono API layer, rule-based DSS engine, Cloudflare Worker deployment target, and a D1-compatible database schema. The project also retains PostgreSQL migrations for local or alternate deployment paths.
 
 ```mermaid
 flowchart TD
-  A[Users] --> F[React + Vite Frontend]
-  B[Partners] --> F
-  C[Admins] --> F
+  Users[Users, Partners, Admins] --> Frontend[React + Vite Frontend]
+  Frontend --> AuthContext[Auth Context and Protected Routes]
+  Frontend --> ApiClient[API Client]
 
-  F --> G[Hono Backend API]
+  ApiClient --> Worker[Hono API on Cloudflare Worker]
+  ApiClient -. local dev .-> LocalApi[Local Hono API]
 
-  G --> H[Auth and Role Guard Module]
-  G --> I[Submission Module]
-  G --> J[DSS Engine Module]
-  G --> K[Partner Request Module]
-  G --> L[Messages and Notifications Module]
-  G --> M[Admin Management Module]
+  Worker --> Auth[Auth and Security Services]
+  Worker --> Submission[Submission and Tracking Services]
+  Worker --> DSS[DSS Engine and Partner Handoff]
+  Worker --> Messaging[Messages and Notifications]
+  Worker --> Admin[Admin and Audit Services]
+  Worker --> Uploads[Upload Service]
+  Worker --> GIS[Partner Location Service]
 
-  H --> DB[(Neon PostgreSQL)]
-  I --> DB
-  J --> DB
-  K --> DB
-  L --> DB
-  M --> DB
+  LocalApi --> Auth
+  LocalApi --> Submission
+  LocalApi --> DSS
+  LocalApi --> Messaging
+  LocalApi --> Admin
+  LocalApi --> Uploads
+  LocalApi --> GIS
 
-  G --> O[Google OAuth]
-  G --> P[Email / OTP Service]
-  G --> Q[File Upload Storage]
+  Auth --> DB[(D1 / PostgreSQL-compatible database)]
+  Submission --> DB
+  DSS --> DB
+  Messaging --> DB
+  Admin --> DB
+  GIS --> DB
+  Uploads --> R2[(Cloudflare R2 or local upload target)]
 
-  R[Cloudflare Workers Target] -. deploys .-> G
-  S[Cloudflare R2 Future Storage] -. future .-> Q
+  Auth --> Email[Brevo, SendGrid, Resend, or console email provider]
+  Auth --> Google[Google Identity]
 ```
 
-## Main Components
+## Main Layers
 
-| Layer | Component | Responsibility |
+| Layer | Current components | Responsibility |
 |---|---|---|
-| Presentation Layer | React + Vite frontend | Login, registration, dashboards, textile submission with weight capture, DSS confirmation, accepted-request delivery tracking, partner outcome reports, messages, notifications, settings |
-| API Layer | Hono backend | Handles REST API requests, authentication checks, role checks, validation, and service orchestration |
-| Decision Support Layer | DSS Engine | Evaluates textile details and burn-test answers, ranks Recycle / Donate / Upcycle, records audit trail |
-| Data Layer | Neon PostgreSQL / D1-compatible schema | Stores users, partners, submissions, DSS runs/results, transactions, outcome reports, messages, notifications, admin logs, and deleted-record snapshots |
-| External Services | Google OAuth, Email/OTP, file storage | Account sign-in, verification, reset flows, uploaded images and attachments |
-| Deployment Target | Cloudflare Workers | Planned runtime target for the Hono backend |
+| Presentation | React, Vite, React Router, AuthContext, role-protected routes | Landing, login/signup, dashboards, submission wizard, DSS review, my requests, messages, notifications, settings, admin pages |
+| API | `backend/src/worker.ts`, `backend/src/honoLocalApp.ts` | REST API, CORS, secure headers, request validation, authentication, role checks |
+| Auth | `authD1Service`, JWT utilities, email/TOTP 2FA, password reset, Google login | Signup, login, session restore, verification, forgot/reset password, security events |
+| Submission | `d1SubmissionService` | Textile submissions, detailed textile answers, burn tests, images, delivery tracking updates |
+| DSS | `dssEngine`, `d1DssService`, `d1GisService` | Eligibility screening, pathway scoring, recommendation audit, partner suggestions, route/bag context, partner handoff |
+| Partner Requests | `transactions` through DSS and transaction services | Pending, accepted, rejected, completed partner request lifecycle |
+| Communication | `d1MessageService`, `d1NotificationService` | Automatic request messages, tracking messages, outcome messages, notification counts/preferences |
+| Admin | Admin routes/services and dashboard pages | User/partner management, required partner location, submission status, DSS rules, rule-change requests, deleted records |
+| Storage | R2 upload service and `uploaded_files` registry | Submission images, message attachments, partner outcome photos |
 
-## User Flow
+## Current Frontend Route Map
 
-1. User registers or logs in.
-2. User submits textile details, estimated weight in kg/g, optional burn-test answers, images, and intended pathway.
-3. Backend saves the submission to Neon PostgreSQL.
-4. DSS Engine evaluates the saved answers.
-5. DSS confirmation page shows ranked Recycle / Donate / Upcycle recommendations.
-6. User selects the final pathway and sends the request to a partner.
-7. Partner views the request, DSS explanation, required bag color, images, and user brief.
-8. Partner accepts or declines the request. Acceptance notifies the user and links to My Requests where delivery details can be added.
-9. After acceptance, the user records courier or direct drop-off details, which notify and message the partner.
-10. Partner can later mark the accepted request completed with a narrative outcome report and photos describing what the textile became.
+- Public: `/`, `/login`, `/signup`, `/terms`, `/privacy`
+- User: `/dashboard`, `/submit`, `/dss/:submissionId`, `/dss-requests`, `/my-requests`
+- Partner: `/partner`
+- Admin: `/admin`, `/admin/deleted-records`
+- Shared protected: `/settings`, `/notifications`, `/messages`
 
-## Partner Flow
-
-1. Partner logs in through partner account.
-2. Partner views assigned textile requests.
-3. Partner reviews item details, DSS reasoning, user brief, and uploaded images.
-4. Partner updates the request status.
-5. Partner views user-submitted courier tracking or direct drop-off details inside the request detail panel.
-6. When completing an accepted request, partner can report the textile outcome with title, notes, and photos, such as bag, wallet, construction material, or other recovered product.
-7. System notifies the user.
-8. Partner may submit rule/preference change requests to admin.
-
-## Admin Flow
-
-1. Admin logs in through admin dashboard.
-2. Admin manages users, partners, submissions, DSS records, deleted-record snapshots, and system activity.
-3. Admin reviews partner rule change requests.
-4. Admin accepts, declines, or asks for more information.
-5. System records audit activity and notifies the partner.
-
-## DSS Architecture
+## Current Data Architecture
 
 ```mermaid
 flowchart LR
-  A[Submission Form Answers] --> B[Submission Records]
-  C[Burn Test Answers] --> B
-  B --> D[DSS Engine]
-  D --> E[Eligibility Screening]
-  D --> F[Burn Test Fabric Analysis]
-  D --> G[Weighted Pathway Scoring]
-  E --> H[Recommendation Results]
-  F --> H
-  G --> H
-  H --> I[DSS Confirmation Page]
-  H --> J[Recommendation Audit Trail]
-  I --> K[Partner Request]
+  Users[(users)] <--> Partners[(partners)]
+  Users --> Submissions[(submissions)]
+  Submissions --> Details[(submission_details)]
+  Submissions --> Burn[(burn_tests)]
+  Submissions --> Images[(submission_images)]
+  Submissions --> Runs[(recommendation_runs)]
+  Runs --> Results[(recommendation_results)]
+  Results --> Transactions[(transactions)]
+  Transactions --> Tracking[(request_tracking_updates)]
+  Transactions --> Messages[(messages)]
+  Transactions --> Notifications[(notifications)]
+  Messages --> Attachments[(message_attachments)]
+  Uploads[(uploaded_files)] --> Images
+  Uploads --> Attachments
+  Uploads --> Transactions
+  Admin[(admin users)] --> Rules[(dss_rules)]
+  Partners --> RuleRequests[(partner_rule_change_requests)]
+  RuleRequests --> RuleReplies[(partner_rule_change_request_replies)]
+  Admin --> Deleted[(deleted_records)]
 ```
 
-The DSS engine currently scores Recycle, Donate, and Upcycle. Buyback is not a scored DSS pathway. It is a yes/no preference shown only when the final selected pathway is Upcycle.
+## DSS Architecture
 
-## Database Groups
+The DSS is an explainable rule-based module. It reads saved submission data, screens restricted categories and unsafe contamination, optionally analyzes burn-test observations, scores Donate/Recycle/Upcycle, generates matched/not-matched/skipped criteria, and saves the selected recommendation when the user sends it to a partner.
 
-| Group | Tables |
-|---|---|
-| Identity and Auth | `users`, `user_preferences`, `password_reset_tokens`, `user_recovery_codes`, `auth_events`, `rate_limits` |
-| Partner Management | `partners`, `partner_rule_change_requests` |
-| Textile Submission | `submissions`, `submission_details`, `burn_tests`, `submission_images`; weight is stored on `submission_details.weight_value` and `submission_details.weight_unit` |
-| DSS Audit | `recommendation_runs`, `recommendation_results`, `recommendation_feedback`, `dss_rules` |
-| Transactions | `transactions`, `request_tracking_updates`; includes bag color, lightweight distance/carbon estimate metadata, accepted-request courier/drop-off tracking, and partner outcome report fields including photo URLs |
-| Communication | `conversations`, `messages`, `message_attachments`, `notifications` |
-| Administration | `activity_logs`, `deleted_records`, `schema_migrations` |
+Buyback is not scored as a standalone DSS route in the current engine. It is stored as an upcycle-related user preference when applicable.
 
-## Deployment View
+## Runtime And Deployment View
 
 ```mermaid
 flowchart TD
-  A[Browser Client] --> B[Cloudflare Pages / Static Frontend]
-  B --> C[Hono API on Cloudflare Workers]
-  C --> D[(Neon PostgreSQL)]
-  C --> E[Google OAuth]
-  C --> F[Email Provider]
-  C --> G[Cloudflare R2 Future Storage]
+  Browser[Browser] --> Pages[Static frontend host]
+  Pages --> Worker[Cloudflare Worker API]
+  Worker --> D1[(Cloudflare D1 database)]
+  Worker --> R2[(Cloudflare R2 bucket)]
+  Worker --> Email[Configured email provider]
+  Worker --> Google[Google Identity verification]
+
+  DevBrowser[Local browser] -.-> Vite[Vite dev server]
+  Vite -.-> LocalHono[Local Hono API]
+  LocalHono -.-> LocalDb[(Local PostgreSQL or D1 dev DB)]
+  LocalHono -.-> LocalStorage[Local/R2-compatible upload target]
 ```
 
-For local QA, the frontend runs with Vite and points to the local Hono backend through `VITE_API_URL`. For deployment, the same Hono API is intended to run on Cloudflare Workers while continuing to use Neon PostgreSQL as the production database.
+## Security And Access Control
+
+- API routes use bearer JWT authentication for protected requests.
+- Role guards restrict user, partner, and admin dashboards and endpoints.
+- Partner request updates require the assigned partner, partner email match, or admin.
+- Tracking updates can only be created by the request owner after the partner request is accepted.
+- Partner locations are required for partner accounts because they are displayed during DSS partner selection.
+- Secrets such as `JWT_SECRET`, `TWO_FACTOR_ENCRYPTION_KEY`, and email API keys are server-side only.
