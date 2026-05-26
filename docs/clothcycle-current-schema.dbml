@@ -1,0 +1,431 @@
+// ClothCycle PH current schema
+// Source of truth: backend/src/db/migrations/*.sql, backend/src/db/d1-schema.sql,
+// and current backend controllers/services that read or write these fields.
+
+Project clothcycle_ph {
+  database_type: "PostgreSQL / Cloudflare D1-compatible schema"
+  Note: "DBML reflects the current implemented ClothCycle PH schema. Enum-like fields are stored as text/varchar with CHECK constraints or application validation."
+}
+
+Table users {
+  id uuid [pk, default: `gen_random_uuid()`]
+  email varchar(255) [not null, unique]
+  name varchar(255) [not null]
+  password_hash varchar(255) [not null]
+  password_setup_required boolean [default: false]
+  role varchar(50) [not null, default: 'user', note: 'enum-like: user, partner, admin']
+  status varchar(50) [default: 'active', note: 'enum-like: active, inactive, suspended']
+  partner_id uuid
+  avatar_url text
+  profile_photo text
+  bio text
+  phone varchar(20)
+  address text
+  terms_accepted_at timestamp
+  email_verified_at timestamp
+  last_login_at timestamp
+  two_factor_enabled boolean [default: true]
+  two_factor_method varchar(20) [default: 'email', note: 'enum-like: email, totp']
+  two_factor_secret_encrypted text
+  two_factor_confirmed_at timestamp
+  two_factor_code_hash text
+  two_factor_code_expires_at timestamp
+  failed_login_count integer [default: 0]
+  locked_until timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table partners {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar(255) [not null]
+  description text
+  logo_url text
+  email varchar(255) [not null, unique]
+  phone varchar(20)
+  address text
+  user_id uuid [unique]
+  website text
+  service_types text
+  accepted_service_types text
+  accepts_clean_only boolean [default: false]
+  capacity_notes text
+  pickup_areas text
+  rule_change_requires_admin boolean [default: true]
+  contact_person varchar(255)
+  status varchar(50) [default: 'pending', note: 'enum-like: pending, active, inactive, rejected']
+  verified boolean [default: false]
+  rating decimal(3,2) [default: 0.00]
+  latitude decimal(10,8)
+  longitude decimal(11,8)
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table user_preferences {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null, unique]
+  email_notifications boolean [default: true]
+  push_notifications boolean [default: true]
+  sms_notifications boolean [default: false]
+  newsletter boolean [default: false]
+  updated_at timestamp [default: `now()`]
+}
+
+Table user_recovery_codes {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  code_hash text [not null]
+  used_at timestamp
+  created_at timestamp [default: `now()`]
+}
+
+Table password_reset_tokens {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  token_hash text [not null, unique]
+  expires_at timestamp [not null]
+  used_at timestamp
+  created_at timestamp [default: `now()`]
+}
+
+Table auth_events {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid
+  event_type varchar(100) [not null]
+  ip_address varchar(64)
+  user_agent text
+  metadata jsonb
+  created_at timestamp [default: `now()`]
+}
+
+Table rate_limits {
+  key varchar(255) [pk]
+  count integer [not null, default: 0]
+  expires_at timestamp [not null]
+  updated_at timestamp [default: `now()`]
+}
+
+Table submissions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  item_type varchar(255) [not null]
+  submission_name varchar(255)
+  condition varchar(100) [not null]
+  fabric varchar(100)
+  cleanliness varchar(100)
+  description text
+  photos jsonb [note: 'PostgreSQL stores this as json[]; D1 stores JSON text']
+  status varchar(50) [default: 'pending', note: 'enum-like: pending, verified, processed, rejected']
+  assigned_partner_id uuid
+  submission_code varchar(50) [unique]
+  service_type varchar(50) [note: 'enum-like: recycle, donate, upcycle, buyback']
+  quantity integer [default: 1]
+  buyback_interest boolean [default: false]
+  action varchar(50)
+  upcycle_request text
+  scheduled_at timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table submission_details {
+  id uuid [pk, default: `gen_random_uuid()`]
+  submission_id uuid [not null, unique]
+  item_types text
+  other_item_type text
+  condition text
+  cleanliness text
+  knows_fabric_type boolean
+  fabric_types text
+  custom_fabric_text text
+  fabric_identification text
+  brand text
+  no_brand_visible boolean [default: false]
+  fabric_description text
+  restricted_category text [default: 'none']
+  uniform_branding text
+  fiber_composition varchar(100)
+  wearability varchar(100)
+  repairability varchar(100)
+  contamination_level varchar(100)
+  damage_classification varchar(100)
+  repurposing_potential varchar(100)
+  trim_removal varchar(100)
+  weight_value decimal(10,3)
+  weight_unit varchar(10) [default: 'kg', note: 'expected values: kg, g']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table burn_tests {
+  id uuid [pk, default: `gen_random_uuid()`]
+  submission_id uuid [not null]
+  performed boolean [default: false]
+  page integer
+  moment text
+  flames text
+  no_flame text
+  smell text
+  ashes text
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table submission_images {
+  id uuid [pk, default: `gen_random_uuid()`]
+  submission_id uuid [not null]
+  url text [not null]
+  storage_key text
+  metadata jsonb
+  uploaded_at timestamp [default: `now()`]
+}
+
+Table transactions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  submission_id uuid [not null]
+  from_user_id uuid [not null]
+  to_partner_id uuid [not null, note: 'D1 schema marks this NOT NULL; early PostgreSQL migration allowed null with ON DELETE SET NULL']
+  type varchar(50) [not null, note: 'enum-like: recycle, donate, upcycle, buyback']
+  status varchar(50) [default: 'pending', note: 'enum-like: pending, accepted, completed, rejected']
+  amount decimal(10,2)
+  notes text
+  bag_color varchar(20) [note: 'white=recycle, black=upcycle, green=donate']
+  estimated_distance_km decimal(10,2)
+  estimated_carbon_kg decimal(10,3)
+  outcome_title text
+  outcome_description text
+  outcome_photos jsonb [default: `jsonb_build_array()`]
+  outcome_reported_at timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table request_tracking_updates {
+  id uuid [pk, default: `gen_random_uuid()`]
+  submission_id uuid [not null]
+  request_id uuid
+  user_id uuid [not null]
+  partner_id uuid
+  progress_status varchar(50) [not null, note: 'enum-like: request_sent, scheduled, in_transit, dropoff_completed, completed']
+  fulfillment_method varchar(30) [not null, default: 'drop_off', note: 'enum-like: drop_off, shipping, pickup, other']
+  contact_name varchar(120)
+  logistics_company varchar(120)
+  tracking_number varchar(120)
+  dropoff_scheduled_at timestamp
+  dropoff_location text
+  notes text
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table deleted_records {
+  id uuid [pk, default: `gen_random_uuid()`]
+  entity_type varchar(100) [not null]
+  entity_id uuid [not null]
+  snapshot jsonb
+  deleted_by_user_id uuid
+  deleted_at timestamp [default: `now()`]
+}
+
+Table recommendation_runs {
+  id uuid [pk, default: `gen_random_uuid()`]
+  submission_id uuid
+  requested_by_user_id uuid
+  engine_name varchar(100) [not null, default: 'dss']
+  engine_version varchar(100)
+  status varchar(50) [default: 'completed', note: 'enum-like: pending, running, completed, failed']
+  criteria jsonb
+  input_snapshot jsonb
+  audit_label text [default: 'DSS audit trail', note: 'added by PostgreSQL migration 017; not present in d1-schema.sql snapshot']
+  started_at timestamp [default: `now()`]
+  completed_at timestamp
+  error_message text
+  created_at timestamp [default: `now()`]
+}
+
+Table recommendation_results {
+  id uuid [pk, default: `gen_random_uuid()`]
+  run_id uuid [not null]
+  submission_id uuid
+  partner_id uuid
+  recommended_pathway varchar(50) [not null, note: 'enum-like: recycle, donate, upcycle, buyback, rejected']
+  rank integer
+  score decimal(10,2)
+  confidence decimal(5,4)
+  explanation text
+  details text
+  output_payload jsonb
+  selected boolean [default: false]
+  generated_at timestamp [default: `now()`]
+}
+
+Table recommendation_feedback {
+  id uuid [pk, default: `gen_random_uuid()`]
+  recommendation_result_id uuid [not null]
+  user_id uuid
+  rating integer
+  accepted boolean
+  feedback text
+  created_at timestamp [default: `now()`]
+}
+
+Table dss_rules {
+  id uuid [pk, default: `gen_random_uuid()`]
+  rule_key varchar(120) [not null, unique]
+  pathway varchar(50) [note: 'enum-like: recycle, donate, upcycle, buyback, rejected, or null']
+  category varchar(120)
+  question_key varchar(120)
+  expected_values jsonb
+  weight decimal(8,2) [default: 0]
+  active boolean [default: true]
+  description text
+  created_by_user_id uuid
+  updated_by_user_id uuid
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table partner_rule_change_requests {
+  id uuid [pk, default: `gen_random_uuid()`]
+  partner_id uuid
+  requested_by_user_id uuid [not null]
+  rule_area varchar(120) [not null]
+  requested_change text [not null]
+  reason text
+  status varchar(50) [default: 'pending', note: 'enum-like: pending, accepted, approved, declined, needs_more_information, implemented']
+  admin_notes text
+  reviewed_by_user_id uuid
+  reviewed_at timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table partner_rule_change_request_replies {
+  id uuid [pk, default: `gen_random_uuid()`]
+  request_id uuid [not null]
+  author_user_id uuid
+  author_role varchar(20) [not null, note: 'enum-like: partner, admin']
+  message text [not null]
+  created_at timestamp [default: `now()`]
+}
+
+Table notifications {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  type varchar(50) [not null, note: 'enum-like: submission_approved, submission_rejected, message, partner_update, system']
+  title varchar(255) [not null]
+  body text
+  data jsonb [default: `{}`]
+  read boolean [default: false]
+  read_at timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table activity_logs {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid
+  action varchar(255) [not null]
+  entity_type varchar(100)
+  entity_id uuid
+  details jsonb
+  created_at timestamp [default: `now()`]
+}
+
+Table conversations {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  partner_id uuid
+  conversation_type varchar(50) [default: 'general']
+  subject varchar(255)
+  status varchar(50) [default: 'open', note: 'enum-like: open, closed, archived']
+  related_submission_id uuid
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table messages {
+  id uuid [pk, default: `gen_random_uuid()`]
+  from_user_id uuid [not null]
+  to_user_id uuid [not null]
+  conversation_id uuid
+  sender_type varchar(50)
+  content text [not null]
+  related_submission_id uuid
+  related_transaction_id uuid
+  action_url text
+  metadata jsonb [default: `{}`]
+  read boolean [default: false]
+  read_at timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table message_attachments {
+  id uuid [pk, default: `gen_random_uuid()`]
+  message_id uuid [not null]
+  filename varchar(255)
+  url text [not null]
+  metadata jsonb
+  uploaded_at timestamp [default: `now()`]
+}
+
+Table schema_migrations {
+  id integer [pk, increment]
+  name varchar(255) [not null, unique]
+  applied_at timestamp [default: `now()`]
+}
+
+Ref: users.partner_id > partners.id [delete: set null]
+Ref: partners.user_id > users.id [delete: set null]
+Ref: user_preferences.user_id > users.id [delete: cascade]
+Ref: user_recovery_codes.user_id > users.id [delete: cascade]
+Ref: password_reset_tokens.user_id > users.id [delete: cascade]
+Ref: auth_events.user_id > users.id [delete: set null]
+
+Ref: submissions.user_id > users.id [delete: cascade]
+Ref: submissions.assigned_partner_id > partners.id [delete: set null]
+Ref: submission_details.submission_id > submissions.id [delete: cascade]
+Ref: burn_tests.submission_id > submissions.id [delete: cascade]
+Ref: submission_images.submission_id > submissions.id [delete: cascade]
+
+Ref: transactions.submission_id > submissions.id [delete: cascade]
+Ref: transactions.from_user_id > users.id [delete: cascade]
+Ref: transactions.to_partner_id > partners.id [delete: set null]
+
+Ref: request_tracking_updates.submission_id > submissions.id [delete: cascade]
+Ref: request_tracking_updates.request_id > transactions.id [delete: set null]
+Ref: request_tracking_updates.user_id > users.id [delete: cascade]
+Ref: request_tracking_updates.partner_id > partners.id [delete: set null]
+
+Ref: deleted_records.deleted_by_user_id > users.id [delete: set null]
+
+Ref: recommendation_runs.submission_id > submissions.id [delete: set null]
+Ref: recommendation_runs.requested_by_user_id > users.id [delete: set null]
+Ref: recommendation_results.run_id > recommendation_runs.id [delete: cascade]
+Ref: recommendation_results.submission_id > submissions.id [delete: cascade]
+Ref: recommendation_results.partner_id > partners.id [delete: set null]
+Ref: recommendation_feedback.recommendation_result_id > recommendation_results.id [delete: cascade]
+Ref: recommendation_feedback.user_id > users.id [delete: set null]
+
+Ref: dss_rules.created_by_user_id > users.id [delete: set null]
+Ref: dss_rules.updated_by_user_id > users.id [delete: set null]
+Ref: partner_rule_change_requests.partner_id > partners.id [delete: set null]
+Ref: partner_rule_change_requests.requested_by_user_id > users.id [delete: cascade]
+Ref: partner_rule_change_requests.reviewed_by_user_id > users.id [delete: set null]
+Ref: partner_rule_change_request_replies.request_id > partner_rule_change_requests.id [delete: cascade]
+Ref: partner_rule_change_request_replies.author_user_id > users.id [delete: set null]
+
+Ref: notifications.user_id > users.id [delete: cascade]
+Ref: activity_logs.user_id > users.id [delete: set null]
+
+Ref: conversations.user_id > users.id [delete: cascade]
+Ref: conversations.partner_id > partners.id [delete: set null]
+Ref: conversations.related_submission_id > submissions.id [delete: set null]
+Ref: messages.from_user_id > users.id [delete: cascade]
+Ref: messages.to_user_id > users.id [delete: cascade]
+Ref: messages.conversation_id > conversations.id [delete: set null]
+Ref: messages.related_submission_id > submissions.id [delete: set null]
+Ref: messages.related_transaction_id > transactions.id [delete: set null]
+Ref: message_attachments.message_id > messages.id [delete: cascade]
