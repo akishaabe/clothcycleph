@@ -915,8 +915,8 @@ export function SubmissionFormPage() {
           </p>
         </motion.div>
 
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
+        <div className="submission-stepper mb-6">
+          <div className="submission-stepper__rail flex items-center justify-between mb-4">
             {stepFlow.map(({ number }, index) => (
               <div key={number} className="flex items-center flex-1">
                 <div
@@ -945,11 +945,11 @@ export function SubmissionFormPage() {
           </div>
 
           <div
-            className="grid text-center text-sm text-[#5a6f5a]"
+            className="submission-stepper__labels grid text-center text-sm text-[#5a6f5a]"
             style={{ gridTemplateColumns: `repeat(${stepFlow.length}, minmax(0, 1fr))` }}
           >
             {stepFlow.map(({ number, label }) => (
-              <span key={number}>{label}</span>
+              <span className="submission-stepper__label" key={number}>{label}</span>
             ))}
           </div>
         </div>

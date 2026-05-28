@@ -465,7 +465,7 @@ export function MessagesPage() {
       currentUser?.role === "partner" && message.related_transaction_id
         ? `/partner?request=${message.related_transaction_id}`
         : currentUser?.role === "user" && message.related_transaction_id
-          ? `/dss-requests?request=${message.related_transaction_id}`
+          ? `/my-requests?request=${message.related_transaction_id}`
           : currentUser?.role === "admin" && message.metadata?.rule_change_request_id
             ? `/admin?panel=rule-requests&request=${message.metadata.rule_change_request_id}`
             : null;

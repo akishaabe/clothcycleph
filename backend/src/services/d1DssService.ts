@@ -17,6 +17,12 @@ const bagColorByPathway: Record<string, string> = {
   donate: 'green',
 };
 
+const pathwayVerb: Record<string, string> = {
+  recycle: 'recycle',
+  donate: 'donate',
+  upcycle: 'upcycle',
+};
+
 function normalizeRequestStatus(status?: string | null) {
   if (status === 'declined' || status === 'rejected') {
     return 'rejected';
@@ -205,17 +211,24 @@ export async function sendRecommendationToPartnerD1(
 
   if (partner.user_id) {
     const sender = await queryD1First(db, 'SELECT name FROM users WHERE id = ?', [userId]);
+    const submissionLabel = submission.submission_name || submission.item_type || 'this textile item';
+    const partnerActionUrl = `/partner?request=${transactionId}`;
+    const userActionUrl = `/my-requests?request=${transactionId}`;
     await createSystemMessageD1(db, {
       fromUserId: userId,
       toUserId: partner.user_id,
-      content: `${sender?.name || 'A user'} sent a ${titleCase(payload.recommended_pathway)} textile request for your review.\n\n${payload.brief}`,
-      actionUrl: `/partner?request=${transactionId}`,
+      content: `I want to ${pathwayVerb[payload.recommended_pathway] || payload.recommended_pathway} this item: ${submissionLabel}. Please review my request when you can.`,
+      relatedSubmissionId: payload.submission_id,
+      relatedTransactionId: transactionId,
+      actionUrl: partnerActionUrl,
       metadata: {
         kind: 'dss_request_sent',
         submission_id: payload.submission_id,
         transaction_id: transactionId,
         recommended_pathway: payload.recommended_pathway,
         bag_color: bagColorByPathway[payload.recommended_pathway],
+        user_action_url: userActionUrl,
+        partner_action_url: partnerActionUrl,
       },
     });
 
@@ -224,7 +237,7 @@ export async function sendRecommendationToPartnerD1(
       type: 'partner_update',
       title: 'New textile request',
       body: `${sender?.name || 'A user'} sent a ${titleCase(payload.recommended_pathway)} request for your review.`,
-      data: { submissionId: payload.submission_id, transactionId },
+      data: { submissionId: payload.submission_id, transactionId, action_url: partnerActionUrl },
     });
   }
 
@@ -233,7 +246,7 @@ export async function sendRecommendationToPartnerD1(
     type: 'partner_update',
     title: 'Request sent to partner',
     body: `Your textile brief was sent to ${partner.name}.`,
-    data: { submissionId: payload.submission_id, transactionId },
+    data: { submissionId: payload.submission_id, transactionId, action_url: `/my-requests?request=${transactionId}` },
   });
 
   return {
@@ -778,17 +791,19 @@ export async function updateDssRequestStatusD1(
         ? `${outcomeCelebration || 'Your textile has a new story!'}\n${
             outcomeDescription || 'Your partner shared what happened to your textile.'
           }`
-        : `Partner decision: ${statusLabels[normalizedStatus] || normalizedStatus}\n${
-            notes ? `Message to user: ${notes}` : 'No additional message provided.'
-          }`,
+        : notes
+          ? `Your ${titleCase(transaction.type)} request was ${statusLabels[normalizedStatus] || normalizedStatus}. ${notes}`
+          : `Your ${titleCase(transaction.type)} request was ${statusLabels[normalizedStatus] || normalizedStatus}.`,
       transaction.submission_id,
       transaction.id,
-      `/dss/${transaction.submission_id}?request=${transaction.id}`,
+      `/my-requests?request=${transaction.id}`,
       JSON.stringify({
         kind: 'dss_status_update',
         status: normalizedStatus,
         submission_id: transaction.submission_id,
         transaction_id: transaction.id,
+        user_action_url: `/my-requests?request=${transaction.id}`,
+        partner_action_url: `/partner?request=${transaction.id}`,
         outcome_title: outcomeTitle || null,
         outcome_photos: outcomePhotos || [],
         celebration: outcomeCelebration || null,
@@ -813,7 +828,7 @@ export async function updateDssRequestStatusD1(
       action_url:
         normalizedStatus === 'accepted'
           ? `/my-requests?status=accepted&request=${transaction.id}`
-          : `/dss-requests?request=${transaction.id}`,
+          : `/my-requests?request=${transaction.id}`,
     },
   });
 

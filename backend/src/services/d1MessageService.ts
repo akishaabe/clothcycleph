@@ -113,20 +113,27 @@ export async function createSystemMessageD1(
     toUserId: string;
     content: string;
     actionUrl?: string;
+    relatedSubmissionId?: string | null;
+    relatedTransactionId?: string | null;
     metadata?: Record<string, unknown>;
   }
 ) {
   const id = generateD1UUID();
   const result = await executeD1(
     db,
-    `INSERT INTO messages (id, from_user_id, to_user_id, content, action_url, metadata)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO messages (
+       id, from_user_id, to_user_id, content,
+       related_submission_id, related_transaction_id, action_url, metadata
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      RETURNING *`,
     [
       id,
       payload.fromUserId,
       payload.toUserId,
       payload.content.trim(),
+      payload.relatedSubmissionId || null,
+      payload.relatedTransactionId || null,
       payload.actionUrl || null,
       JSON.stringify(payload.metadata || {}),
     ]

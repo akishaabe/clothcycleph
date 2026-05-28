@@ -170,7 +170,8 @@ select {
 .app-darkable-page dt,
 .app-darkable-page span,
 .app-darkable-page a {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .app-darkable-page table {
@@ -251,7 +252,8 @@ select {
   .app-darkable-page [class*="rounded-[28px]"],
   .app-darkable-page [class*="rounded-[32px]"],
   .app-darkable-page [class*="rounded-[36px]"] {
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+    word-break: normal;
   }
 
   .app-darkable-page table {
