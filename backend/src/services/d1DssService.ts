@@ -1,6 +1,7 @@
 import { D1Database, executeD1, generateD1UUID, queryD1, queryD1First } from '../config/d1.js';
 import { analyzeBurnTest, buildPathwayRecommendations, DSS_ENGINE_VERSION, evaluateEligibility } from './dssEngine.js';
 import { createNotificationD1 } from './d1NotificationService.js';
+import { createSystemMessageD1 } from './d1MessageService.js';
 import { listPartnerLocationsD1, PartnerSearchOptions } from './d1GisService.js';
 
 const statusLabels: Record<string, string> = {
@@ -75,9 +76,10 @@ export async function sendRecommendationToPartnerD1(
 
   const partner = await queryD1First(
     db,
-    `SELECT id, name, user_id
-     FROM partners
-     WHERE id = ? AND COALESCE(status, 'active') IN ('active', 'pending')`,
+    `SELECT p.id, p.name, COALESCE(p.user_id, u.id) AS user_id
+     FROM partners p
+     LEFT JOIN users u ON lower(u.email) = lower(p.email)
+     WHERE p.id = ? AND COALESCE(p.status, 'active') IN ('active', 'pending')`,
     [payload.partner_id]
   );
 
@@ -203,6 +205,20 @@ export async function sendRecommendationToPartnerD1(
 
   if (partner.user_id) {
     const sender = await queryD1First(db, 'SELECT name FROM users WHERE id = ?', [userId]);
+    await createSystemMessageD1(db, {
+      fromUserId: userId,
+      toUserId: partner.user_id,
+      content: `${sender?.name || 'A user'} sent a ${titleCase(payload.recommended_pathway)} textile request for your review.\n\n${payload.brief}`,
+      actionUrl: `/partner?request=${transactionId}`,
+      metadata: {
+        kind: 'dss_request_sent',
+        submission_id: payload.submission_id,
+        transaction_id: transactionId,
+        recommended_pathway: payload.recommended_pathway,
+        bag_color: bagColorByPathway[payload.recommended_pathway],
+      },
+    });
+
     await createNotificationD1(db, {
       userId: partner.user_id,
       type: 'partner_update',

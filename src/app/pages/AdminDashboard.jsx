@@ -225,7 +225,15 @@ const mapUserToAccount = (user) => ({
   role: user.role.charAt(0).toUpperCase() + user.role.slice(1),
   email: user.email,
   status: user.status || 'active',
-  joined: user.created_at ? user.created_at.split('T')[0] : '',
+  joined: user.created_at || '',
+  joinedLabel: user.created_at
+    ? formatManilaDate(user.created_at, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "Asia/Manila",
+      })
+    : '',
   phone: user.phone || '',
   location: user.address || (user.role === 'partner' ? 'Mapúa Makati' : ''),
   partner_id: user.partner_id || null,
@@ -1746,7 +1754,7 @@ export function AdminDashboard() {
                         {formatStatusLabel(item.status)}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">{item.joined}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600">{item.joinedLabel || item.joined}</td>
                     <td className="py-3 px-4">
                       <div className="flex flex-wrap gap-2">
                         <button
