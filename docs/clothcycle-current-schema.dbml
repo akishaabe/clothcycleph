@@ -1,13 +1,207 @@
-// ClothCycle PH current database schema
-// Source of truth inspected for this revision:
-// - backend/src/db/d1-schema.sql
-// - backend/src/db/migrations/*.sql
-// - backend/src/db/d1-migrations/*.sql
-// - current Worker/local services that read and write these tables
+// ClothCycle PH current Cloudflare D1 database schema
+// Source of truth for this revision: Cloudflare D1 sqlite_master output.
+// Boolean values are stored as INTEGER in D1. JSON-like values are stored as TEXT.
 
 Project clothcycle_ph {
-  database_type: "Cloudflare D1 / SQLite-compatible schema, with PostgreSQL migrations retained for local deployments"
-  Note: "Column names match the current consolidated D1 schema. Boolean values are stored as INTEGER in D1. JSON-like columns are stored as TEXT in D1 and parsed by services."
+  database_type: "Cloudflare D1 / SQLite"
+  Note: "Schema reflects the live clothcycleph-db D1 database introspected from sqlite_master. Nullable fields are columns without NOT NULL in the live CREATE TABLE SQL."
+}
+
+Table _cf_KV {
+  key text [pk]
+  value blob
+
+  Note: "Cloudflare internal KV table present in D1 sqlite_master output."
+}
+
+Table activity_logs {
+  id text [pk]
+  user_id text
+  action text [not null]
+  entity_type text
+  entity_id text
+  details text [note: "JSON text"]
+  created_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (entity_type, entity_id) [name: "idx_activity_logs_entity"]
+    user_id [name: "idx_activity_logs_user_id"]
+  }
+}
+
+Table auth_events {
+  id text [pk]
+  user_id text
+  event_type text [not null]
+  ip_address text
+  user_agent text
+  metadata text [note: "JSON text"]
+  created_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    event_type [name: "idx_auth_events_event_type"]
+    user_id [name: "idx_auth_events_user_id"]
+  }
+}
+
+Table burn_tests {
+  id text [pk]
+  submission_id text [not null]
+  performed integer [default: 0, note: "boolean-like"]
+  page integer
+  moment text [note: "JSON/text array"]
+  flames text [note: "JSON/text array"]
+  no_flame text [note: "JSON/text array"]
+  smell text
+  ashes text [note: "JSON/text array"]
+  created_at text [default: `CURRENT_TIMESTAMP`]
+  updated_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    submission_id [name: "idx_burn_tests_submission_id"]
+  }
+}
+
+Table conversations {
+  id text [pk]
+  user_id text [not null]
+  partner_id text
+  conversation_type text [default: "general"]
+  subject text
+  status text [default: "open", note: "CHECK: open, closed, archived"]
+  related_submission_id text
+  created_at text [default: `CURRENT_TIMESTAMP`]
+  updated_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    partner_id [name: "idx_conversations_partner_id"]
+    user_id [name: "idx_conversations_user_id"]
+  }
+}
+
+Table deleted_records {
+  id text [pk]
+  entity_type text [not null]
+  entity_id text [not null]
+  snapshot text [note: "JSON text snapshot"]
+  deleted_by_user_id text
+  deleted_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    deleted_at [name: "idx_deleted_records_deleted_at"]
+    (entity_type, entity_id) [name: "idx_deleted_records_entity"]
+  }
+}
+
+Table dss_rules {
+  id text [pk]
+  rule_key text [not null, unique]
+  pathway text [note: "CHECK: null, recycle, donate, upcycle, buyback, rejected"]
+  category text
+  question_key text
+  expected_values text [note: "JSON text"]
+  weight real [default: 0]
+  active integer [default: 1, note: "boolean-like"]
+  description text
+  created_by_user_id text
+  updated_by_user_id text
+  created_at text [default: `CURRENT_TIMESTAMP`]
+  updated_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    active [name: "idx_dss_rules_active"]
+    pathway [name: "idx_dss_rules_pathway"]
+  }
+}
+
+Table message_attachments {
+  id text [pk]
+  message_id text [not null]
+  filename text
+  url text [not null]
+  metadata text [note: "JSON text"]
+  uploaded_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    message_id [name: "idx_message_attachments_message_id"]
+  }
+}
+
+Table messages {
+  id text [pk]
+  from_user_id text [not null]
+  to_user_id text [not null]
+  conversation_id text
+  sender_type text
+  content text [not null]
+  related_submission_id text
+  related_transaction_id text
+  action_url text
+  metadata text [default: "{}", note: "JSON text"]
+  read integer [default: 0, note: "boolean-like"]
+  read_at text
+  created_at text [default: `CURRENT_TIMESTAMP`]
+  updated_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    conversation_id [name: "idx_messages_conversation_id"]
+    created_at [name: "idx_messages_created_at"]
+    from_user_id [name: "idx_messages_from_user_id"]
+    to_user_id [name: "idx_messages_to_user_id"]
+  }
+}
+
+Table notifications {
+  id text [pk]
+  user_id text [not null]
+  type text [not null, note: "CHECK: submission_approved, submission_rejected, message, partner_update, system"]
+  title text [not null]
+  body text
+  data text [default: "{}", note: "JSON text"]
+  read integer [default: 0, note: "boolean-like"]
+  read_at text
+  created_at text [default: `CURRENT_TIMESTAMP`]
+  updated_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    created_at [name: "idx_notifications_created_at"]
+    user_id [name: "idx_notifications_user_id"]
+    (user_id, read) [name: "idx_notifications_user_read"]
+  }
+}
+
+Table partner_rule_change_request_replies {
+  id text [pk]
+  request_id text [not null]
+  author_user_id text
+  author_role text [not null, note: "CHECK: partner, admin"]
+  message text [not null]
+  created_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    created_at [name: "idx_partner_rule_change_request_replies_created_at"]
+    request_id [name: "idx_partner_rule_change_request_replies_request_id"]
+  }
+}
+
+Table partner_rule_change_requests {
+  id text [pk]
+  partner_id text
+  requested_by_user_id text [not null]
+  rule_area text [not null]
+  requested_change text [not null]
+  reason text
+  status text [default: "pending", note: "CHECK: pending, accepted, approved, declined, needs_more_information, implemented"]
+  admin_notes text
+  reviewed_by_user_id text
+  reviewed_at text
+  created_at text [default: `CURRENT_TIMESTAMP`]
+  updated_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    partner_id [name: "idx_partner_rule_change_requests_partner_id"]
+    status [name: "idx_partner_rule_change_requests_status"]
+  }
 }
 
 Table partners {
@@ -17,7 +211,7 @@ Table partners {
   logo_url text
   email text [not null, unique]
   phone text
-  address text [note: "Partner location shown in DSS partner selection. Missing partner addresses are backfilled to Mapua Makati by migration 033."]
+  address text
   user_id text [unique]
   website text
   service_types text
@@ -27,42 +221,257 @@ Table partners {
   pickup_areas text
   rule_change_requires_admin integer [default: 1, note: "boolean-like"]
   contact_person text
-  status text [default: 'pending', note: "enum-like: pending, active, inactive, rejected"]
+  status text [default: "pending", note: "CHECK: pending, active, inactive, rejected"]
   verified integer [default: 0, note: "boolean-like"]
   rating real [default: 0]
   latitude real [note: "CHECK: null or -90..90"]
   longitude real [note: "CHECK: null or -180..180"]
   created_at text [default: `CURRENT_TIMESTAMP`]
   updated_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    email [name: "idx_partners_email"]
+    status [name: "idx_partners_status"]
+    user_id [name: "idx_partners_user_id"]
+  }
 }
 
-Table users {
+Table password_reset_tokens {
   id text [pk]
-  email text [not null, unique]
-  name text [not null]
-  password_hash text [not null]
-  password_setup_required integer [default: 0, note: "boolean-like"]
-  role text [default: 'user', note: "enum-like: user, partner, admin"]
-  status text [default: 'active', note: "enum-like: active, inactive, suspended"]
+  user_id text [not null]
+  token_hash text [not null, unique]
+  expires_at text [not null]
+  used_at text
+  created_at text [default: `CURRENT_TIMESTAMP`]
+  verified_at text
+  reset_token_hash text
+  reset_token_expires_at text
+
+  indexes {
+    reset_token_hash [unique, name: "idx_password_reset_tokens_reset_token_hash", note: "Partial unique index in D1: WHERE reset_token_hash IS NOT NULL"]
+    token_hash [name: "idx_password_reset_tokens_token_hash"]
+    user_id [name: "idx_password_reset_tokens_user_id"]
+  }
+}
+
+Table rate_limits {
+  key text [pk]
+  count integer [not null, default: 0]
+  expires_at text [not null]
+  updated_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    expires_at [name: "idx_rate_limits_expires_at"]
+  }
+}
+
+Table recommendation_feedback {
+  id text [pk]
+  recommendation_result_id text [not null]
+  user_id text
+  rating integer [note: "CHECK: null or 1..5"]
+  accepted integer [note: "boolean-like"]
+  feedback text
+  created_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    recommendation_result_id [name: "idx_recommendation_feedback_result_id"]
+  }
+}
+
+Table recommendation_results {
+  id text [pk]
+  run_id text [not null]
+  submission_id text
   partner_id text
-  avatar_url text
-  profile_photo text
-  bio text
-  phone text
-  address text [note: "Required by admin UI for partner accounts; partner display can also use partners.address."]
-  terms_accepted_at text
-  email_verified_at text
-  last_login_at text
-  two_factor_enabled integer [default: 1, note: "boolean-like"]
-  two_factor_method text [default: 'email', note: "enum-like: email, totp"]
-  two_factor_secret_encrypted text
-  two_factor_confirmed_at text
-  two_factor_code_hash text
-  two_factor_code_expires_at text
-  failed_login_count integer [default: 0]
-  locked_until text
+  recommended_pathway text [not null]
+  rank integer
+  score real
+  confidence real [note: "CHECK: null or 0..1"]
+  explanation text
+  details text
+  output_payload text [note: "JSON text"]
+  selected integer [default: 0, note: "boolean-like"]
+  generated_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    partner_id [name: "idx_recommendation_results_partner_id"]
+    run_id [name: "idx_recommendation_results_run_id"]
+    submission_id [name: "idx_recommendation_results_submission_id"]
+  }
+}
+
+Table recommendation_runs {
+  id text [pk]
+  submission_id text
+  requested_by_user_id text
+  engine_name text [default: "dss"]
+  engine_version text
+  status text [default: "completed", note: "CHECK: pending, running, completed, failed"]
+  criteria text [note: "JSON text"]
+  input_snapshot text [note: "JSON text"]
+  started_at text [default: `CURRENT_TIMESTAMP`]
+  completed_at text
+  error_message text
+  created_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    status [name: "idx_recommendation_runs_status"]
+    submission_id [name: "idx_recommendation_runs_submission_id"]
+  }
+}
+
+Table request_tracking_updates {
+  id text [pk]
+  submission_id text [not null]
+  request_id text
+  user_id text [not null]
+  partner_id text
+  progress_status text [not null, note: "CHECK: request_sent, scheduled, in_transit, dropoff_completed, completed"]
+  fulfillment_method text [default: "drop_off", note: "CHECK: drop_off, shipping, pickup, other"]
+  contact_name text
+  logistics_company text
+  tracking_number text
+  dropoff_scheduled_at text
+  dropoff_location text
+  notes text
   created_at text [default: `CURRENT_TIMESTAMP`]
   updated_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    created_at [name: "idx_request_tracking_created_at"]
+    partner_id [name: "idx_request_tracking_partner_id"]
+    request_id [name: "idx_request_tracking_request_id"]
+    submission_id [name: "idx_request_tracking_submission_id"]
+    user_id [name: "idx_request_tracking_user_id"]
+  }
+}
+
+Table schema_migrations {
+  id integer [pk, increment]
+  name text [not null, unique]
+  applied_at text [default: `CURRENT_TIMESTAMP`]
+}
+
+Table submission_details {
+  id text [pk]
+  submission_id text [not null, unique]
+  item_types text [note: "JSON/text array"]
+  other_item_type text
+  condition text
+  cleanliness text
+  knows_fabric_type integer [note: "boolean-like"]
+  fabric_types text [note: "JSON/text array"]
+  custom_fabric_text text
+  fabric_identification text [note: "JSON/text array"]
+  brand text
+  no_brand_visible integer [default: 0, note: "boolean-like"]
+  fabric_description text [note: "JSON/text array"]
+  restricted_category text [default: "none"]
+  uniform_branding text
+  fiber_composition text
+  wearability text
+  repairability text
+  contamination_level text
+  damage_classification text
+  repurposing_potential text
+  trim_removal text
+  weight_value real
+  weight_unit text [default: "kg"]
+  created_at text [default: `CURRENT_TIMESTAMP`]
+  updated_at text [default: `CURRENT_TIMESTAMP`]
+}
+
+Table submission_images {
+  id text [pk]
+  submission_id text [not null]
+  url text [not null]
+  storage_key text
+  metadata text [note: "JSON text"]
+  uploaded_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    submission_id [name: "idx_submission_images_submission_id"]
+  }
+}
+
+Table submissions {
+  id text [pk]
+  user_id text [not null]
+  item_type text [not null]
+  submission_name text
+  condition text [not null]
+  fabric text
+  cleanliness text
+  description text
+  photos text [note: "JSON text array of image records/URLs"]
+  status text [default: "pending", note: "CHECK: pending, verified, processed, rejected"]
+  assigned_partner_id text
+  submission_code text [unique]
+  service_type text [note: "CHECK: null, recycle, donate, upcycle, buyback"]
+  quantity integer [default: 1]
+  buyback_interest integer [default: 0, note: "boolean-like"]
+  action text
+  upcycle_request text
+  scheduled_at text
+  created_at text [default: `CURRENT_TIMESTAMP`]
+  updated_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    assigned_partner_id [name: "idx_submissions_assigned_partner_id"]
+    status [name: "idx_submissions_status"]
+    user_id [name: "idx_submissions_user_id"]
+  }
+}
+
+Table transactions {
+  id text [pk]
+  submission_id text [not null]
+  from_user_id text [not null]
+  to_partner_id text [not null]
+  type text [not null, note: "CHECK: recycle, donate, upcycle, buyback"]
+  status text [default: "pending", note: "CHECK: pending, accepted, completed, rejected"]
+  amount real
+  notes text
+  bag_color text [note: "white=recycle, black=upcycle, green=donate"]
+  estimated_distance_km real
+  estimated_carbon_kg real
+  outcome_title text
+  outcome_description text
+  outcome_photos text [default: "[]", note: "JSON text array of photo URLs"]
+  outcome_reported_at text
+  created_at text [default: `CURRENT_TIMESTAMP`]
+  updated_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    from_user_id [name: "idx_transactions_from_user_id"]
+    status [name: "idx_transactions_status"]
+    submission_id [name: "idx_transactions_submission_id"]
+    to_partner_id [name: "idx_transactions_to_partner_id"]
+  }
+}
+
+Table uploaded_files {
+  id text [pk]
+  user_id text
+  storage_key text [not null]
+  url text [not null]
+  original_name text
+  content_type text
+  size_bytes integer
+  purpose text [default: "general"]
+  related_entity_type text
+  related_entity_id text
+  metadata text [default: "{}", note: "JSON text"]
+  created_at text [default: `CURRENT_TIMESTAMP`]
+  updated_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (related_entity_type, related_entity_id) [name: "idx_uploaded_files_related_entity"]
+    storage_key [name: "idx_uploaded_files_storage_key"]
+    url [name: "idx_uploaded_files_url"]
+    user_id [name: "idx_uploaded_files_user_id"]
+  }
 }
 
 Table user_preferences {
@@ -81,374 +490,89 @@ Table user_recovery_codes {
   code_hash text [not null]
   used_at text
   created_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    user_id [name: "idx_user_recovery_codes_user_id"]
+  }
 }
 
-Table password_reset_tokens {
+Table users {
   id text [pk]
-  user_id text [not null]
-  token_hash text [not null, unique, note: "initial reset/verification code hash"]
-  expires_at text [not null]
-  verified_at text
-  reset_token_hash text [unique, note: "second-step reset token hash after code verification"]
-  reset_token_expires_at text
-  used_at text
-  created_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table auth_events {
-  id text [pk]
-  user_id text
-  event_type text [not null]
-  ip_address text
-  user_agent text
-  metadata text [note: "JSON text"]
-  created_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table rate_limits {
-  key text [pk]
-  count integer [not null, default: 0]
-  expires_at text [not null]
-  updated_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table submissions {
-  id text [pk]
-  user_id text [not null]
-  item_type text [not null]
-  submission_name text
-  condition text [not null]
-  fabric text
-  cleanliness text
-  description text
-  photos text [note: "JSON text array of image records/URLs"]
-  status text [default: 'pending', note: "enum-like: pending, verified, processed, rejected"]
-  assigned_partner_id text
-  submission_code text [unique]
-  service_type text [note: "enum-like: recycle, donate, upcycle, buyback"]
-  quantity integer [default: 1]
-  buyback_interest integer [default: 0, note: "boolean-like"]
-  action text
-  upcycle_request text
-  scheduled_at text
-  created_at text [default: `CURRENT_TIMESTAMP`]
-  updated_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table submission_details {
-  id text [pk]
-  submission_id text [not null, unique]
-  item_types text [note: "JSON/text array"]
-  other_item_type text
-  condition text
-  cleanliness text
-  knows_fabric_type integer [note: "boolean-like"]
-  fabric_types text [note: "JSON/text array"]
-  custom_fabric_text text
-  fabric_identification text [note: "JSON/text array"]
-  brand text
-  no_brand_visible integer [default: 0, note: "boolean-like"]
-  fabric_description text [note: "JSON/text array"]
-  restricted_category text [default: 'none']
-  uniform_branding text
-  fiber_composition text
-  wearability text
-  repairability text
-  contamination_level text
-  damage_classification text
-  repurposing_potential text
-  trim_removal text
-  weight_value real
-  weight_unit text [default: 'kg', note: "expected values from form: kg, g"]
-  created_at text [default: `CURRENT_TIMESTAMP`]
-  updated_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table burn_tests {
-  id text [pk]
-  submission_id text [not null]
-  performed integer [default: 0, note: "boolean-like"]
-  page integer
-  moment text [note: "JSON/text array"]
-  flames text [note: "JSON/text array"]
-  no_flame text [note: "JSON/text array"]
-  smell text
-  ashes text [note: "JSON/text array"]
-  created_at text [default: `CURRENT_TIMESTAMP`]
-  updated_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table submission_images {
-  id text [pk]
-  submission_id text [not null]
-  url text [not null]
-  storage_key text
-  metadata text [note: "JSON text"]
-  uploaded_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table transactions {
-  id text [pk]
-  submission_id text [not null]
-  from_user_id text [not null]
-  to_partner_id text [not null, note: "Current DSS send flow requires a selected partner."]
-  type text [not null, note: "enum-like: recycle, donate, upcycle, buyback"]
-  status text [default: 'pending', note: "enum-like: pending, accepted, completed, rejected"]
-  amount real
-  notes text
-  bag_color text [note: "white=recycle, black=upcycle, green=donate"]
-  estimated_distance_km real
-  estimated_carbon_kg real [note: "lightweight route estimate, not full audited carbon accounting"]
-  outcome_title text
-  outcome_description text
-  outcome_photos text [default: `'[]'`, note: "JSON text array of photo URLs"]
-  outcome_reported_at text
-  created_at text [default: `CURRENT_TIMESTAMP`]
-  updated_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table request_tracking_updates {
-  id text [pk]
-  submission_id text [not null]
-  request_id text
-  user_id text [not null]
+  email text [not null, unique]
+  name text [not null]
+  password_hash text [not null]
+  password_setup_required integer [default: 0, note: "boolean-like"]
+  role text [default: "user", note: "CHECK: user, partner, admin"]
+  status text [default: "active", note: "CHECK: active, inactive, suspended"]
   partner_id text
-  progress_status text [not null, note: "enum-like: request_sent, scheduled, in_transit, dropoff_completed, completed"]
-  fulfillment_method text [default: 'drop_off', note: "enum-like: drop_off, shipping, pickup, other"]
-  contact_name text
-  logistics_company text
-  tracking_number text
-  dropoff_scheduled_at text
-  dropoff_location text
-  notes text
+  avatar_url text
+  profile_photo text
+  bio text
+  phone text
+  address text
+  terms_accepted_at text
+  email_verified_at text
+  last_login_at text
+  two_factor_enabled integer [default: 1, note: "boolean-like"]
+  two_factor_method text [default: "email", note: "CHECK: email, totp"]
+  two_factor_secret_encrypted text
+  two_factor_confirmed_at text
+  two_factor_code_hash text
+  two_factor_code_expires_at text
+  failed_login_count integer [default: 0]
+  locked_until text
   created_at text [default: `CURRENT_TIMESTAMP`]
   updated_at text [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    email [name: "idx_users_email"]
+    partner_id [name: "idx_users_partner_id"]
+    role [name: "idx_users_role"]
+  }
 }
 
-Table deleted_records {
-  id text [pk]
-  entity_type text [not null]
-  entity_id text [not null]
-  snapshot text [note: "JSON text snapshot"]
-  deleted_by_user_id text
-  deleted_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table recommendation_runs {
-  id text [pk]
-  submission_id text
-  requested_by_user_id text
-  engine_name text [default: 'dss']
-  engine_version text
-  status text [default: 'completed', note: "enum-like: pending, running, completed, failed"]
-  criteria text [note: "JSON text"]
-  input_snapshot text [note: "JSON text"]
-  audit_label text [note: "PostgreSQL migration 017 added this; not present in the current D1 schema snapshot."]
-  started_at text [default: `CURRENT_TIMESTAMP`]
-  completed_at text
-  error_message text
-  created_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table recommendation_results {
-  id text [pk]
-  run_id text [not null]
-  submission_id text
-  partner_id text
-  recommended_pathway text [not null, note: "enum-like: recycle, donate, upcycle, buyback, rejected"]
-  rank integer
-  score real
-  confidence real [note: "CHECK: null or 0..1"]
-  explanation text
-  details text
-  output_payload text [note: "JSON text with recommendation, criteria, bag color, route context, and burn-test analysis"]
-  selected integer [default: 0, note: "boolean-like"]
-  generated_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table recommendation_feedback {
-  id text [pk]
-  recommendation_result_id text [not null]
-  user_id text
-  rating integer [note: "CHECK: null or 1..5"]
-  accepted integer [note: "boolean-like"]
-  feedback text
-  created_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table dss_rules {
-  id text [pk]
-  rule_key text [not null, unique]
-  pathway text [note: "enum-like: recycle, donate, upcycle, buyback, rejected"]
-  category text
-  question_key text
-  expected_values text [note: "JSON text"]
-  weight real [default: 0]
-  active integer [default: 1, note: "boolean-like"]
-  description text
-  created_by_user_id text
-  updated_by_user_id text
-  created_at text [default: `CURRENT_TIMESTAMP`]
-  updated_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table partner_rule_change_requests {
-  id text [pk]
-  partner_id text
-  requested_by_user_id text [not null]
-  rule_area text [not null]
-  requested_change text [not null]
-  reason text
-  status text [default: 'pending', note: "enum-like: pending, accepted, approved, declined, needs_more_information, implemented"]
-  admin_notes text
-  reviewed_by_user_id text
-  reviewed_at text
-  created_at text [default: `CURRENT_TIMESTAMP`]
-  updated_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table partner_rule_change_request_replies {
-  id text [pk]
-  request_id text [not null]
-  author_user_id text
-  author_role text [not null, note: "enum-like: partner, admin"]
-  message text [not null]
-  created_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table notifications {
-  id text [pk]
-  user_id text [not null]
-  type text [not null, note: "enum-like: submission_approved, submission_rejected, message, partner_update, system"]
-  title text [not null]
-  body text
-  data text [default: `'{}'`, note: "JSON text"]
-  read integer [default: 0, note: "boolean-like"]
-  read_at text
-  created_at text [default: `CURRENT_TIMESTAMP`]
-  updated_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table activity_logs {
-  id text [pk]
-  user_id text
-  action text [not null]
-  entity_type text
-  entity_id text
-  details text [note: "JSON text"]
-  created_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table conversations {
-  id text [pk]
-  user_id text [not null]
-  partner_id text
-  conversation_type text [default: 'general']
-  subject text
-  status text [default: 'open', note: "enum-like: open, closed, archived"]
-  related_submission_id text
-  created_at text [default: `CURRENT_TIMESTAMP`]
-  updated_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table messages {
-  id text [pk]
-  from_user_id text [not null]
-  to_user_id text [not null]
-  conversation_id text
-  sender_type text
-  content text [not null]
-  related_submission_id text
-  related_transaction_id text
-  action_url text
-  metadata text [default: `'{}'`, note: "JSON text"]
-  read integer [default: 0, note: "boolean-like"]
-  read_at text
-  created_at text [default: `CURRENT_TIMESTAMP`]
-  updated_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table message_attachments {
-  id text [pk]
-  message_id text [not null]
-  filename text
-  url text [not null]
-  metadata text [note: "JSON text"]
-  uploaded_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table uploaded_files {
-  id text [pk]
-  user_id text
-  storage_key text [not null]
-  url text [not null]
-  original_name text
-  content_type text
-  size_bytes integer
-  purpose text [default: 'general', note: "examples: image, submission_image, message_attachment, outcome_photo"]
-  related_entity_type text [note: "examples: submission, message, transaction"]
-  related_entity_id text
-  metadata text [default: `'{}'`, note: "JSON text"]
-  created_at text [default: `CURRENT_TIMESTAMP`]
-  updated_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Table schema_migrations {
-  id integer [pk, increment]
-  name text [not null, unique]
-  applied_at text [default: `CURRENT_TIMESTAMP`]
-}
-
-Ref: partners.user_id > users.id [delete: set null]
-Ref: users.partner_id > partners.id [delete: set null]
-Ref: user_preferences.user_id > users.id [delete: cascade]
-Ref: user_recovery_codes.user_id > users.id [delete: cascade]
-Ref: password_reset_tokens.user_id > users.id [delete: cascade]
-Ref: auth_events.user_id > users.id [delete: set null]
-
-Ref: submissions.user_id > users.id [delete: cascade]
-Ref: submissions.assigned_partner_id > partners.id [delete: set null]
-Ref: submission_details.submission_id > submissions.id [delete: cascade]
-Ref: burn_tests.submission_id > submissions.id [delete: cascade]
-Ref: submission_images.submission_id > submissions.id [delete: cascade]
-
-Ref: transactions.submission_id > submissions.id [delete: cascade]
-Ref: transactions.from_user_id > users.id [delete: cascade]
-Ref: transactions.to_partner_id > partners.id [delete: set null]
-
-Ref: request_tracking_updates.submission_id > submissions.id [delete: cascade]
-Ref: request_tracking_updates.request_id > transactions.id [delete: set null]
-Ref: request_tracking_updates.user_id > users.id [delete: cascade]
-Ref: request_tracking_updates.partner_id > partners.id [delete: set null]
-
-Ref: deleted_records.deleted_by_user_id > users.id [delete: set null]
-
-Ref: recommendation_runs.submission_id > submissions.id [delete: set null]
-Ref: recommendation_runs.requested_by_user_id > users.id [delete: set null]
-Ref: recommendation_results.run_id > recommendation_runs.id [delete: cascade]
-Ref: recommendation_results.submission_id > submissions.id [delete: cascade]
-Ref: recommendation_results.partner_id > partners.id [delete: set null]
-Ref: recommendation_feedback.recommendation_result_id > recommendation_results.id [delete: cascade]
-Ref: recommendation_feedback.user_id > users.id [delete: set null]
-
-Ref: dss_rules.created_by_user_id > users.id [delete: set null]
-Ref: dss_rules.updated_by_user_id > users.id [delete: set null]
-Ref: partner_rule_change_requests.partner_id > partners.id [delete: set null]
-Ref: partner_rule_change_requests.requested_by_user_id > users.id [delete: cascade]
-Ref: partner_rule_change_requests.reviewed_by_user_id > users.id [delete: set null]
-Ref: partner_rule_change_request_replies.request_id > partner_rule_change_requests.id [delete: cascade]
-Ref: partner_rule_change_request_replies.author_user_id > users.id [delete: set null]
-
-Ref: notifications.user_id > users.id [delete: cascade]
 Ref: activity_logs.user_id > users.id [delete: set null]
-
+Ref: auth_events.user_id > users.id [delete: set null]
+Ref: burn_tests.submission_id > submissions.id [delete: cascade]
 Ref: conversations.user_id > users.id [delete: cascade]
 Ref: conversations.partner_id > partners.id [delete: set null]
 Ref: conversations.related_submission_id > submissions.id [delete: set null]
+Ref: deleted_records.deleted_by_user_id > users.id [delete: set null]
+Ref: dss_rules.created_by_user_id > users.id [delete: set null]
+Ref: dss_rules.updated_by_user_id > users.id [delete: set null]
+Ref: message_attachments.message_id > messages.id [delete: cascade]
 Ref: messages.from_user_id > users.id [delete: cascade]
 Ref: messages.to_user_id > users.id [delete: cascade]
 Ref: messages.conversation_id > conversations.id [delete: set null]
 Ref: messages.related_submission_id > submissions.id [delete: set null]
 Ref: messages.related_transaction_id > transactions.id [delete: set null]
-Ref: message_attachments.message_id > messages.id [delete: cascade]
+Ref: notifications.user_id > users.id [delete: cascade]
+Ref: partner_rule_change_request_replies.request_id > partner_rule_change_requests.id [delete: cascade]
+Ref: partner_rule_change_request_replies.author_user_id > users.id [delete: set null]
+Ref: partner_rule_change_requests.partner_id > partners.id [delete: set null]
+Ref: partner_rule_change_requests.requested_by_user_id > users.id [delete: cascade]
+Ref: partner_rule_change_requests.reviewed_by_user_id > users.id [delete: set null]
+Ref: partners.user_id > users.id [delete: set null]
+Ref: password_reset_tokens.user_id > users.id [delete: cascade]
+Ref: recommendation_feedback.recommendation_result_id > recommendation_results.id [delete: cascade]
+Ref: recommendation_feedback.user_id > users.id [delete: set null]
+Ref: recommendation_results.run_id > recommendation_runs.id [delete: cascade]
+Ref: recommendation_results.submission_id > submissions.id [delete: cascade]
+Ref: recommendation_results.partner_id > partners.id [delete: set null]
+Ref: recommendation_runs.submission_id > submissions.id [delete: set null]
+Ref: recommendation_runs.requested_by_user_id > users.id [delete: set null]
+Ref: request_tracking_updates.submission_id > submissions.id [delete: cascade]
+Ref: request_tracking_updates.request_id > transactions.id [delete: set null]
+Ref: request_tracking_updates.user_id > users.id [delete: cascade]
+Ref: request_tracking_updates.partner_id > partners.id [delete: set null]
+Ref: submission_details.submission_id > submissions.id [delete: cascade]
+Ref: submission_images.submission_id > submissions.id [delete: cascade]
+Ref: submissions.user_id > users.id [delete: cascade]
+Ref: submissions.assigned_partner_id > partners.id [delete: set null]
+Ref: transactions.submission_id > submissions.id [delete: cascade]
+Ref: transactions.from_user_id > users.id [delete: cascade]
+Ref: transactions.to_partner_id > partners.id [delete: set null]
 Ref: uploaded_files.user_id > users.id [delete: set null]
+Ref: user_preferences.user_id > users.id [delete: cascade]
+Ref: user_recovery_codes.user_id > users.id [delete: cascade]
+Ref: users.partner_id > partners.id [delete: set null]
