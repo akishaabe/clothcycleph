@@ -90,6 +90,7 @@ import {
 } from './controllers/adminController.js';
 import { uploadFile } from './controllers/uploadController.js';
 import { listPartnerLocations } from './services/gisService.js';
+import { contentSecurityPolicy } from './securityHeaders.js';
 import {
   changePasswordSchema,
   forgotPasswordSchema,
@@ -187,6 +188,7 @@ export function setLocalDatabaseStatus(status: 'starting' | 'connected' | 'error
 }
 
 app.use('*', secureHeaders({ crossOriginResourcePolicy: 'cross-origin' }));
+app.use('*', contentSecurityPolicy);
 app.use(
   '*',
   cors({

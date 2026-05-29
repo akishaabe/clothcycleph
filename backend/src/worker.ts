@@ -95,6 +95,7 @@ import {
 } from './services/d1DssService.js';
 import { listPartnerLocationsD1 } from './services/d1GisService.js';
 import { getConfig } from './config/env.js';
+import { contentSecurityPolicy } from './securityHeaders.js';
 
 type WorkerFile = {
   arrayBuffer: () => Promise<ArrayBuffer>;
@@ -152,6 +153,7 @@ const ALLOWED_MESSAGE_ATTACHMENT_MIMETYPES = [
 const app = new Hono<{ Bindings: CloudflareEnv; Variables: Variables }>();
 
 app.use('*', secureHeaders({ crossOriginResourcePolicy: 'cross-origin' }));
+app.use('*', contentSecurityPolicy);
 app.use(
   '*',
   cors({
