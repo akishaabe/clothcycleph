@@ -15,8 +15,11 @@ export const CONTENT_SECURITY_POLICY = [
   'upgrade-insecure-requests',
 ].join('; ');
 
+export const STRICT_TRANSPORT_SECURITY = 'max-age=31536000; includeSubDomains; preload';
+
 export async function contentSecurityPolicy(c: Context, next: Next) {
   await next();
   c.header('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+  c.header('Strict-Transport-Security', STRICT_TRANSPORT_SECURITY);
   c.header('X-Frame-Options', 'DENY');
 }
