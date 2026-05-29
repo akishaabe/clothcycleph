@@ -358,7 +358,6 @@ export async function getPartnerRuleChangeRequestsD1(
       return result;
     }
 
-    const placeholders = requestIds.map(() => '?').join(', ');
     const replies = await queryD1(
       db,
       `SELECT
@@ -367,9 +366,11 @@ export async function getPartnerRuleChangeRequestsD1(
          u.email AS author_email
        FROM partner_rule_change_request_replies r
        LEFT JOIN users u ON u.id = r.author_user_id
-       WHERE r.request_id IN (${placeholders})
+       WHERE r.request_id IN (
+         SELECT value FROM json_each(?)
+       )
        ORDER BY r.created_at ASC`,
-      requestIds
+      [JSON.stringify(requestIds)]
     );
     const repliesByRequest = (replies.results || []).reduce((groups: Record<string, any[]>, reply: any) => {
       groups[reply.request_id] = [...(groups[reply.request_id] || []), reply];
