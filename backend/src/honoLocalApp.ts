@@ -401,7 +401,7 @@ function controller(handler: (req: any, res: any) => unknown, options: HandlerOp
         return c.json(
           {
             error: 'Validation failed',
-            details: error.errors.map((issue) => ({
+            details: error.issues.map((issue) => ({
               field: issue.path.join('.'),
               message: issue.message,
             })),
