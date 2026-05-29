@@ -12,8 +12,8 @@ services:
     volumes:
       - ./backend:/app
       - clothcycle_wrangler_node_modules:/app/node_modules
-      - clothcycle_wrangler_config:/root/.config/.wrangler
-      - clothcycle_wrangler_cache:/root/.cache
+      - clothcycle_wrangler_config:/home/wrangler/.config/.wrangler
+      - clothcycle_wrangler_cache:/home/wrangler/.cache
     command: wrangler --version
 
 volumes:

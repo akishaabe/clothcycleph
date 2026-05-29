@@ -10,6 +10,15 @@ RUN apt-get update \
 COPY package*.json ./
 RUN npm install
 
-ENV PATH="/app/node_modules/.bin:${PATH}"
+RUN groupadd --system wrangler \
+  && useradd --system --create-home --gid wrangler wrangler \
+  && mkdir -p /home/wrangler/.config/.wrangler /home/wrangler/.cache /home/wrangler/.npm \
+  && chown -R wrangler:wrangler /app /home/wrangler
+
+USER wrangler
+
+ENV HOME="/home/wrangler" \
+  NPM_CONFIG_CACHE="/home/wrangler/.npm" \
+  PATH="/app/node_modules/.bin:${PATH}"
 
 CMD ["wrangler", "--version"]
