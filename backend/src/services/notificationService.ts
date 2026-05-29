@@ -41,16 +41,15 @@ export async function createNotification(payload: CreateNotificationPayload) {
 
 export async function getUserNotifications(userId: string, unreadOnly = false) {
   try {
-    let sql = 'SELECT * FROM notifications WHERE user_id = $1';
-    const params: unknown[] = [userId];
-
-    if (unreadOnly) {
-      sql += ' AND read = false';
-    }
-
-    sql += ' ORDER BY created_at DESC LIMIT 50';
-
-    const result = await query(sql, params);
+    const result = await query(
+      `SELECT *
+       FROM notifications
+       WHERE user_id = $1
+         AND (NOT $2::boolean OR read = false)
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      [userId, unreadOnly]
+    );
     return result.rows;
   } catch (error) {
     console.error('Error fetching notifications:', error);
@@ -242,29 +241,24 @@ export async function deleteNotification(notificationId: string, userId: string)
 export async function notifyUsers(userIds: string[], notification: Omit<CreateNotificationPayload, 'userId'>) {
   try {
     const ids = userIds.map(() => uuidv4());
-    const values = userIds
-      .map((userId, index) => [
-        ids[index],
-        userId,
-        notification.type,
-        notification.title,
-        notification.body || null,
-        JSON.stringify(notification.data || {}),
-      ])
-      .flat();
-
-    const placeholders = userIds
-      .map((_, index) => {
-        const offset = index * 6;
-        return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`;
-      })
-      .join(',');
+    const types = userIds.map(() => notification.type);
+    const titles = userIds.map(() => notification.title);
+    const bodies = userIds.map(() => notification.body || null);
+    const data = userIds.map(() => JSON.stringify(notification.data || {}));
 
     const result = await query(
       `INSERT INTO notifications (id, user_id, type, title, body, data)
-       VALUES ${placeholders}
+       SELECT id, user_id, type, title, body, data
+       FROM unnest(
+         $1::uuid[],
+         $2::uuid[],
+         $3::text[],
+         $4::text[],
+         $5::text[],
+         $6::jsonb[]
+       ) AS notification_rows(id, user_id, type, title, body, data)
        RETURNING *`,
-      values
+      [ids, userIds, types, titles, bodies, data]
     );
 
     // Invalidate caches
