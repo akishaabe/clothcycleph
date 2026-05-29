@@ -18,4 +18,5 @@ export const CONTENT_SECURITY_POLICY = [
 export async function contentSecurityPolicy(c: Context, next: Next) {
   await next();
   c.header('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+  c.header('X-Frame-Options', 'DENY');
 }
