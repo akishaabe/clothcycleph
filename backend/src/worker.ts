@@ -96,6 +96,7 @@ import {
 import { listPartnerLocationsD1 } from './services/d1GisService.js';
 import { getConfig } from './config/env.js';
 import { contentSecurityPolicy } from './securityHeaders.js';
+import { resolveAllowedCorsOrigin } from './corsConfig.js';
 
 type WorkerFile = {
   arrayBuffer: () => Promise<ArrayBuffer>;
@@ -158,16 +159,7 @@ app.use(
   '*',
   cors({
     origin: (origin, c) => {
-      const allowedOrigins = (c.env.CORS_ORIGIN || c.env.APP_URL || 'http://localhost:5173')
-        .split(',')
-        .map((item: string) => item.trim())
-        .filter(Boolean);
-
-      if (!origin || allowedOrigins.includes(origin) || /^http:\/\/localhost:517\d$/.test(origin)) {
-        return origin || allowedOrigins[0];
-      }
-
-      return allowedOrigins[0];
+      return resolveAllowedCorsOrigin(origin, c.env.CORS_ORIGIN);
     },
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],

@@ -15,7 +15,7 @@ export function getConfig(env: EnvRecord = {}) {
     return value == null ? fallback : String(value);
   };
   const nodeEnv = read('NODE_ENV', 'development');
-  const corsOrigins = read('CORS_ORIGIN', 'http://localhost:5173')!
+  const corsOrigins = read('CORS_ORIGIN', 'https://clothcycleph.com,https://www.clothcycleph.com,http://localhost:5173')!
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);

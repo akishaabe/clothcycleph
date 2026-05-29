@@ -91,6 +91,7 @@ import {
 import { uploadFile } from './controllers/uploadController.js';
 import { listPartnerLocations } from './services/gisService.js';
 import { contentSecurityPolicy } from './securityHeaders.js';
+import { resolveAllowedCorsOrigin } from './corsConfig.js';
 import {
   changePasswordSchema,
   forgotPasswordSchema,
@@ -193,10 +194,7 @@ app.use(
   '*',
   cors({
     origin: (origin) => {
-      if (!origin || isAllowedCorsOrigin(origin)) {
-        return origin || config.cors.origins[0] || 'http://localhost:5173';
-      }
-      return config.cors.origins[0] || 'http://localhost:5173';
+      return resolveAllowedCorsOrigin(origin, config.cors.origins.join(','));
     },
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -572,18 +570,6 @@ async function readUploadFile(c: Context, policy: 'image' | 'messageAttachment' 
     size: file.size,
     buffer: Buffer.from(await file.arrayBuffer()),
   };
-}
-
-function isAllowedCorsOrigin(origin: string) {
-  if (config.cors.origins.includes(origin)) {
-    return true;
-  }
-
-  if (config.server.env === 'development') {
-    return /^http:\/\/(localhost|127\.0\.0\.1):517\d$/.test(origin);
-  }
-
-  return false;
 }
 
 function contentTypeFromFilename(filename: string) {
