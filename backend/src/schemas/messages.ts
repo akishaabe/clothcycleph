@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidLikeStringSchema } from './common.js';
 
 const messageAttachmentSchema = z.object({
   filename: z.string().trim().min(1).max(255),
@@ -9,7 +10,7 @@ const messageAttachmentSchema = z.object({
 });
 
 export const sendMessageSchema = z.object({
-  to_user_id: z.string().uuid(),
+  to_user_id: uuidLikeStringSchema,
   content: z.string().trim().max(5000).optional().default(''),
   attachments: z.array(messageAttachmentSchema).max(5).optional().default([]),
 }).refine((data) => data.content.length > 0 || data.attachments.length > 0, {

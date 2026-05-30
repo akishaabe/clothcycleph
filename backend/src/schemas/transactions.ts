@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { uuidLikeStringSchema } from './common.js';
 
 export const createTransactionSchema = z.object({
-  submission_id: z.string().uuid(),
-  to_partner_id: z.string().uuid(),
+  submission_id: uuidLikeStringSchema,
+  to_partner_id: uuidLikeStringSchema,
   type: z.enum(['recycle', 'donate', 'upcycle', 'buyback']),
   amount: z.number().positive().optional(),
   notes: z.string().max(1000).optional(),

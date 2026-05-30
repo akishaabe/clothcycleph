@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidLikeStringSchema } from './common.js';
 
 const photoSchema = z.union([
   z.string().url(),
@@ -88,7 +89,7 @@ export const updateSubmissionStatusSchema = z.object({
 });
 
 export const createTrackingUpdateSchema = z.object({
-  request_id: z.string().uuid().nullable().optional(),
+  request_id: uuidLikeStringSchema.nullable().optional(),
   progress_status: z.enum(['request_sent', 'scheduled', 'in_transit', 'dropoff_completed', 'completed']),
   fulfillment_method: z.enum(['drop_off', 'shipping', 'pickup', 'other']).default('drop_off').optional(),
   contact_name: z.string().trim().max(120).nullable().optional(),

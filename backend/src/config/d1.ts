@@ -118,6 +118,11 @@ function normalizeD1Row<T>(row: T | undefined): T | undefined {
 export function generateD1UUID(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
+
+  // RFC 4122 version 4 UUID bits. Without these, IDs are UUID-shaped but
+  // can randomly fail strict validators such as z.string().uuid().
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
   
   // Format as UUID string (8-4-4-4-12)
   const hex = Array.from(bytes)

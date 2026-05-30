@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { uuidLikeStringSchema } from './common.js';
 
 export const sendDssRecommendationSchema = z.object({
-  submission_id: z.string().uuid(),
-  partner_id: z.string().uuid(),
+  submission_id: uuidLikeStringSchema,
+  partner_id: uuidLikeStringSchema,
   recommended_pathway: z.enum(['recycle', 'donate', 'upcycle']),
   buyback_interest: z.boolean().optional(),
   estimated_distance_km: z.coerce.number().nonnegative().max(50000).nullable().optional(),
