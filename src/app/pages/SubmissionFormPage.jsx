@@ -1711,7 +1711,13 @@ export function SubmissionFormPage() {
 
               {formData.action === "Upcycle" && (
                 <>
-                  <QuestionBlock label="Are you interested in a buyback option (selling the upcycled item)?">
+                  <QuestionBlock label="Buyback">
+                    <p className="mb-4 text-sm leading-6 text-[#5a6f5a]">
+                      Buyback means you are open to selling the upcycled item if
+                      a partner can support it. Choosing Yes lets the partner
+                      review the item for possible resale or compensation;
+                      choosing No keeps the request as upcycle only.
+                    </p>
                     <div className="grid sm:grid-cols-2 gap-3">
                       {["Yes", "No"].map((answer) => (
                         <RadioOption
