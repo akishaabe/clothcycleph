@@ -1713,10 +1713,13 @@ export function SubmissionFormPage() {
                 <>
                   <QuestionBlock label="Buyback">
                     <p className="mb-4 text-sm leading-6 text-[#5a6f5a]">
-                      Buyback means you are open to selling the upcycled item if
-                      a partner can support it. Choosing Yes lets the partner
-                      review the item for possible resale or compensation;
-                      choosing No keeps the request as upcycle only.
+                      Buyback” means the user wants to purchase or reclaim
+                      the upcycled version of their submitted textile item
+                      after it has been redesigned or transformed by a partner.
+                      Choosing “Yes” indicates that the user is interested in
+                      having the finished upcycled product returned to them,
+                      subject to partner approval, production feasibility, and
+                      possible associated costs.
                     </p>
                     <div className="grid sm:grid-cols-2 gap-3">
                       {["Yes", "No"].map((answer) => (

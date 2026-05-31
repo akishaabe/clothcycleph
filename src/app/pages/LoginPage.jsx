@@ -46,6 +46,7 @@ export function LoginPage() {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+  const [isGoogleButtonReady, setIsGoogleButtonReady] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
@@ -127,6 +128,8 @@ export function LoginPage() {
     }
 
     let isMounted = true;
+    let readyTimerId;
+    setIsGoogleButtonReady(false);
 
     loadGoogleIdentityScript()
       .then(() => {
@@ -184,6 +187,12 @@ export function LoginPage() {
           width: googleButtonWidth,
           text: "continue_with",
         });
+
+        readyTimerId = window.setTimeout(() => {
+          if (isMounted) {
+            setIsGoogleButtonReady(true);
+          }
+        }, 900);
       })
       .catch((googleError) => {
         if (isMounted) {
@@ -193,6 +202,7 @@ export function LoginPage() {
 
     return () => {
       isMounted = false;
+      window.clearTimeout(readyTimerId);
     };
   }, [authMode, continueWithGoogle, googleClientId, navigate, twoFactorToken]);
 
@@ -826,7 +836,11 @@ export function LoginPage() {
                   ) : null}
 
                   {googleClientId ? (
-                    <div className="auth-google-button flex justify-center">
+                    <div
+                      className={`auth-google-button flex justify-center ${
+                        isGoogleButtonReady ? "is-ready" : ""
+                      }`}
+                    >
                       <div ref={googleButtonRef} className="w-full max-w-[360px]" />
                     </div>
                   ) : null}

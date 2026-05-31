@@ -30,6 +30,7 @@ export function SignUpPage() {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+  const [isGoogleButtonReady, setIsGoogleButtonReady] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
@@ -41,6 +42,8 @@ export function SignUpPage() {
     }
 
     let isMounted = true;
+    let readyTimerId;
+    setIsGoogleButtonReady(false);
 
     loadGoogleIdentityScript()
       .then(() => {
@@ -103,6 +106,12 @@ export function SignUpPage() {
           width: googleButtonWidth,
           text: "signup_with",
         });
+
+        readyTimerId = window.setTimeout(() => {
+          if (isMounted) {
+            setIsGoogleButtonReady(true);
+          }
+        }, 900);
       })
       .catch((googleError) => {
         if (isMounted) {
@@ -112,6 +121,7 @@ export function SignUpPage() {
 
     return () => {
       isMounted = false;
+      window.clearTimeout(readyTimerId);
     };
   }, [continueWithGoogle, formData.terms, googleClientId, navigate, twoFactorToken]);
 
@@ -391,7 +401,11 @@ export function SignUpPage() {
                 or
                 <div className="h-px flex-1 bg-[#e7ebe6]" />
               </div>
-              <div className="auth-google-button flex justify-center">
+              <div
+                className={`auth-google-button flex justify-center ${
+                  isGoogleButtonReady ? "is-ready" : ""
+                }`}
+              >
                 <div ref={googleButtonRef} className="w-full max-w-[360px]" />
               </div>
               {isGoogleSubmitting ? (
