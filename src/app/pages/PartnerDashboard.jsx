@@ -187,6 +187,7 @@ export function PartnerDashboard() {
   const [outcomeDescription, setOutcomeDescription] = useState("");
   const [outcomeFiles, setOutcomeFiles] = useState([]);
   const [outcomePreviews, setOutcomePreviews] = useState([]);
+  const [outcomeUploadError, setOutcomeUploadError] = useState("");
   const [isUploadingOutcome, setIsUploadingOutcome] = useState(false);
   const [isLoadingRequests, setIsLoadingRequests] = useState(true);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -485,6 +486,7 @@ export function PartnerDashboard() {
       setOutcomeDescription("");
       setOutcomeFiles([]);
       setOutcomePreviews([]);
+      setOutcomeUploadError("");
     } catch (error) {
       setRequestError(error.message || "Unable to update request status.");
     } finally {
@@ -509,16 +511,22 @@ export function PartnerDashboard() {
     [outcomeFiles, outcomePreviews],
   );
 
-  const handleOutcomeFiles = (files) => {
+  const handleOutcomeFiles = (files, input) => {
     const selectedFiles = Array.from(files || []);
 
     try {
       selectedFiles.forEach((file) => FileUploadService.validateFile(file));
     } catch (error) {
-      setRequestError(error.message || "Only image files up to 5MB can be uploaded.");
+      const message = error.message || "Only image files up to 5MB can be uploaded.";
+      setOutcomeUploadError(message);
+      setRequestError(message);
+      if (input) {
+        input.value = "";
+      }
       return;
     }
 
+    setOutcomeUploadError("");
     setRequestError("");
     setOutcomeFiles(selectedFiles);
     outcomePreviews.forEach((preview) => URL.revokeObjectURL(preview));
@@ -1453,15 +1461,21 @@ export function PartnerDashboard() {
                       placeholder="Example: We sorted and stitched the fabric into two tote bags for the next community sale."
                     />
                     <label className="block cursor-pointer rounded-2xl border-2 border-dashed border-[#d6e6f8] bg-[#fbfdff] p-5 text-center text-sm text-[#41668f] transition-colors hover:bg-[#eff6ff] dark:border-blue-400/20 dark:bg-white/[0.04] dark:text-[#9fc5f8]">
-                      Add outcome photos
+                      <span className="block font-semibold">Add outcome photos</span>
+                      <span className="mt-1 block text-xs text-[#6a83a4] dark:text-[#9fc5f8]">Upload images up to 5MB</span>
                       <input
                         type="file"
                         accept="image/*"
                         multiple
                         className="hidden"
-                        onChange={(event) => handleOutcomeFiles(event.target.files)}
+                        onChange={(event) => handleOutcomeFiles(event.target.files, event.target)}
                       />
                     </label>
+                    {outcomeUploadError && (
+                      <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {outcomeUploadError}
+                      </div>
+                    )}
                     {(previewOutcomeImages.length > 0 || existingOutcomeImages.length > 0) && (
                       <ImageCarousel
                         images={previewOutcomeImages.length > 0 ? previewOutcomeImages : existingOutcomeImages}

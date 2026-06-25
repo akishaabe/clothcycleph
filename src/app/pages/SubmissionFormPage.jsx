@@ -564,10 +564,10 @@ export function SubmissionFormPage() {
   };
 
   const handleImageUpload = async (files) => {
-    const nextFiles = Array.from(files || []);
+    const selectedFiles = Array.from(files || []);
 
     try {
-      nextFiles.forEach((file) => FileUploadService.validateFile(file));
+      selectedFiles.forEach((file) => FileUploadService.validateFile(file));
     } catch (error) {
       setSubmitError(error.message || "Unable to upload this file.");
       if (fileInputRef.current) {
@@ -577,16 +577,23 @@ export function SubmissionFormPage() {
     }
 
     setSubmitError("");
+    const previews = await Promise.all(
+      selectedFiles.map(async (file) => getFilePreview(file)),
+    );
+
     setFormData((prev) => ({
       ...prev,
-      imageFiles: nextFiles,
-      imageLabels: nextFiles.map((file, index) => prev.imageLabels[index] || file.name.replace(/\.[^.]+$/, "")),
+      imageFiles: [...prev.imageFiles, ...selectedFiles],
+      imageLabels: [
+        ...prev.imageLabels,
+        ...selectedFiles.map((file) => file.name.replace(/\.[^.]+$/, "")),
+      ],
     }));
+    setImagePreviews((prev) => [...prev, ...previews.filter(Boolean)]);
 
-    const previews = await Promise.all(
-      nextFiles.map(async (file) => getFilePreview(file)),
-    );
-    setImagePreviews(previews.filter(Boolean));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const removeImage = (indexToRemove) => {
@@ -1784,7 +1791,7 @@ export function SubmissionFormPage() {
                   <p className="text-[#5a6f5a] mb-1">
                     Click to upload or drag and drop
                   </p>
-                  <p className="text-sm text-[#8a9a8a]">PNG, JPG up to 10MB</p>
+                  <p className="text-sm text-[#8a9a8a]">Images only, up to 5MB</p>
                   <input
                     id="submission-images"
                     type="file"
@@ -1809,6 +1816,20 @@ export function SubmissionFormPage() {
                 {(uploadError || submitError) && (
                   <div className="mt-3 rounded-xl border border-[#d4a574] bg-[#fff8e8] px-4 py-3 text-sm text-[#7a5427]">
                     {submitError || uploadError}
+                  </div>
+                )}
+
+                {imagePreviews.length > 0 && (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading || isSubmitting}
+                      className="inline-flex items-center gap-2 rounded-xl border border-[#d4d8d0] px-4 py-2 text-sm font-semibold text-[#5a6f5a] transition-colors hover:border-[#6b8e6b] hover:bg-[#f6f8f4] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Upload className="h-4 w-4" />
+                      Add another image
+                    </button>
                   </div>
                 )}
 
