@@ -1211,12 +1211,6 @@ export function DssConfirmationPage() {
                   </button>
                 </form>
               )}
-              <PartnerMap
-                partners={partnerOptions}
-                selectedPartnerId={selectedPartnerId}
-                onSelect={setSelectedPartnerId}
-                userLocation={userLocation}
-              />
               <div className="grid gap-3 md:grid-cols-2">
                 {partnerOptions.map((partner) => (
                   <button
@@ -1617,77 +1611,6 @@ function isValidCoordinate(lat, lng) {
     lat <= 90 &&
     lng >= -180 &&
     lng <= 180
-  );
-}
-
-function PartnerMap({ partners, selectedPartnerId, onSelect, userLocation }) {
-  const plottedPartners = partners.filter(
-    (partner) => partner.latitude != null && partner.longitude != null,
-  );
-  const coordinates = [
-    ...plottedPartners.map((partner) => ({
-      lat: Number(partner.latitude),
-      lng: Number(partner.longitude),
-    })),
-    ...(userLocation ? [userLocation] : []),
-  ];
-
-  if (coordinates.length === 0) {
-    return null;
-  }
-
-  const bounds = coordinates.reduce(
-    (nextBounds, point) => ({
-      minLat: Math.min(nextBounds.minLat, point.lat),
-      maxLat: Math.max(nextBounds.maxLat, point.lat),
-      minLng: Math.min(nextBounds.minLng, point.lng),
-      maxLng: Math.max(nextBounds.maxLng, point.lng),
-    }),
-    {
-      minLat: coordinates[0].lat,
-      maxLat: coordinates[0].lat,
-      minLng: coordinates[0].lng,
-      maxLng: coordinates[0].lng,
-    },
-  );
-
-  const toPosition = (lat, lng) => {
-    const latSpan = Math.max(bounds.maxLat - bounds.minLat, 0.08);
-    const lngSpan = Math.max(bounds.maxLng - bounds.minLng, 0.08);
-    return {
-      top: `${8 + ((bounds.maxLat - lat) / latSpan) * 84}%`,
-      left: `${8 + ((lng - bounds.minLng) / lngSpan) * 84}%`,
-    };
-  };
-
-  return (
-    <div className="relative mb-4 h-64 overflow-hidden rounded-2xl border border-[#dce4da] bg-[#eef5ea]">
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(51,97,88,0.08)_1px,transparent_1px),linear-gradient(rgba(51,97,88,0.08)_1px,transparent_1px)] bg-[length:36px_36px]" />
-      {userLocation && (
-        <div
-          className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
-          style={toPosition(userLocation.lat, userLocation.lng)}
-          title="Your location"
-        >
-          <div className="h-4 w-4 rounded-full border-2 border-white bg-[#10233f] shadow-lg" />
-        </div>
-      )}
-      {plottedPartners.map((partner) => (
-        <button
-          key={partner.id}
-          onClick={() => onSelect(partner.id)}
-          className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-lg transition-transform hover:scale-110 ${
-            selectedPartnerId === partner.id ? "h-5 w-5 bg-[#336158]" : "h-4 w-4 bg-[#7ea186]"
-          }`}
-          style={toPosition(Number(partner.latitude), Number(partner.longitude))}
-          title={partner.name}
-          aria-label={`Select ${partner.name}`}
-        />
-      ))}
-      <div className="absolute bottom-3 left-3 rounded-xl bg-white/90 px-3 py-2 text-xs text-[#5f6f67] shadow-sm">
-        Dark marker: you. Green markers: partners.
-      </div>
-    </div>
   );
 }
 

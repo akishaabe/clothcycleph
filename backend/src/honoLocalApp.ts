@@ -139,6 +139,8 @@ type HandlerOptions = {
 };
 
 const MAX_UPLOAD_SIZE = 5 * 1024 * 1024;
+const FILE_SIZE_LIMIT_MESSAGE =
+  'File size exceeds the maximum allowed limit. Please upload a smaller file.';
 const ALLOWED_UPLOAD_MIMETYPES = new Set([
   'image/jpeg',
   'image/png',
@@ -558,7 +560,7 @@ async function readUploadFile(c: Context, policy: 'image' | 'messageAttachment' 
       400,
       isMessageAttachment
         ? 'Message attachments must be 50MB or smaller'
-        : 'File size must be less than 5MB'
+        : FILE_SIZE_LIMIT_MESSAGE
     );
   }
 

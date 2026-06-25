@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { getDashboardPathForRole } from "../../utils/roleRoutes";
 import { useFileUpload } from "../../hooks/useFileUpload";
+import { FileUploadService } from "../../services/fileUpload";
 import { useSubmissions } from "../../hooks/useSubmissions";
 import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
 import "./SubmissionFormPage.css";
@@ -564,6 +565,18 @@ export function SubmissionFormPage() {
 
   const handleImageUpload = async (files) => {
     const nextFiles = Array.from(files || []);
+
+    try {
+      nextFiles.forEach((file) => FileUploadService.validateFile(file));
+    } catch (error) {
+      setSubmitError(error.message || "Unable to upload this file.");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      return;
+    }
+
+    setSubmitError("");
     setFormData((prev) => ({
       ...prev,
       imageFiles: nextFiles,

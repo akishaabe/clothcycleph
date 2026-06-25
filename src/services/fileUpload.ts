@@ -1,4 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+export const MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024;
+export const FILE_SIZE_LIMIT_MESSAGE =
+  'File size exceeds the maximum allowed limit. Please upload a smaller file.';
 
 export interface UploadProgress {
   loaded: number;
@@ -75,6 +78,8 @@ export class FileUploadService {
   ): Promise<string[]> {
     const urls: string[] = [];
 
+    files.forEach((file) => this.validateFile(file));
+
     for (let i = 0; i < files.length; i++) {
       const { url } = await this.uploadFile(files[i], (progress) => {
         if (onProgress) {
@@ -95,9 +100,8 @@ export class FileUploadService {
     }
 
     // Check file size (5MB max)
-    const maxSize = 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      throw new Error('File size must be less than 5MB');
+    if (file.size > MAX_UPLOAD_FILE_SIZE) {
+      throw new Error(FILE_SIZE_LIMIT_MESSAGE);
     }
 
     // Check file size (minimum 10KB)
@@ -108,6 +112,8 @@ export class FileUploadService {
   }
 
   static getFilePreview(file: File): Promise<string> {
+    this.validateFile(file);
+
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);

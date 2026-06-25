@@ -133,6 +133,8 @@ type Variables = {
 
 const MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5MB
 const MIN_UPLOAD_SIZE = 10 * 1024; // 10KB
+const FILE_SIZE_LIMIT_MESSAGE =
+  'File size exceeds the maximum allowed limit. Please upload a smaller file.';
 const ALLOWED_UPLOAD_MIMETYPES = [
   'image/jpeg',
   'image/png',
@@ -881,13 +883,13 @@ app.post('/api/upload', requireAuth, async (c) => {
     }
 
     if (file.size > MAX_UPLOAD_SIZE) {
-      return c.json({ error: 'File size must be less than 5MB' }, 400);
+      return c.json({ error: FILE_SIZE_LIMIT_MESSAGE }, 400);
     }
   }
 
   const fileData = await file.arrayBuffer();
   if (fileData.byteLength > MAX_UPLOAD_SIZE) {
-    return c.json({ error: 'File size must be less than 5MB' }, 400);
+    return c.json({ error: FILE_SIZE_LIMIT_MESSAGE }, 400);
   }
 
   const apiBaseUrl = c.env.R2_PUBLIC_BASE_URL || new URL(c.req.url).origin;

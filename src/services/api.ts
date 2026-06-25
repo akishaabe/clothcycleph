@@ -29,6 +29,7 @@ import {
   SendDssRecommendationPayload,
   DssAuditRun,
 } from '../types/api';
+import { FILE_SIZE_LIMIT_MESSAGE, MAX_UPLOAD_FILE_SIZE } from './fileUpload';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const REQUEST_TIMEOUT_MS = 20000;
@@ -718,6 +719,10 @@ export const adminService = {
 
 export const uploadService = {
   async uploadFile(file: File): Promise<{ url: string; key: string; message: string }> {
+    if (file.size > MAX_UPLOAD_FILE_SIZE) {
+      throw new Error(FILE_SIZE_LIMIT_MESSAGE);
+    }
+
     const formData = new FormData();
     formData.append('file', file);
 
@@ -743,6 +748,12 @@ export const uploadService = {
   },
 
   async uploadMultipleFiles(files: File[]): Promise<string[]> {
+    files.forEach((file) => {
+      if (file.size > MAX_UPLOAD_FILE_SIZE) {
+        throw new Error(FILE_SIZE_LIMIT_MESSAGE);
+      }
+    });
+
     const urls = await Promise.all(files.map((file) => this.uploadFile(file)));
     return urls.map((response) => response.url);
   },

@@ -10,6 +10,9 @@ export interface FileRequest extends Request {
   file?: UploadedFile;
 }
 
+const FILE_SIZE_LIMIT_MESSAGE =
+  'File size exceeds the maximum allowed limit. Please upload a smaller file.';
+
 export const uploadFile = async (req: FileRequest, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -31,7 +34,7 @@ export const uploadFile = async (req: FileRequest, res: Response) => {
     // Validate file size (max 5MB)
     const maxSize = 5 * 1024 * 1024;
     if (req.file.size > maxSize) {
-      throw new AppError(400, 'File size must be less than 5MB');
+      throw new AppError(400, FILE_SIZE_LIMIT_MESSAGE);
     }
 
     let url: string;
