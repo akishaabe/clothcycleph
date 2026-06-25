@@ -84,8 +84,25 @@ const toPhotoUrl = (photo) => {
   return typeof photo === "string" ? photo : photo.url || "";
 };
 
+const normalizePhotoList = (photos = []) => {
+  if (Array.isArray(photos)) {
+    return photos;
+  }
+
+  if (typeof photos === "string") {
+    try {
+      const parsed = JSON.parse(photos);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return photos.trim() ? [photos] : [];
+    }
+  }
+
+  return [];
+};
+
 const normalizeOutcomePhotos = (photos = []) =>
-  photos
+  normalizePhotoList(photos)
     .map((photo, index) => ({
       url: toPhotoUrl(photo),
       label: typeof photo === "object" && photo?.label ? photo.label : `Outcome photo ${index + 1}`,
