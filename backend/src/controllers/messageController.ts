@@ -19,7 +19,8 @@ export interface FileRequest extends Request {
   file?: UploadedFile;
 }
 
-const MAX_MESSAGE_ATTACHMENT_SIZE = 50 * 1024 * 1024;
+const MAX_MESSAGE_ATTACHMENT_SIZE = 10 * 1024 * 1024;
+const MESSAGE_ATTACHMENT_LIMIT_MESSAGE = 'Message attachments must be 10MB or smaller';
 const ALLOWED_ATTACHMENT_MIMES = new Set([
   'image/jpeg',
   'image/png',
@@ -41,6 +42,9 @@ const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([
   '.gif',
   '.heic',
   '.heif',
+  '.bmp',
+  '.tif',
+  '.tiff',
   '.pdf',
   '.doc',
   '.docx',
@@ -397,14 +401,17 @@ function normalizeAttachmentInputs(value: unknown): MessageAttachmentInput[] {
 
 function validateMessageAttachment(file: UploadedFile) {
   const extension = path.extname(file.originalname).toLowerCase();
-  const allowed = ALLOWED_ATTACHMENT_MIMES.has(file.mimetype) || ALLOWED_ATTACHMENT_EXTENSIONS.has(extension);
+  const allowed =
+    file.mimetype?.startsWith('image/') ||
+    ALLOWED_ATTACHMENT_MIMES.has(file.mimetype) ||
+    ALLOWED_ATTACHMENT_EXTENSIONS.has(extension);
 
   if (!allowed) {
     throw new AppError(400, 'Only images, PDF, Word, and Excel files are allowed');
   }
 
   if (file.size > MAX_MESSAGE_ATTACHMENT_SIZE) {
-    throw new AppError(400, 'Message attachments must be 50MB or smaller');
+    throw new AppError(400, MESSAGE_ATTACHMENT_LIMIT_MESSAGE);
   }
 }
 

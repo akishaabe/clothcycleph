@@ -1,12 +1,14 @@
 import { z } from 'zod';
 import { uuidLikeStringSchema } from './common.js';
 
+const MAX_MESSAGE_ATTACHMENT_SIZE = 10 * 1024 * 1024;
+
 const messageAttachmentSchema = z.object({
   filename: z.string().trim().min(1).max(255),
   url: z.string().trim().min(1).max(2000),
   key: z.string().trim().max(1000).optional(),
   mimetype: z.string().trim().max(255).optional(),
-  size: z.number().int().positive().max(50 * 1024 * 1024).optional(),
+  size: z.number().int().positive().max(MAX_MESSAGE_ATTACHMENT_SIZE).optional(),
 });
 
 export const sendMessageSchema = z.object({

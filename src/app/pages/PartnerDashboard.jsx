@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { Recycle, Package, Clock, CheckCircle, XCircle, Bell, User, BarChart3, Settings, LogOut, MessageSquare, Eye, Loader2, RefreshCw, X, Search, ChevronDown } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { dssService, messageService, notificationService, uploadService } from "../../services/api";
+import { FileUploadService } from "../../services/fileUpload";
 import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
 import { ImageCarousel } from "../components/ImageCarousel";
 import { formatManilaDate, parseUtcTimestamp } from "../../utils/dateTime";
@@ -510,6 +511,15 @@ export function PartnerDashboard() {
 
   const handleOutcomeFiles = (files) => {
     const selectedFiles = Array.from(files || []);
+
+    try {
+      selectedFiles.forEach((file) => FileUploadService.validateFile(file));
+    } catch (error) {
+      setRequestError(error.message || "Only image files up to 5MB can be uploaded.");
+      return;
+    }
+
+    setRequestError("");
     setOutcomeFiles(selectedFiles);
     outcomePreviews.forEach((preview) => URL.revokeObjectURL(preview));
     setOutcomePreviews(selectedFiles.map((file) => URL.createObjectURL(file)));

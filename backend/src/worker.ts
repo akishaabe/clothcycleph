@@ -135,6 +135,7 @@ const MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5MB
 const MIN_UPLOAD_SIZE = 10 * 1024; // 10KB
 const FILE_SIZE_LIMIT_MESSAGE =
   'File size exceeds the maximum allowed limit. Please upload a smaller file.';
+const ALLOWED_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'bmp', 'tif', 'tiff'];
 const ALLOWED_UPLOAD_MIMETYPES = [
   'image/jpeg',
   'image/png',
@@ -143,7 +144,8 @@ const ALLOWED_UPLOAD_MIMETYPES = [
   'image/heic',
   'image/heif',
 ];
-const MAX_MESSAGE_ATTACHMENT_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_MESSAGE_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10MB
+const MESSAGE_ATTACHMENT_LIMIT_MESSAGE = 'Message attachments must be 10MB or smaller';
 const ALLOWED_MESSAGE_ATTACHMENT_MIMETYPES = [
   ...ALLOWED_UPLOAD_MIMETYPES,
   'application/pdf',
@@ -297,12 +299,25 @@ const parseOptionalNumber = (value?: string) => {
 };
 
 const isAllowedMessageAttachment = (file: WorkerFile) => {
+  if (file.type?.startsWith('image/')) {
+    return true;
+  }
+
   if (ALLOWED_MESSAGE_ATTACHMENT_MIMETYPES.includes(file.type)) {
     return true;
   }
 
   const extension = file.name.split('.').pop()?.toLowerCase();
-  return Boolean(extension && ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(extension));
+  return Boolean(extension && [...ALLOWED_IMAGE_EXTENSIONS, 'pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(extension));
+};
+
+const isAllowedImageUpload = (file: WorkerFile) => {
+  if (file.type?.startsWith('image/')) {
+    return true;
+  }
+
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  return Boolean(extension && ALLOWED_IMAGE_EXTENSIONS.includes(extension));
 };
 
 const getStatusCode = (error: Error) => {
@@ -829,12 +844,12 @@ app.post('/api/messages/attachments', requireAuth, async (c) => {
   }
 
   if (file.size != null && file.size > MAX_MESSAGE_ATTACHMENT_SIZE) {
-    return c.json({ error: 'Message attachments must be 50MB or smaller' }, 400);
+    return c.json({ error: MESSAGE_ATTACHMENT_LIMIT_MESSAGE }, 400);
   }
 
   const fileData = await file.arrayBuffer();
   if (fileData.byteLength > MAX_MESSAGE_ATTACHMENT_SIZE) {
-    return c.json({ error: 'Message attachments must be 50MB or smaller' }, 400);
+    return c.json({ error: MESSAGE_ATTACHMENT_LIMIT_MESSAGE }, 400);
   }
 
   const apiBaseUrl = c.env.R2_PUBLIC_BASE_URL || new URL(c.req.url).origin;
@@ -873,7 +888,7 @@ app.post('/api/upload', requireAuth, async (c) => {
     return c.json({ error: 'Missing file' }, 400);
   }
 
-  if (!ALLOWED_UPLOAD_MIMETYPES.includes(file.type)) {
+  if (!isAllowedImageUpload(file)) {
     return c.json({ error: 'Only image files are allowed' }, 400);
   }
 

@@ -2,6 +2,16 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 export const MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024;
 export const FILE_SIZE_LIMIT_MESSAGE =
   'File size exceeds the maximum allowed limit. Please upload a smaller file.';
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'bmp', 'tif', 'tiff']);
+
+export function isImageFile(file: File): boolean {
+  if (file.type.startsWith('image/')) {
+    return true;
+  }
+
+  const extension = file.name.split('.').pop()?.toLowerCase() || '';
+  return ALLOWED_IMAGE_EXTENSIONS.has(extension);
+}
 
 export interface UploadProgress {
   loaded: number;
@@ -94,9 +104,8 @@ export class FileUploadService {
 
   static validateFile(file: File): void {
     // Check file type
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
-    if (!allowedTypes.includes(file.type)) {
-      throw new Error('Only image files (JPEG, PNG, WebP, GIF, HEIC, HEIF) are allowed');
+    if (!isImageFile(file)) {
+      throw new Error('Only image files are allowed');
     }
 
     // Check file size (5MB max)

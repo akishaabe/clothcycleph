@@ -149,7 +149,9 @@ const ALLOWED_UPLOAD_MIMETYPES = new Set([
   'image/heic',
   'image/heif',
 ]);
-const MAX_MESSAGE_ATTACHMENT_SIZE = 50 * 1024 * 1024;
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif', '.bmp', '.tif', '.tiff']);
+const MAX_MESSAGE_ATTACHMENT_SIZE = 10 * 1024 * 1024;
+const MESSAGE_ATTACHMENT_LIMIT_MESSAGE = 'Message attachments must be 10MB or smaller';
 const ALLOWED_MESSAGE_ATTACHMENT_MIMETYPES = new Set([
   ...ALLOWED_UPLOAD_MIMETYPES,
   'application/pdf',
@@ -166,6 +168,9 @@ const ALLOWED_MESSAGE_ATTACHMENT_EXTENSIONS = new Set([
   '.gif',
   '.heic',
   '.heif',
+  '.bmp',
+  '.tif',
+  '.tiff',
   '.pdf',
   '.doc',
   '.docx',
@@ -543,6 +548,8 @@ async function readUploadFile(c: Context, policy: 'image' | 'messageAttachment' 
     : ALLOWED_UPLOAD_MIMETYPES;
   const maxSize = isMessageAttachment ? MAX_MESSAGE_ATTACHMENT_SIZE : MAX_UPLOAD_SIZE;
   const typeAllowed =
+    file.type.startsWith('image/') ||
+    ALLOWED_IMAGE_EXTENSIONS.has(extension) ||
     allowedMimetypes.has(file.type) ||
     (isMessageAttachment && ALLOWED_MESSAGE_ATTACHMENT_EXTENSIONS.has(extension));
 
@@ -559,7 +566,7 @@ async function readUploadFile(c: Context, policy: 'image' | 'messageAttachment' 
     throw new AppError(
       400,
       isMessageAttachment
-        ? 'Message attachments must be 50MB or smaller'
+        ? MESSAGE_ATTACHMENT_LIMIT_MESSAGE
         : FILE_SIZE_LIMIT_MESSAGE
     );
   }

@@ -12,6 +12,7 @@ export interface FileRequest extends Request {
 
 const FILE_SIZE_LIMIT_MESSAGE =
   'File size exceeds the maximum allowed limit. Please upload a smaller file.';
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif', '.bmp', '.tif', '.tiff']);
 
 export const uploadFile = async (req: FileRequest, res: Response) => {
   try {
@@ -26,8 +27,8 @@ export const uploadFile = async (req: FileRequest, res: Response) => {
     }
 
     // Validate file type (images only)
-    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
-    if (!allowedMimes.includes(req.file.mimetype)) {
+    const extension = path.extname(req.file.originalname).toLowerCase();
+    if (!req.file.mimetype?.startsWith('image/') && !ALLOWED_IMAGE_EXTENSIONS.has(extension)) {
       throw new AppError(400, 'Only image files are allowed');
     }
 

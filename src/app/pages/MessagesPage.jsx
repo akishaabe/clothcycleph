@@ -125,14 +125,10 @@ const formatMessageTime = (value) => {
 };
 
 const normalizeEmail = (email) => email?.trim().toLowerCase() ?? "";
-const MESSAGE_ATTACHMENT_LIMIT = 50 * 1024 * 1024;
+const MESSAGE_ATTACHMENT_LIMIT = 10 * 1024 * 1024;
+const MESSAGE_ATTACHMENT_LIMIT_MESSAGE = "Message attachments must be 10MB or smaller.";
 const MESSAGE_ATTACHMENT_ACCEPT = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "image/heic",
-  "image/heif",
+  "image/*",
   "application/pdf",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -147,6 +143,9 @@ const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([
   "gif",
   "heic",
   "heif",
+  "bmp",
+  "tif",
+  "tiff",
   "pdf",
   "doc",
   "docx",
@@ -410,6 +409,7 @@ export function MessagesPage() {
     for (const file of files) {
       const extension = file.name.split(".").pop()?.toLowerCase() || "";
       const isAllowedType =
+        file.type.startsWith("image/") ||
         MESSAGE_ATTACHMENT_ACCEPT.split(",").includes(file.type) ||
         ALLOWED_ATTACHMENT_EXTENSIONS.has(extension);
 
@@ -421,7 +421,7 @@ export function MessagesPage() {
 
       if (file.size > MESSAGE_ATTACHMENT_LIMIT) {
         event.target.value = "";
-        setSendError("Message attachments must be 50MB or smaller.");
+        setSendError(MESSAGE_ATTACHMENT_LIMIT_MESSAGE);
         return;
       }
 
