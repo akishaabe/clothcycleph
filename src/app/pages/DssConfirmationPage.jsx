@@ -29,7 +29,7 @@ const pathwayLabels = {
 
 const fixedServicePathways = ["recycle", "donate", "upcycle"];
 const REQUEST_ALREADY_SENT_MESSAGE =
-  "Request already sent. You cannot send another request for the same items.";
+  "Request already sent! View your request status below.";
 
 const bagGuidance = {
   recycle: { color: "white", label: "White bag" },
