@@ -73,6 +73,7 @@ import {
   verifyResetCodeSchema,
 } from './schemas/auth.js';
 import {
+  cancelDssRequestSchema,
   partnerRuleChangeReplySchema,
   partnerRuleChangeRequestSchema,
   remindDssRequestSchema,
@@ -80,6 +81,7 @@ import {
   updateDssRequestStatusSchema,
 } from './schemas/dss.js';
 import {
+  cancelDssRequestD1,
   createPartnerRuleChangeRequestD1,
   getPartnerRuleChangeRequestsD1,
   getPartnerDssRequestsD1,
@@ -751,6 +753,13 @@ app.post('/api/dss/requests/:id/remind', requireAuth, async (c) => {
   const body = await parseJsonBody(c, remindDssRequestSchema);
   const result = await remindDssRequestD1(c.env.DB, user.id!, c.req.param('id')!, body.message);
   return c.json({ message: `Reminder sent to ${result.partnerName}.`, data: result.request });
+});
+
+app.post('/api/dss/requests/:id/cancel', requireAuth, async (c) => {
+  const user = (c as any).get('user') as { id?: string };
+  const body = await parseJsonBody(c, cancelDssRequestSchema);
+  const data = await cancelDssRequestD1(c.env.DB, user.id!, c.req.param('id')!, body.reason);
+  return c.json({ message: 'Request cancelled successfully.', data });
 });
 
 app.put('/api/dss/requests/:id/status', requireAuth, async (c) => {

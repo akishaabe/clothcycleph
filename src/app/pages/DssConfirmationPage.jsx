@@ -25,6 +25,7 @@ const pathwayLabels = {
   upcycle: "Upcycle",
   buyback: "Buyback",
   rejected: "Rejected",
+  cancelled: "Cancelled",
 };
 
 const fixedServicePathways = ["recycle", "donate", "upcycle"];
@@ -74,9 +75,11 @@ const statusClass = {
   accepted: "bg-[#edf7ed] text-[#336158] border-[#cfe2cf]",
   completed: "bg-[#eef5ff] text-[#3f5f8f] border-[#cfe0f4]",
   rejected: "bg-red-50 text-red-700 border-red-100",
+  cancelled: "bg-zinc-100 text-zinc-700 border-zinc-200",
 };
 
 const normalizeStatus = (status) => {
+  if (status === "cancelled" || status === "canceled") return "cancelled";
   if (status === "declined" || status === "rejected") return "rejected";
   if (status === "in_progress") return "accepted";
   if (status === "completed") return "completed";

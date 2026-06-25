@@ -80,6 +80,7 @@ const requestStatusClass = {
   completed: "bg-[#eef5ff] text-[#3f5f8f]",
   in_progress: "bg-[#eef5ff] text-[#3f5f8f]",
   rejected: "bg-red-50 text-red-700",
+  cancelled: "bg-zinc-100 text-zinc-700",
 };
 
 const trackingStatusOptions = [
@@ -130,7 +131,8 @@ const formatStatusLabel = (status) =>
 
 const normalizeStatus = (value) => {
   const status = String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
-  if (["declined", "rejected", "cancelled", "canceled"].includes(status)) return "rejected";
+  if (["cancelled", "canceled"].includes(status)) return "cancelled";
+  if (["declined", "rejected"].includes(status)) return "rejected";
   if (["approved", "accepted"].includes(status)) return "accepted";
   if (["completed", "processed", "complete"].includes(status)) return "completed";
   if (status === "pending") return "pending";
@@ -874,7 +876,7 @@ export function UserDashboard() {
               />
             </label>
             <div className="flex flex-wrap gap-2">
-              {["all", "pending", "accepted", "in_progress", "completed", "declined", "rejected"].map(
+              {["all", "pending", "accepted", "in_progress", "completed", "cancelled", "declined", "rejected"].map(
                 (status) => (
                   <button
                     key={status}
@@ -999,7 +1001,7 @@ export function UserDashboard() {
               placeholder="Search partner requests"
             />
             <div className="flex flex-wrap gap-2">
-              {["all", "pending", "accepted", "declined", "completed"].map(
+              {["all", "pending", "accepted", "cancelled", "declined", "completed"].map(
                 (status) => (
                   <button
                     key={status}

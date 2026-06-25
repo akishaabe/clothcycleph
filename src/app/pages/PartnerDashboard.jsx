@@ -40,6 +40,7 @@ const statusStyles = {
   accepted: "bg-[#4f6f9f]/20 text-[#10233f]",
   completed: "bg-green-100 text-green-700",
   rejected: "bg-red-100 text-red-700",
+  cancelled: "bg-zinc-100 text-zinc-700",
 };
 
 const decisionStatusStyles = {
@@ -61,11 +62,18 @@ const decisionStatusStyles = {
     className:
       "border-red-100 bg-red-50 text-red-700 dark:border-red-400/25 dark:bg-red-400/10 dark:text-red-200",
   },
+  cancelled: {
+    Icon: XCircle,
+    label: "Cancelled",
+    className:
+      "border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-400/25 dark:bg-zinc-400/10 dark:text-zinc-200",
+  },
 };
 
 const normalizeStatus = (value) => {
   const status = String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
-  if (["declined", "rejected", "cancelled", "canceled"].includes(status)) return "rejected";
+  if (["cancelled", "canceled"].includes(status)) return "cancelled";
+  if (["declined", "rejected"].includes(status)) return "rejected";
   if (["approved", "accepted"].includes(status)) return "accepted";
   if (["completed", "processed", "complete"].includes(status)) return "completed";
   if (status === "pending") return "pending";
@@ -781,7 +789,7 @@ export function PartnerDashboard() {
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#41668f] dark:text-[#9fc5f8]" />
             </label>
             <div className="flex flex-wrap gap-2">
-              {["all", "pending", "accepted", "completed", "rejected"].map(
+              {["all", "pending", "accepted", "completed", "cancelled", "rejected"].map(
                 (status) => (
                   <button
                     key={status}
@@ -1175,7 +1183,7 @@ export function PartnerDashboard() {
 
       {selectedRequest && (() => {
         const selectedDecisionStatus = normalizeStatus(selectedRequest.status);
-        const isDecisionLocked = ["accepted", "rejected", "completed"].includes(selectedDecisionStatus);
+        const isDecisionLocked = ["accepted", "rejected", "completed", "cancelled"].includes(selectedDecisionStatus);
 
         return (
         <div
@@ -1235,6 +1243,19 @@ export function PartnerDashboard() {
                     {selectedRequest.output_payload?.brief || selectedRequest.notes || "No brief provided."}
                   </pre>
                 </div>
+
+                {normalizeStatus(selectedRequest.status) === "cancelled" && (
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 text-sm leading-6 text-zinc-700 dark:border-zinc-400/20 dark:bg-zinc-400/10 dark:text-zinc-200">
+                    <h3 className="mb-2 text-xl font-semibold text-[#10233f] dark:text-white">Cancellation</h3>
+                    <p>
+                      {selectedRequest.cancellation_reason ||
+                        "The user cancelled this request before adding a reason."}
+                    </p>
+                    {selectedRequest.cancelled_at && (
+                      <p className="mt-2 text-xs">Cancelled {formatDateTime(selectedRequest.cancelled_at)}</p>
+                    )}
+                  </div>
+                )}
 
                 <div className="rounded-2xl border border-[#d6e6f8] bg-white p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
                   <h3 className="mb-4 text-xl font-semibold text-[#10233f] dark:text-white">Recommendation summary</h3>

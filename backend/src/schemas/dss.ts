@@ -19,6 +19,10 @@ export const updateDssRequestStatusSchema = z.object({
   outcome_photos: z.array(z.string().url()).optional(),
 });
 
+export const cancelDssRequestSchema = z.object({
+  reason: z.string().trim().max(1000).optional(),
+});
+
 export const remindDssRequestSchema = z.object({
   message: z.string().trim().max(1000).optional(),
 });

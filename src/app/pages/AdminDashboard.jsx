@@ -144,6 +144,16 @@ const getStatusClass = (status) => {
   return "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300";
 };
 
+const dssRequestStatusClass = {
+  pending: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200",
+  accepted: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200",
+  completed: "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300",
+  rejected: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  cancelled: "bg-gray-200 text-gray-700 dark:bg-white/10 dark:text-gray-200",
+};
+
+const dssRequestStatuses = ["pending", "accepted", "completed", "rejected", "cancelled"];
+
 const formatStatusLabel = (status) =>
   String(status || "")
     .replace(/_/g, " ")
@@ -264,6 +274,8 @@ export function AdminDashboard() {
   const [formData, setFormData] = useState(emptyForm);
   const [dssAuditRuns, setDssAuditRuns] = useState([]);
   const [dssAuditError, setDssAuditError] = useState("");
+  const [dssRequests, setDssRequests] = useState([]);
+  const [dssRequestError, setDssRequestError] = useState("");
   const [ruleChangeRequests, setRuleChangeRequests] = useState([]);
   const [adminSubmissions, setAdminSubmissions] = useState([]);
   const [dssRules, setDssRules] = useState([]);
@@ -286,6 +298,9 @@ export function AdminDashboard() {
   const [ruleReplyStatus, setRuleReplyStatus] = useState({});
   const [showAllDssAudit, setShowAllDssAudit] = useState(false);
   const [dssAuditSort, setDssAuditSort] = useState("newest");
+  const [dssRequestFilter, setDssRequestFilter] = useState("all");
+  const [dssRequestSearch, setDssRequestSearch] = useState("");
+  const [showAllDssRequests, setShowAllDssRequests] = useState(false);
   const [isActivityExpanded, setIsActivityExpanded] = useState(false);
   const [systemHealth, setSystemHealth] = useState({
     value: "Checking",
@@ -306,6 +321,7 @@ export function AdminDashboard() {
           submissionsResponse,
           rulesResponse,
           deletedRecordsResponse,
+          dssRequestsResponse,
         ] = await Promise.all([
           dssService.getAuditRuns(),
           dssService.getRuleChangeRequests(),
@@ -314,6 +330,7 @@ export function AdminDashboard() {
           adminService.getSubmissions(),
           adminService.getDssRules(),
           adminService.getDeletedRecords(),
+          dssService.getPartnerRequests(),
         ]);
         if (isMounted) {
           setDssAuditRuns(response.data);
@@ -321,6 +338,8 @@ export function AdminDashboard() {
           setAdminSubmissions(submissionsResponse.data);
           setDssRules(rulesResponse.data);
           setDeletedRecords(deletedRecordsResponse.data || []);
+          setDssRequests(dssRequestsResponse.data || []);
+          setDssRequestError("");
           setBadgeCounts({
             messages: Number(messagesResponse.unread_count || 0),
             notifications: Number(notificationsResponse.unread_count || 0),
@@ -329,6 +348,7 @@ export function AdminDashboard() {
       } catch (error) {
         if (isMounted) {
           setDssAuditError(error.message || "Unable to load DSS audit runs.");
+          setDssRequestError(error.message || "Unable to load DSS request monitoring.");
         }
       }
     }
@@ -544,6 +564,50 @@ export function AdminDashboard() {
     });
   }, [ruleChangeRequests, ruleRequestFilter, ruleRequestSearch, ruleRequestSort]);
 
+  const filteredDssRequests = useMemo(() => {
+    const query = dssRequestSearch.trim().toLowerCase();
+
+    return dssRequests
+      .filter((request) => {
+        const status = String(request.status || "pending").toLowerCase();
+        const statusMatch = dssRequestFilter === "all" || status === dssRequestFilter;
+        const queryMatch =
+          !query ||
+          [
+            request.submission_name,
+            request.item_type,
+            request.type,
+            request.status_label,
+            status,
+            request.user_name,
+            request.user_email,
+            request.partner_name,
+            request.partner_email,
+            request.cancellation_reason,
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(query);
+
+        return statusMatch && queryMatch;
+      })
+      .sort((a, b) => getTimestamp(b.updated_at || b.created_at) - getTimestamp(a.updated_at || a.created_at));
+  }, [dssRequestFilter, dssRequestSearch, dssRequests]);
+
+  const dssRequestCounts = useMemo(
+    () =>
+      dssRequests.reduce(
+        (counts, request) => {
+          const status = String(request.status || "pending").toLowerCase();
+          counts.total += 1;
+          counts[status] = (counts[status] || 0) + 1;
+          return counts;
+        },
+        { total: 0 },
+      ),
+    [dssRequests],
+  );
+
   const systemActivity = useMemo(() => {
     const accountEvents = accounts.slice(0, 4).map((account) => ({
       timestamp: account.joined,
@@ -560,11 +624,16 @@ export function AdminDashboard() {
       action: `Partner rule request ${request.status || "pending"}`,
       user: request.partner_name || request.requested_by_name || "Partner",
     }));
+    const requestEvents = dssRequests.slice(0, 4).map((request) => ({
+      timestamp: request.updated_at || request.cancelled_at || request.created_at,
+      action: `DSS request ${formatStatusLabel(request.status || "pending")}`,
+      user: `${request.user_name || request.user_email || "User"} to ${request.partner_name || "Partner"}`,
+    }));
 
-    return [...ruleEvents, ...dssEvents, ...accountEvents]
+    return [...requestEvents, ...ruleEvents, ...dssEvents, ...accountEvents]
       .sort((a, b) => getTimestamp(b.timestamp) - getTimestamp(a.timestamp))
       .slice(0, isActivityExpanded ? 12 : 4);
-  }, [accounts, dssAuditRuns, isActivityExpanded, ruleChangeRequests]);
+  }, [accounts, dssAuditRuns, dssRequests, isActivityExpanded, ruleChangeRequests]);
 
   const openCreateModal = (role = activeRole) => {
     setActiveRole(role);
@@ -713,6 +782,8 @@ export function AdminDashboard() {
       ["admins", roleCounts.Admin || 0],
       ["partners", roleCounts.Partner || 0],
       ["dss_audit_runs", dssAuditRuns.length],
+      ["dss_partner_requests", dssRequestCounts.total || 0],
+      ["cancelled_dss_requests", dssRequestCounts.cancelled || 0],
       ["partner_rule_requests", ruleChangeRequests.length],
       ["pending_rule_requests", ruleChangeRequests.filter((request) => request.status === "pending").length],
       ["submissions", adminSubmissions.length],
@@ -1139,6 +1210,152 @@ export function AdminDashboard() {
                 )}
               </details>
             ))}
+          </div>
+        </motion.div>
+
+        <motion.div
+          id="dss-requests"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.355 }}
+          className="mb-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-white/10 dark:bg-white/[0.04]"
+        >
+          <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h3 className="text-xl text-gray-950 dark:text-white">DSS Request Monitoring</h3>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                All user-to-partner requests for admin monitoring, including cancelled requests and reasons.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <label className="relative block">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+                <input
+                  value={dssRequestSearch}
+                  onChange={(event) => setDssRequestSearch(event.target.value)}
+                  className="w-64 rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 outline-none focus:border-gray-500 dark:border-white/10 dark:bg-black/20 dark:text-white"
+                  placeholder="Search requests"
+                />
+              </label>
+              <select
+                value={dssRequestFilter}
+                onChange={(event) => setDssRequestFilter(event.target.value)}
+                className="w-fit rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 dark:border-white/10 dark:bg-black/20 dark:text-white"
+              >
+                <option value="all">All statuses</option>
+                {dssRequestStatuses.map((status) => (
+                  <option key={status} value={status}>
+                    {formatStatusLabel(status)}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowAllDssRequests((current) => !current)}
+                className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/10"
+              >
+                {showAllDssRequests ? "Show less" : "View all"}
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            {["total", ...dssRequestStatuses].map((status) => (
+              <button
+                key={status}
+                type="button"
+                onClick={() => setDssRequestFilter(status === "total" ? "all" : status)}
+                className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+                  (status === "total" && dssRequestFilter === "all") || dssRequestFilter === status
+                    ? "border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950"
+                    : "border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-400 dark:border-white/10 dark:bg-black/20 dark:text-gray-200"
+                }`}
+              >
+                <div className="text-2xl font-semibold">{dssRequestCounts[status] || 0}</div>
+                <div className="text-xs font-semibold uppercase tracking-wide">
+                  {status === "total" ? "Total" : formatStatusLabel(status)}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {dssRequestError && (
+            <div className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-200">
+              {dssRequestError}
+            </div>
+          )}
+
+          <div className="overflow-x-auto rounded-2xl border border-gray-200 dark:border-white/10">
+            <table className="w-full min-w-[980px]">
+              <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
+                <tr>
+                  <th className="px-4 py-3 text-left">Item</th>
+                  <th className="px-4 py-3 text-left">User</th>
+                  <th className="px-4 py-3 text-left">Partner</th>
+                  <th className="px-4 py-3 text-left">Type</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Updated</th>
+                  <th className="px-4 py-3 text-left">Cancellation</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-white/10">
+                {filteredDssRequests.slice(0, showAllDssRequests ? 100 : 8).map((request) => {
+                  const status = String(request.status || "pending").toLowerCase();
+                  const updatedAt = request.updated_at || request.cancelled_at || request.created_at;
+
+                  return (
+                    <tr key={request.id} className="bg-white align-top hover:bg-gray-50 dark:bg-transparent dark:hover:bg-white/[0.04]">
+                      <td className="px-4 py-4">
+                        <div className="font-semibold text-gray-950 dark:text-white">
+                          {request.submission_name || request.item_type || "Textile request"}
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Sent {request.created_at ? formatManilaDate(request.created_at) : "recently"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
+                        <div>{request.user_name || "Unknown user"}</div>
+                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{request.user_email || "No email"}</div>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
+                        <div>{request.partner_name || "Unknown partner"}</div>
+                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{request.partner_email || "No email"}</div>
+                      </td>
+                      <td className="px-4 py-4 text-sm capitalize text-gray-700 dark:text-gray-300">
+                        {request.type || "request"}
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${dssRequestStatusClass[status] || dssRequestStatusClass.pending}`}>
+                          {formatStatusLabel(status)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
+                        {updatedAt ? formatManilaDate(updatedAt) : "Recent"}
+                      </td>
+                      <td className="max-w-[260px] px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
+                        {status === "cancelled" ? (
+                          <div>
+                            <div className="font-semibold text-gray-950 dark:text-white">
+                              {request.cancelled_at ? formatManilaDate(request.cancelled_at) : "Cancelled"}
+                            </div>
+                            <p className="mt-1 line-clamp-3 text-xs leading-5 text-gray-600 dark:text-gray-300">
+                              {request.cancellation_reason || "No reason provided."}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Not cancelled</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filteredDssRequests.length === 0 && (
+              <div className="border-t border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-600 dark:border-white/10 dark:bg-black/20 dark:text-gray-300">
+                No DSS requests match this view.
+              </div>
+            )}
           </div>
         </motion.div>
 

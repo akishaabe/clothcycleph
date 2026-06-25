@@ -9,6 +9,7 @@ const statusLabels: Record<string, string> = {
   accepted: 'Accepted',
   completed: 'Completed',
   rejected: 'Rejected',
+  cancelled: 'Cancelled',
 };
 
 const bagColorByPathway: Record<string, string> = {
@@ -24,6 +25,10 @@ const pathwayVerb: Record<string, string> = {
 };
 
 function normalizeRequestStatus(status?: string | null) {
+  if (status === 'cancelled' || status === 'canceled') {
+    return 'cancelled';
+  }
+
   if (status === 'declined' || status === 'rejected') {
     return 'rejected';
   }
@@ -655,12 +660,16 @@ export async function getPartnerDssRequestsD1(db: D1Database, userId: string, em
        bt.ashes AS burn_ashes,
        u.name AS user_name,
        u.email AS user_email,
+       p.name AS partner_name,
+       p.email AS partner_email,
+       p.address AS partner_address,
        rr.confidence,
        rr.explanation,
        rr.output_payload
      FROM transactions t
      JOIN submissions s ON s.id = t.submission_id
      JOIN users u ON u.id = t.from_user_id
+     JOIN partners p ON p.id = t.to_partner_id
      LEFT JOIN submission_details sd ON sd.submission_id = s.id
      LEFT JOIN burn_tests bt ON bt.id = (
        SELECT id FROM burn_tests WHERE submission_id = s.id ORDER BY created_at DESC LIMIT 1
@@ -884,6 +893,90 @@ export async function remindDssRequestD1(
     partnerName: request.partner_name,
     request: result.results?.[0] ?? null,
   };
+}
+
+export async function cancelDssRequestD1(
+  db: D1Database,
+  userId: string,
+  requestId: string,
+  reason?: string
+) {
+  const request = await queryD1First(
+    db,
+    `SELECT t.*, p.name AS partner_name, p.user_id AS partner_user_id,
+            COALESCE(s.submission_name, s.item_type, 'textile') AS submission_label
+     FROM transactions t
+     JOIN partners p ON p.id = t.to_partner_id
+     JOIN submissions s ON s.id = t.submission_id
+     WHERE t.id = ? AND t.from_user_id = ?`,
+    [requestId, userId]
+  );
+
+  if (!request) {
+    throw new Error('Request not found');
+  }
+
+  const currentStatus = normalizeRequestStatus(request.status);
+  if (!['pending', 'accepted'].includes(currentStatus)) {
+    throw new Error('Only pending or accepted requests can be cancelled.');
+  }
+
+  const cancellationReason = reason?.trim() || null;
+  if (currentStatus === 'accepted' && !cancellationReason) {
+    throw new Error('Cancellation reason is required for accepted requests.');
+  }
+
+  const result = await executeD1(
+    db,
+    `UPDATE transactions
+     SET status = 'cancelled',
+         cancellation_reason = ?,
+         cancelled_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?
+     RETURNING *`,
+    [cancellationReason, requestId]
+  );
+  const cancelledRequest = result.results?.[0] ?? null;
+
+  const messageBody = cancellationReason
+    ? `The user cancelled the ${titleCase(request.type)} request for ${request.submission_label}. Reason: ${cancellationReason}`
+    : `The user cancelled the ${titleCase(request.type)} request for ${request.submission_label}.`;
+
+  if (request.partner_user_id) {
+    await createSystemMessageD1(db, {
+      fromUserId: userId,
+      toUserId: request.partner_user_id,
+      content: messageBody,
+      relatedSubmissionId: request.submission_id,
+      relatedTransactionId: request.id,
+      actionUrl: `/partner?request=${request.id}`,
+      metadata: {
+        kind: 'dss_request_cancelled',
+        status: 'cancelled',
+        submission_id: request.submission_id,
+        transaction_id: request.id,
+        cancellation_reason: cancellationReason,
+        partner_action_url: `/partner?request=${request.id}`,
+      },
+    });
+
+    await createNotificationD1(db, {
+      userId: request.partner_user_id,
+      type: 'partner_update',
+      title: 'Request cancelled',
+      body: messageBody,
+      data: {
+        submissionId: request.submission_id,
+        transactionId: request.id,
+        status: 'cancelled',
+        cancellation_reason: cancellationReason,
+        action_url: `/partner?request=${request.id}`,
+      },
+    });
+  }
+
+  return cancelledRequest;
 }
 
 async function getSubmissionForUserD1(db: D1Database, submissionId: string, userId: string, role?: string) {

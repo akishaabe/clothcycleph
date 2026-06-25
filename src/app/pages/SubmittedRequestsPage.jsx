@@ -11,6 +11,7 @@ const statusClass = {
   accepted: "bg-[#edf7ed] text-[#336158] border-[#cfe2cf]",
   completed: "bg-[#eef5ff] text-[#3f5f8f] border-[#cfe0f4]",
   rejected: "bg-red-50 text-red-700 border-red-100",
+  cancelled: "bg-zinc-100 text-zinc-700 border-zinc-200",
 };
 
 const pathwayLabels = {
@@ -20,7 +21,7 @@ const pathwayLabels = {
   buyback: "Buyback",
 };
 
-const filters = ["all", "pending", "accepted", "completed", "rejected"];
+const filters = ["all", "pending", "accepted", "completed", "cancelled", "rejected"];
 
 const trackingStatusOptions = [
   { value: "scheduled", label: "Scheduled" },
@@ -57,7 +58,8 @@ const formatStatusLabel = (status) =>
 
 const normalizeStatus = (value) => {
   const status = String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
-  if (["declined", "rejected", "cancelled", "canceled"].includes(status)) return "rejected";
+  if (["cancelled", "canceled"].includes(status)) return "cancelled";
+  if (["declined", "rejected"].includes(status)) return "rejected";
   if (["approved", "accepted"].includes(status)) return "accepted";
   if (["completed", "processed", "complete"].includes(status)) return "completed";
   if (status === "pending") return "pending";

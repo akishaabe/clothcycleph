@@ -307,9 +307,11 @@ export interface DssRequest {
   from_user_id: string;
   to_partner_id: string;
   type: 'recycle' | 'donate' | 'upcycle' | 'buyback';
-  status: 'pending' | 'accepted' | 'completed' | 'rejected';
+  status: 'pending' | 'accepted' | 'completed' | 'rejected' | 'cancelled';
   status_label?: string;
   notes?: string;
+  cancellation_reason?: string | null;
+  cancelled_at?: string | null;
   partner_name?: string;
   partner_email?: string;
   partner_address?: string;
@@ -358,7 +360,8 @@ export type DssRequestStatus =
   | 'pending'
   | 'accepted'
   | 'completed'
-  | 'rejected';
+  | 'rejected'
+  | 'cancelled';
 
 export interface SendDssRecommendationPayload {
   submission_id: string;

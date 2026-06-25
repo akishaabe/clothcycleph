@@ -61,6 +61,7 @@ import {
   updateTransactionStatus,
 } from './controllers/transactionController.js';
 import {
+  cancelDssRequest,
   createPartnerRuleChangeRequest,
   exportDssAuditReport,
   getDssAuditRuns,
@@ -111,6 +112,7 @@ import { createSubmissionSchema, createTrackingUpdateSchema, updateSubmissionSta
 import { sendMessageSchema } from './schemas/messages.js';
 import { createTransactionSchema, updateTransactionStatusSchema } from './schemas/transactions.js';
 import {
+  cancelDssRequestSchema,
   partnerRuleChangeReplySchema,
   partnerRuleChangeRequestSchema,
   remindDssRequestSchema,
@@ -364,6 +366,10 @@ app.get('/api/dss/requests/partner', controller(getPartnerDssRequests, { auth: t
 app.post(
   '/api/dss/requests/:id/remind',
   controller(remindDssRequest, { auth: true, paramsSchema: uuidParamSchema, bodySchema: remindDssRequestSchema })
+);
+app.post(
+  '/api/dss/requests/:id/cancel',
+  controller(cancelDssRequest, { auth: true, paramsSchema: uuidParamSchema, bodySchema: cancelDssRequestSchema })
 );
 app.put(
   '/api/dss/requests/:id/status',

@@ -412,6 +412,16 @@ export const dssService = {
     });
   },
 
+  async cancelRequest(
+    requestId: string,
+    payload: { reason?: string } = {}
+  ): Promise<{ message: string; data: DssRequest }> {
+    return fetchWithAuth(`/dss/requests/${requestId}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   async remindRequest(
     requestId: string,
     payload: { message?: string } = {}

@@ -81,7 +81,7 @@ function bindParams(statement: D1PreparedStatement, params: any[]) {
   return safeParams.length > 0 ? statement.bind(...safeParams) : statement;
 }
 
-const timestampFieldPattern = /(?:^|_)(?:created_at|updated_at|submitted_at|scheduled_at|expires_at|locked_until|last_message_time|email_verified_at|read_at)$/;
+const timestampFieldPattern = /(?:^|_)(?:created_at|updated_at|submitted_at|scheduled_at|expires_at|locked_until|last_message_time|email_verified_at|read_at|cancelled_at)$/;
 const sqliteUtcTimestampPattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
 
 function normalizeD1Result<T>(result: D1Result<T>): D1Result<T> {

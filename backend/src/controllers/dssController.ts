@@ -12,9 +12,14 @@ const statusLabels: Record<string, string> = {
   accepted: 'Accepted',
   completed: 'Completed',
   rejected: 'Rejected',
+  cancelled: 'Cancelled',
 };
 
 function normalizeRequestStatus(status?: string | null) {
+  if (status === 'cancelled' || status === 'canceled') {
+    return 'cancelled';
+  }
+
   if (status === 'declined' || status === 'rejected') {
     return 'rejected';
   }
@@ -508,6 +513,9 @@ export const getPartnerDssRequests = async (req: AuthRequest, res: Response) => 
          row_to_json(bt) AS burn_test,
          u.name AS user_name,
          u.email AS user_email,
+         p.name AS partner_name,
+         p.email AS partner_email,
+         p.address AS partner_address,
          rr.confidence,
          rr.explanation,
          rr.output_payload,
@@ -528,6 +536,7 @@ export const getPartnerDssRequests = async (req: AuthRequest, res: Response) => 
        FROM transactions t
        JOIN submissions s ON s.id = t.submission_id
        JOIN users u ON u.id = t.from_user_id
+       JOIN partners p ON p.id = t.to_partner_id
        LEFT JOIN submission_details sd ON sd.submission_id = s.id
        LEFT JOIN LATERAL (
          SELECT *
@@ -1179,6 +1188,101 @@ export const remindDssRequest = async (req: AuthRequest, res: Response) => {
       message: `Reminder sent to ${request.partner_name}.`,
       data: updateResult.rows[0],
     });
+  } catch (error) {
+    res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
+  }
+};
+
+export const cancelDssRequest = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new AppError(401, 'User not authenticated');
+    }
+
+    const requestResult = await query(
+      `SELECT t.*, p.name AS partner_name, p.user_id AS partner_user_id,
+              COALESCE(s.submission_name, s.item_type, 'textile') AS submission_label
+       FROM transactions t
+       JOIN partners p ON p.id = t.to_partner_id
+       JOIN submissions s ON s.id = t.submission_id
+       WHERE t.id = $1 AND t.from_user_id = $2`,
+      [req.params.id, userId]
+    );
+
+    if (requestResult.rows.length === 0) {
+      throw new AppError(404, 'Request not found');
+    }
+
+    const request = requestResult.rows[0];
+    const currentStatus = normalizeRequestStatus(request.status);
+    if (!['pending', 'accepted'].includes(currentStatus)) {
+      throw new AppError(400, 'Only pending or accepted requests can be cancelled.');
+    }
+
+    const cancellationReason = req.body.reason?.trim() || null;
+    if (currentStatus === 'accepted' && !cancellationReason) {
+      throw new AppError(400, 'Cancellation reason is required for accepted requests.');
+    }
+
+    const updateResult = await query(
+      `UPDATE transactions
+       SET status = 'cancelled',
+           cancellation_reason = $1,
+           cancelled_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      [cancellationReason, req.params.id]
+    );
+
+    const messageBody = cancellationReason
+      ? `The user cancelled the ${titleCase(request.type)} request for ${request.submission_label}. Reason: ${cancellationReason}`
+      : `The user cancelled the ${titleCase(request.type)} request for ${request.submission_label}.`;
+
+    if (request.partner_user_id) {
+      await query(
+        `INSERT INTO messages (
+           id, from_user_id, to_user_id, content,
+           related_submission_id, related_transaction_id, action_url, metadata
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          uuidv4(),
+          userId,
+          request.partner_user_id,
+          messageBody,
+          request.submission_id,
+          request.id,
+          `/partner?request=${request.id}`,
+          JSON.stringify({
+            kind: 'dss_request_cancelled',
+            status: 'cancelled',
+            submission_id: request.submission_id,
+            transaction_id: request.id,
+            cancellation_reason: cancellationReason,
+            partner_action_url: `/partner?request=${request.id}`,
+          }),
+        ]
+      );
+
+      await enqueueNotification(
+        request.partner_user_id,
+        'partner_update',
+        'Request cancelled',
+        messageBody,
+        {
+          submissionId: request.submission_id,
+          transactionId: request.id,
+          status: 'cancelled',
+          cancellation_reason: cancellationReason,
+          action_url: `/partner?request=${request.id}`,
+        }
+      );
+    }
+
+    res.json({ message: 'Request cancelled successfully.', data: updateResult.rows[0] });
   } catch (error) {
     res.status((error as AppError).statusCode || 400).json({ error: (error as Error).message });
   }

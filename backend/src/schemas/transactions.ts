@@ -10,6 +10,6 @@ export const createTransactionSchema = z.object({
 });
 
 export const updateTransactionStatusSchema = z.object({
-  status: z.enum(['pending', 'in_progress', 'completed', 'rejected']),
+  status: z.enum(['pending', 'in_progress', 'accepted', 'completed', 'rejected', 'cancelled']),
   notes: z.string().max(1000).optional(),
 });
