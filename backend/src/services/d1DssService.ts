@@ -901,6 +901,8 @@ export async function cancelDssRequestD1(
   requestId: string,
   reason?: string
 ) {
+  await ensureRequestCancellationSchemaD1(db);
+
   const request = await queryD1First(
     db,
     `SELECT t.*, p.name AS partner_name, p.user_id AS partner_user_id,
@@ -977,6 +979,92 @@ export async function cancelDssRequestD1(
   }
 
   return cancelledRequest;
+}
+
+async function ensureRequestCancellationSchemaD1(db: D1Database) {
+  const columns = await queryD1<{ name: string }>(db, 'PRAGMA table_info(transactions)');
+  const columnNames = new Set((columns.results || []).map((column) => column.name));
+
+  if (!columnNames.has('cancellation_reason')) {
+    await executeD1(db, 'ALTER TABLE transactions ADD COLUMN cancellation_reason TEXT');
+    columnNames.add('cancellation_reason');
+  }
+
+  if (!columnNames.has('cancelled_at')) {
+    await executeD1(db, 'ALTER TABLE transactions ADD COLUMN cancelled_at TEXT');
+    columnNames.add('cancelled_at');
+  }
+
+  const tableInfo = await queryD1First<{ sql?: string }>(
+    db,
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'transactions'"
+  );
+
+  if (tableInfo?.sql?.includes("'cancelled'")) {
+    return;
+  }
+
+  await rebuildTransactionsTableForCancellationD1(db, columnNames);
+}
+
+async function rebuildTransactionsTableForCancellationD1(db: D1Database, existingColumns: Set<string>) {
+  const columnDefinitions = [
+    'id TEXT PRIMARY KEY',
+    'submission_id TEXT NOT NULL REFERENCES submissions(id) ON DELETE CASCADE',
+    'from_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE',
+    'to_partner_id TEXT NOT NULL REFERENCES partners(id) ON DELETE SET NULL',
+    "type TEXT NOT NULL CHECK (type IN ('recycle', 'donate', 'upcycle', 'buyback'))",
+    "status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'completed', 'rejected', 'cancelled'))",
+    'amount REAL',
+    'notes TEXT',
+    'cancellation_reason TEXT',
+    'cancelled_at TEXT',
+    'bag_color TEXT',
+    'estimated_distance_km REAL',
+    'estimated_carbon_kg REAL',
+    'outcome_title TEXT',
+    'outcome_description TEXT',
+    "outcome_photos TEXT DEFAULT '[]'",
+    'outcome_reported_at TEXT',
+    'created_at TEXT DEFAULT CURRENT_TIMESTAMP',
+    'updated_at TEXT DEFAULT CURRENT_TIMESTAMP',
+  ];
+  const columnNames = columnDefinitions.map((definition) => definition.split(' ')[0]);
+  const selectExpressions = columnNames.map((column) => {
+    if (existingColumns.has(column)) {
+      return column;
+    }
+
+    if (column === 'status') {
+      return "'pending'";
+    }
+
+    if (column === 'outcome_photos') {
+      return "'[]'";
+    }
+
+    if (column === 'created_at' || column === 'updated_at') {
+      return 'CURRENT_TIMESTAMP';
+    }
+
+    return 'NULL';
+  });
+
+  await executeD1(db, 'PRAGMA foreign_keys = OFF');
+  await executeD1(db, `CREATE TABLE transactions_new (${columnDefinitions.join(', ')})`);
+  await executeD1(
+    db,
+    `INSERT INTO transactions_new (${columnNames.join(', ')})
+     SELECT ${selectExpressions.join(', ')}
+     FROM transactions`
+  );
+  await executeD1(db, 'DROP TABLE transactions');
+  await executeD1(db, 'ALTER TABLE transactions_new RENAME TO transactions');
+  await executeD1(db, 'CREATE INDEX IF NOT EXISTS idx_transactions_submission_id ON transactions(submission_id)');
+  await executeD1(db, 'CREATE INDEX IF NOT EXISTS idx_transactions_from_user_id ON transactions(from_user_id)');
+  await executeD1(db, 'CREATE INDEX IF NOT EXISTS idx_transactions_to_partner_id ON transactions(to_partner_id)');
+  await executeD1(db, 'CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status)');
+  await executeD1(db, 'PRAGMA foreign_keys = ON');
 }
 
 async function getSubmissionForUserD1(db: D1Database, submissionId: string, userId: string, role?: string) {

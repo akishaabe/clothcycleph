@@ -177,12 +177,15 @@ export function SubmittedRequestsPage() {
       const status = statusFromSubmission(submission, latestPartnerRequest);
       const latestOutcomeRequest =
         relatedRequests.find((request) => request.outcome_title || request.outcome_photos?.length > 0) || null;
+      const cancelablePartnerRequest =
+        relatedRequests.find((request) => ["pending", "accepted"].includes(normalizeStatus(request.status))) || null;
 
       return {
         id: submission.id,
         submission,
         relatedRequests,
         latestPartnerRequest,
+        cancelablePartnerRequest,
         recommendation,
         title: submission.submission_name || submission.item_type || "Untitled request",
         itemType: submission.item_type,
@@ -356,7 +359,8 @@ export function SubmittedRequestsPage() {
   };
 
   const submitCancelRequest = async () => {
-    if (!cancelTarget?.latestPartnerRequest) {
+    const partnerRequest = cancelTarget?.cancelablePartnerRequest || cancelTarget?.latestPartnerRequest;
+    if (!partnerRequest) {
       return;
     }
 
@@ -372,7 +376,7 @@ export function SubmittedRequestsPage() {
     setRequestMessage("");
 
     try {
-      const response = await dssService.cancelRequest(cancelTarget.latestPartnerRequest.id, {
+      const response = await dssService.cancelRequest(partnerRequest.id, {
         reason: reason || undefined,
       });
       const cancelledRequest = response.data;
@@ -561,7 +565,7 @@ export function SubmittedRequestsPage() {
                     >
                       View Details
                     </button>
-                    {["pending", "accepted"].includes(requestStatus) && request.latestPartnerRequest && (
+                    {request.cancelablePartnerRequest && (
                       <button
                         type="button"
                         onClick={() => openCancelDialog(request)}
