@@ -1791,7 +1791,7 @@ export function SubmissionFormPage() {
                   <p className="text-[#5a6f5a] mb-1">
                     Click to upload or drag and drop
                   </p>
-                  <p className="text-sm text-[#8a9a8a]">Images only, up to 5MB</p>
+                  <p className="text-sm text-[#8a9a8a]">Upload images up to 5MB</p>
                   <input
                     id="submission-images"
                     type="file"
