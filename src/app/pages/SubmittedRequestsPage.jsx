@@ -1,5 +1,5 @@
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ChevronDown, Image as ImageIcon, Recycle, Search, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronDown, Image as ImageIcon, Recycle, Search, X, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { dssService, submissionService } from "../../services/api";
 import { BrandLoadingScreen } from "../components/BrandLoadingScreen";
@@ -105,6 +105,10 @@ export function SubmittedRequestsPage() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
   const [error, setError] = useState("");
+  const [requestMessage, setRequestMessage] = useState("");
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [isCancelling, setIsCancelling] = useState(false);
   const [trackingMessage, setTrackingMessage] = useState("");
   const [isSavingTracking, setIsSavingTracking] = useState(false);
   const [trackingForm, setTrackingForm] = useState({
@@ -344,6 +348,64 @@ export function SubmittedRequestsPage() {
     }
   };
 
+  const openCancelDialog = (request) => {
+    setCancelTarget(request);
+    setCancelReason("");
+    setError("");
+    setRequestMessage("");
+  };
+
+  const submitCancelRequest = async () => {
+    if (!cancelTarget?.latestPartnerRequest) {
+      return;
+    }
+
+    const requestStatus = normalizeStatus(cancelTarget.status);
+    const reason = cancelReason.trim();
+    if (requestStatus === "accepted" && !reason) {
+      setError("Cancellation reason is required for accepted requests.");
+      return;
+    }
+
+    setIsCancelling(true);
+    setError("");
+    setRequestMessage("");
+
+    try {
+      const response = await dssService.cancelRequest(cancelTarget.latestPartnerRequest.id, {
+        reason: reason || undefined,
+      });
+      const cancelledRequest = response.data;
+      setPartnerRequests((current) =>
+        current.map((request) =>
+          request.id === cancelledRequest.id ? { ...request, ...cancelledRequest } : request,
+        ),
+      );
+      setSelectedRequest((current) => {
+        if (!current?.latestPartnerRequest || current.latestPartnerRequest.id !== cancelledRequest.id) {
+          return current;
+        }
+
+        const updatedPartnerRequest = { ...current.latestPartnerRequest, ...cancelledRequest };
+        return {
+          ...current,
+          status: "cancelled",
+          latestPartnerRequest: updatedPartnerRequest,
+          relatedRequests: current.relatedRequests.map((request) =>
+            request.id === cancelledRequest.id ? { ...request, ...cancelledRequest } : request,
+          ),
+        };
+      });
+      setRequestMessage(response.message || "Request cancelled successfully.");
+      setCancelTarget(null);
+      setCancelReason("");
+    } catch (cancelError) {
+      setError(cancelError.message || "Unable to cancel request.");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const updateFilter = (status) => {
     setFilter(status);
     setSearchParams(status === "all" ? {} : { status });
@@ -421,9 +483,15 @@ export function SubmittedRequestsPage() {
             </div>
           </div>
 
-          {error && (
-            <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
+          {(requestMessage || error) && (
+            <div
+              className={`mb-4 rounded-xl border px-4 py-3 text-sm ${
+                requestMessage
+                  ? "border-[#cfe2cf] bg-[#edf7ed] text-[#336158]"
+                  : "border-red-100 bg-red-50 text-red-700"
+              }`}
+            >
+              {requestMessage || error}
             </div>
           )}
 
@@ -493,6 +561,16 @@ export function SubmittedRequestsPage() {
                     >
                       View Details
                     </button>
+                    {["pending", "accepted"].includes(requestStatus) && request.latestPartnerRequest && (
+                      <button
+                        type="button"
+                        onClick={() => openCancelDialog(request)}
+                        className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-red-100 px-4 py-2 text-center text-sm font-semibold text-red-700 hover:bg-red-50"
+                      >
+                        <XCircle className="h-4 w-4" />
+                        Cancel request
+                      </button>
+                    )}
                     <button
                       onClick={() =>
                         navigate(`/dss/${request.submission.id}${request.latestPartnerRequest ? `?request=${request.latestPartnerRequest.id}` : ""}`)
@@ -509,6 +587,68 @@ export function SubmittedRequestsPage() {
           </div>
         </section>
       </main>
+
+      {cancelTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#19221d]/45 p-6 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl border border-[#dce4da] bg-white p-6 shadow-[0_24px_70px_rgba(25,34,29,0.24)]">
+            <div className="mb-4 flex items-start gap-3">
+              <div className="rounded-2xl bg-red-50 p-3 text-red-700">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-[#19221d]">Cancel request?</h2>
+                <p className="mt-2 text-sm leading-6 text-[#5f6f67]">
+                  This will mark the request sent to {cancelTarget.partnerName || "the partner"} as cancelled.
+                </p>
+              </div>
+            </div>
+
+            {normalizeStatus(cancelTarget.status) === "accepted" && (
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.06em] text-[#5f6f67]">
+                  Cancellation reason
+                </span>
+                <textarea
+                  value={cancelReason}
+                  onChange={(event) => setCancelReason(event.target.value)}
+                  rows={4}
+                  className="w-full resize-y rounded-2xl border border-[#dce4da] bg-white px-4 py-3 text-sm text-[#19221d] outline-none focus:border-[#336158] focus:ring-2 focus:ring-[#336158]/10"
+                  placeholder="Tell the partner why this accepted request is being cancelled"
+                />
+              </label>
+            )}
+
+            {error && (
+              <div className="mt-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
+            <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelTarget(null);
+                  setCancelReason("");
+                  setError("");
+                }}
+                disabled={isCancelling}
+                className="rounded-xl border border-[#dce4da] px-4 py-3 text-sm font-semibold text-[#5f6f67] hover:bg-[#f3f5f2] disabled:opacity-50"
+              >
+                Keep request
+              </button>
+              <button
+                type="button"
+                onClick={submitCancelRequest}
+                disabled={isCancelling || (normalizeStatus(cancelTarget.status) === "accepted" && !cancelReason.trim())}
+                className="rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isCancelling ? "Cancelling..." : "Cancel request"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedRequest && (
         <RequestDetailsModal
