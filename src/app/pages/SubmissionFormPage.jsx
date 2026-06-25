@@ -1783,26 +1783,29 @@ export function SubmissionFormPage() {
               </QuestionBlock>
 
               <QuestionBlock label="Upload Images (Optional)">
-                <label
-                  htmlFor="submission-images"
-                  className="block cursor-pointer rounded-xl border-2 border-dashed border-[#d4d8d0] p-8 text-center transition-colors hover:border-[#6b8e6b]"
-                >
-                  <Upload className="w-12 h-12 mx-auto mb-3 text-[#5a6f5a]" />
-                  <p className="text-[#5a6f5a] mb-1">
-                    Click to upload or drag and drop
-                  </p>
-                  <p className="text-sm text-[#8a9a8a]">Upload images up to 5MB</p>
-                  <input
-                    id="submission-images"
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    ref={fileInputRef}
-                    className="hidden"
-                    disabled={isUploading || isSubmitting}
-                    onChange={(event) => handleImageUpload(event.target.files)}
-                  />
-                </label>
+                <input
+                  id="submission-images"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  ref={fileInputRef}
+                  className="hidden"
+                  disabled={isUploading || isSubmitting}
+                  onChange={(event) => handleImageUpload(event.target.files)}
+                />
+
+                {imagePreviews.length === 0 && (
+                  <label
+                    htmlFor="submission-images"
+                    className="block cursor-pointer rounded-xl border-2 border-dashed border-[#d4d8d0] p-8 text-center transition-colors hover:border-[#6b8e6b]"
+                  >
+                    <Upload className="w-12 h-12 mx-auto mb-3 text-[#5a6f5a]" />
+                    <p className="text-[#5a6f5a] mb-1">
+                      Click to upload or drag and drop
+                    </p>
+                    <p className="text-sm text-[#8a9a8a]">Images only, up to 5MB</p>
+                  </label>
+                )}
 
                 {isUploading && (
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#d4d8d0]">
