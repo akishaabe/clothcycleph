@@ -28,6 +28,8 @@ const pathwayLabels = {
 };
 
 const fixedServicePathways = ["recycle", "donate", "upcycle"];
+const REQUEST_ALREADY_SENT_MESSAGE =
+  "Request already sent. You cannot send another request for the same items.";
 
 const bagGuidance = {
   recycle: { color: "white", label: "White bag" },
@@ -668,6 +670,11 @@ export function DssConfirmationPage() {
   }, [matchingPartners, partners, partnerAddressCoordinates, userLocation]);
 
   const selectedPartner = partnerOptions.find((partner) => partner.id === selectedPartnerId) || null;
+  const sentRequestForSubmission = useMemo(
+    () => requests.find((request) => request.submission_id === submissionId) || null,
+    [requests, submissionId],
+  );
+  const hasSentRequestForSubmission = Boolean(sentRequestForSubmission);
   const selectedDistanceKm = selectedPartner?.distance_km == null ? null : Number(selectedPartner.distance_km);
   const selectedCarbonKg = estimateCarbonKg(
     selectedDistanceKm,
@@ -827,6 +834,13 @@ export function DssConfirmationPage() {
       return;
     }
 
+    if (hasSentRequestForSubmission) {
+      setError("");
+      setSentMessage(REQUEST_ALREADY_SENT_MESSAGE);
+      setIsSendConfirmationOpen(false);
+      return;
+    }
+
     if (!selectedPartnerId || !selectedPathway) {
       setError("Choose a pathway and partner first.");
       return;
@@ -855,7 +869,7 @@ export function DssConfirmationPage() {
 
       const requestsResponse = await dssService.getUserRequests();
       setRequests(requestsResponse.data);
-      setSentMessage("Sent to partner. They can now view, accept, or decline it.");
+      setSentMessage(REQUEST_ALREADY_SENT_MESSAGE);
     } catch (sendError) {
       setError(sendError.message || "Unable to send to partner.");
     } finally {
@@ -1291,20 +1305,20 @@ export function DssConfirmationPage() {
                   </p>
                 )}
               </div>
-              {(error || sentMessage) && (
+              {(error || sentMessage || hasSentRequestForSubmission) && (
                 <div
                   className={`mt-3 rounded-xl border px-4 py-3 text-sm ${
-                    sentMessage
+                    sentMessage || hasSentRequestForSubmission
                       ? "border-[#cfe2cf] bg-[#edf7ed] text-[#336158] dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200"
                       : "border-red-100 bg-red-50 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200"
                   }`}
                 >
-                  {sentMessage || error}
+                  {sentMessage || (hasSentRequestForSubmission ? REQUEST_ALREADY_SENT_MESSAGE : error)}
                 </div>
               )}
               <button
                 onClick={handleSend}
-                disabled={isRejected || isSending || !selectedPartnerId || !selectedPathway}
+                disabled={isRejected || isSending || hasSentRequestForSubmission || !selectedPartnerId || !selectedPathway}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#336158] px-5 py-3 text-white transition-all hover:bg-[#2a4c48] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-500/80 dark:text-[#07110d] dark:hover:bg-emerald-400 dark:disabled:bg-emerald-500/30 dark:disabled:text-zinc-400"
               >
                 {isSending ? (
@@ -1312,7 +1326,7 @@ export function DssConfirmationPage() {
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
-                Send to partner
+                {hasSentRequestForSubmission ? "Request already sent" : "Send to partner"}
               </button>
             </div>
 
@@ -1463,9 +1477,10 @@ export function DssConfirmationPage() {
               <button
                 type="button"
                 onClick={() => handleSend(true)}
-                className="rounded-xl bg-[#336158] px-4 py-3 text-sm font-semibold text-white hover:bg-[#2a4c48] dark:bg-emerald-500/80 dark:text-[#07110d] dark:hover:bg-emerald-400"
+                disabled={isSending || hasSentRequestForSubmission}
+                className="rounded-xl bg-[#336158] px-4 py-3 text-sm font-semibold text-white hover:bg-[#2a4c48] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-500/80 dark:text-[#07110d] dark:hover:bg-emerald-400"
               >
-                Send as {pathwayLabels[selectedPathway]}
+                {hasSentRequestForSubmission ? "Request already sent" : `Send as ${pathwayLabels[selectedPathway]}`}
               </button>
             </div>
           </div>

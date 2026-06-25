@@ -244,6 +244,7 @@ export async function createTrackingUpdateD1(
   const fulfillmentMethod = payload.fulfillment_method || 'drop_off';
   const isShipping = fulfillmentMethod === 'shipping';
   const dropoffLocation = isShipping ? null : payload.dropoff_location || request.partner_address || null;
+  const dropoffScheduledAt = normalizeD1Timestamp(payload.dropoff_scheduled_at);
 
   if (!payload.contact_name) {
     throw new Error('Contact name is required for delivery updates.');
@@ -254,7 +255,7 @@ export async function createTrackingUpdateD1(
   if (isShipping && (!payload.logistics_company || !payload.tracking_number)) {
     throw new Error('Courier and tracking number are required for courier delivery updates.');
   }
-  if (!isShipping && (!payload.dropoff_scheduled_at || !dropoffLocation)) {
+  if (!isShipping && (!dropoffScheduledAt || !dropoffLocation)) {
     throw new Error('Drop-off date/time and location are required for direct drop-off updates.');
   }
 
@@ -278,7 +279,7 @@ export async function createTrackingUpdateD1(
       payload.contact_name || null,
       isShipping ? payload.logistics_company || null : null,
       isShipping ? payload.tracking_number || null : null,
-      !isShipping ? payload.dropoff_scheduled_at || null : null,
+      !isShipping ? dropoffScheduledAt : null,
       dropoffLocation,
       payload.notes || null,
     ]
@@ -294,7 +295,7 @@ export async function createTrackingUpdateD1(
   if (payload.contact_name) messageParts.push(`Contact name: ${payload.contact_name}.`);
   if (isShipping && payload.logistics_company) messageParts.push(`Courier: ${payload.logistics_company}.`);
   if (isShipping && payload.tracking_number) messageParts.push(`Tracking Number: ${payload.tracking_number}.`);
-  if (!isShipping && payload.dropoff_scheduled_at) messageParts.push(`Drop-off date/time: ${payload.dropoff_scheduled_at}.`);
+  if (!isShipping && dropoffScheduledAt) messageParts.push(`Drop-off date/time: ${dropoffScheduledAt}.`);
   if (!isShipping && dropoffLocation) messageParts.push(`Drop-off location: ${dropoffLocation}.`);
   if (payload.notes) messageParts.push(`Notes: ${payload.notes}`);
 
@@ -488,6 +489,18 @@ function parseTextOrJsonArray(value: unknown) {
   }
 
   return splitTextValues(value);
+}
+
+function normalizeD1Timestamp(value: string | Date | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
+
+  return value;
 }
 
 async function saveSubmissionImages(db: D1Database, submissionId: string, photos: unknown[]) {
