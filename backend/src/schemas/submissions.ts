@@ -48,6 +48,7 @@ export const createSubmissionSchema = z.object({
           'none',
         ])
         .default('none'),
+      prohibited_items_confirmed: z.boolean().default(false),
       uniform_branding: nullableTrimmedStringSchema,
       fiber_composition: nullableTrimmedStringSchema,
       wearability: nullableTrimmedStringSchema,
@@ -74,6 +75,14 @@ export const createSubmissionSchema = z.object({
 }).superRefine((data, ctx) => {
   const hasQuantity = data.quantity != null && Number(data.quantity) > 0;
   const hasWeight = data.details?.weight_value != null && Number(data.details.weight_value) > 0;
+
+  if (!data.details?.prohibited_items_confirmed) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please confirm that the items are not included in the prohibited categories.',
+      path: ['details', 'prohibited_items_confirmed'],
+    });
+  }
 
   if (!hasQuantity && !hasWeight) {
     ctx.addIssue({

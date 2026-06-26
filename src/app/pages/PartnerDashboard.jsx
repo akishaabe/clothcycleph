@@ -162,6 +162,8 @@ function DecisionStatusIndicator({ status, compact = false }) {
       ? "You've accepted this request."
       : normalizedStatus === "rejected"
         ? "You've rejected this request."
+        : normalizedStatus === "cancelled"
+          ? "This request has been cancelled by the user."
         : "You've completed this request.";
 
   return (
@@ -455,6 +457,11 @@ export function PartnerDashboard() {
   }, [requests]);
 
   const updateRequestStatus = async (request, status, noteOverride, options = {}) => {
+    if (status === "completed" && getRequestLifecycleStatus(request) !== "accepted") {
+      setRequestError("Only accepted requests can have an outcome report.");
+      return;
+    }
+
     setIsUpdatingStatus(true);
     setRequestError("");
     const noteToSend = noteOverride ?? statusNote;
@@ -1182,8 +1189,9 @@ export function PartnerDashboard() {
       </div>
 
       {selectedRequest && (() => {
-        const selectedDecisionStatus = normalizeStatus(selectedRequest.status);
+        const selectedDecisionStatus = getRequestLifecycleStatus(selectedRequest);
         const isDecisionLocked = ["accepted", "rejected", "completed", "cancelled"].includes(selectedDecisionStatus);
+        const canReportOutcome = selectedDecisionStatus === "accepted";
 
         return (
         <div
@@ -1460,7 +1468,7 @@ export function PartnerDashboard() {
                   )}
                 </div>
 
-                {normalizeStatus(selectedRequest.status) === "accepted" && (
+                {canReportOutcome && (
                   <div className="grid gap-3 rounded-2xl border border-[#d6e6f8] bg-white p-6 dark:border-blue-400/20 dark:bg-white/[0.04]">
                     <div>
                       <h3 className="text-2xl font-semibold text-[#10233f] dark:text-white">Report what happened</h3>
@@ -1507,7 +1515,7 @@ export function PartnerDashboard() {
                     <button
                       type="button"
                       onClick={() => updateRequestStatus(selectedRequest, "completed")}
-                      disabled={isUpdatingStatus || isUploadingOutcome || !outcomeTitle.trim()}
+                      disabled={!canReportOutcome || isUpdatingStatus || isUploadingOutcome || !outcomeTitle.trim()}
                       className="rounded-xl bg-[#4f6f9f] px-4 py-3 text-sm font-semibold text-white hover:bg-[#3f5f8f] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {isUploadingOutcome ? "Uploading photos..." : isUpdatingStatus ? "Completing..." : "Mark as completed"}

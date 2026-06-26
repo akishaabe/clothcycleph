@@ -190,6 +190,7 @@ export interface SubmissionDetails {
     | 'used_undergarments'
     | 'mold_chemical_contaminated'
     | 'none';
+  prohibited_items_confirmed?: boolean;
   uniform_branding?: string | null;
   fiber_composition?: string | null;
   wearability?: string | null;

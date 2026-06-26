@@ -54,16 +54,9 @@ const restrictedCategoryOptions = [
   { value: "none", label: "None of the above" },
 ];
 
-const restrictedCategoryMessages = {
-  hospital_medical_uniform:
-    "This item is not eligible for textile routing because medical textiles may carry safety and contamination risks.",
-  ppe_contaminated_workwear:
-    "This item is rejected because PPE or contaminated workwear may contain hazardous residues or biological exposure risks.",
-  used_undergarments:
-    "This item is not eligible due to hygiene restrictions and will not be assessed for donation, upcycling, or recycling.",
-  mold_chemical_contaminated:
-    "This item is rejected because mold or chemical contamination can pose health and material safety risks.",
-};
+const prohibitedItemOptions = restrictedCategoryOptions.filter(
+  (option) => option.value !== "none",
+);
 
 const damageClassificationOptions = [
   "No damage",
@@ -400,6 +393,7 @@ export function SubmissionFormPage() {
 
   const [formData, setFormData] = useState({
     restrictedCategory: "",
+    prohibitedItemsConfirmed: false,
     uniformBranding: "",
     submissionName: "",
     itemTypes: [],
@@ -615,11 +609,21 @@ export function SubmissionFormPage() {
 
     if (!canSubmitForm) {
       setSubmitError(
-        !hasQuantityOrWeight
+        !hasConfirmedProhibitedItems
+          ? "Please confirm that your items are not included in the prohibited categories."
+          : !hasQuantityOrWeight
           ? quantityOrWeightMessage
           : "Please update the highlighted donation answers before submitting.",
       );
-      setStep(!hasQuantityOrWeight || !isStepTwoComplete ? 2 : hasDonationBlockedUniform ? 1 : 2);
+      setStep(
+        !hasConfirmedProhibitedItems
+          ? 1
+          : !hasQuantityOrWeight || !isStepTwoComplete
+          ? 2
+          : hasDonationBlockedUniform
+          ? 1
+          : 2,
+      );
       return;
     }
 
@@ -673,6 +677,7 @@ export function SubmissionFormPage() {
           no_brand_visible: formData.noBrandVisible,
           fabric_description: formData.fabricDescription,
           restricted_category: formData.restrictedCategory || "none",
+          prohibited_items_confirmed: formData.prohibitedItemsConfirmed,
           uniform_branding:
             formData.action === "Donate" ? formData.uniformBranding || null : null,
           fiber_composition: toFiberComposition(),
@@ -772,11 +777,11 @@ export function SubmissionFormPage() {
     0,
   );
 
-  const isRestrictedItem =
-    formData.restrictedCategory && formData.restrictedCategory !== "none";
+  const hasConfirmedProhibitedItems =
+    formData.prohibitedItemsConfirmed && formData.restrictedCategory === "none";
 
   const isBurnTestComplete =
-    formData.restrictedCategory === "none" &&
+    hasConfirmedProhibitedItems &&
     (!isDonation || formData.uniformBranding === "No") &&
     (formData.burnTestChoice === "No" ||
       (formData.burnTestChoice === "Yes" && formData.burnTestAshes.length > 0));
@@ -832,9 +837,9 @@ export function SubmissionFormPage() {
   const reviewRows = [
     {
       label: "Restricted Category Screening",
-      value:
-        restrictedCategoryOptions.find((option) => option.value === formData.restrictedCategory)?.label ||
-        formData.restrictedCategory,
+      value: formData.prohibitedItemsConfirmed
+        ? "Confirmed items are not in prohibited categories"
+        : "Not confirmed",
       step: 1,
     },
     isDonation && { label: "Uniform or Institutional Branding", value: formData.uniformBranding, step: 1 },
@@ -984,30 +989,61 @@ export function SubmissionFormPage() {
             <div className="space-y-7">
               <h2 className="text-2xl text-[#2d4a2d]">Eligibility Screening</h2>
 
-              <QuestionBlock label="Q0: Does the item belong to any restricted category?">
-                <div className="grid gap-3">
-                  {restrictedCategoryOptions.map((option) => (
-                    <RadioOption
-                      key={option.value}
-                      name="restrictedCategory"
-                      label={option.label}
-                      checked={formData.restrictedCategory === option.value}
-                      onChange={() => updateField("restrictedCategory", option.value)}
-                    />
-                  ))}
+              <QuestionBlock label="Prohibited items reminder">
+                <div className="rounded-2xl border border-[#e6c6a8] bg-[#fff8e8] p-5 text-[#5f482b]">
+                  <div className="mb-3 flex items-start gap-3">
+                    <AlertCircle className="mt-1 h-5 w-5 shrink-0 text-[#a45d4d]" />
+                    <div>
+                      <div className="font-semibold text-[#7a5427]">
+                        Please do not send items from these restricted categories.
+                      </div>
+                      <p className="mt-1 text-sm leading-6">
+                        These items may create hygiene, safety, or contamination risks and cannot be routed for donation, recycling, or upcycling.
+                      </p>
+                    </div>
+                  </div>
+
+                  <ul className="grid gap-2 text-sm leading-6 sm:grid-cols-2">
+                    {prohibitedItemOptions.map((option) => (
+                      <li key={option.value} className="rounded-xl bg-white/70 px-3 py-2">
+                        {option.label}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
+
+                <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border-2 border-[#d4d8d0] bg-white p-4 text-[#2d4a2d] transition-all hover:border-[#6b8e6b]">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-5 w-5 accent-[#6b8e6b]"
+                    checked={formData.prohibitedItemsConfirmed}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setFormData((prev) => ({
+                        ...prev,
+                        prohibitedItemsConfirmed: checked,
+                        restrictedCategory: checked ? "none" : "",
+                        uniformBranding: checked ? prev.uniformBranding : "",
+                        burnTestChoice: checked ? prev.burnTestChoice : "",
+                        burnTestPage: checked ? prev.burnTestPage : null,
+                        burnTestMoment: checked ? prev.burnTestMoment : [],
+                        burnTestFlames: checked ? prev.burnTestFlames : [],
+                        burnTestNoFlame: checked ? prev.burnTestNoFlame : [],
+                        burnTestSmell: checked ? prev.burnTestSmell : "",
+                        burnTestAshes: checked ? prev.burnTestAshes : [],
+                      }));
+                      if (!checked) {
+                        setShowBurnTestResult(false);
+                      }
+                    }}
+                  />
+                  <span className="text-sm leading-6">
+                    I confirm that the items I will send are not included in the prohibited categories listed above.
+                  </span>
+                </label>
               </QuestionBlock>
 
-              {isRestrictedItem && (
-                <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-4 text-sm leading-6 text-red-700">
-                  {restrictedCategoryMessages[formData.restrictedCategory]}
-                  <div className="mt-2 font-semibold">
-                    Evaluation stopped. This item will not be treated as donation, recycling, or upcycling material.
-                  </div>
-                </div>
-              )}
-
-              {isDonation && formData.restrictedCategory === "none" && (
+              {isDonation && hasConfirmedProhibitedItems && (
                 <QuestionBlock label="Is the item a uniform or does it have identifiable company, school, or institutional branding?">
                   <p className="mb-4 text-sm text-[#5a6f5a]/80">
                     Examples include bank uniforms, company uniforms, school
@@ -1037,12 +1073,12 @@ export function SubmissionFormPage() {
                 </QuestionBlock>
               )}
 
-              {formData.restrictedCategory === "none" &&
+              {hasConfirmedProhibitedItems &&
                 (!isDonation || formData.uniformBranding === "No") && (
                 <h2 className="text-2xl text-[#2d4a2d]">Burn Test</h2>
               )}
 
-              {formData.restrictedCategory === "none" &&
+              {hasConfirmedProhibitedItems &&
                 (!isDonation || formData.uniformBranding === "No") &&
                 showBurnTestResult && (
                 <QuestionBlock label="Burn test fabric result">
@@ -1090,7 +1126,7 @@ export function SubmissionFormPage() {
                 </QuestionBlock>
               )}
 
-              {formData.restrictedCategory === "none" &&
+              {hasConfirmedProhibitedItems &&
                 (!isDonation || formData.uniformBranding === "No") &&
                 !showBurnTestResult && !formData.burnTestChoice && (
                 <QuestionBlock label="Do you want to do a burn test?">
@@ -1113,7 +1149,7 @@ export function SubmissionFormPage() {
                 </QuestionBlock>
               )}
 
-              {formData.restrictedCategory === "none" &&
+              {hasConfirmedProhibitedItems &&
                 (!isDonation || formData.uniformBranding === "No") &&
                 !showBurnTestResult && formData.burnTestChoice === "No" && (
                 <QuestionBlock label="Do you want to do a burn test?">
@@ -1143,7 +1179,7 @@ export function SubmissionFormPage() {
                 </QuestionBlock>
               )}
 
-              {formData.restrictedCategory === "none" && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
+              {hasConfirmedProhibitedItems && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 1 && (
                   <div className="space-y-6">
                     <QuestionBlock label="How to do a burn test?">
@@ -1185,7 +1221,7 @@ export function SubmissionFormPage() {
                   </div>
                 )}
 
-              {formData.restrictedCategory === "none" && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
+              {hasConfirmedProhibitedItems && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 2 && (
                   <BurnTestCheckboxPage
                     label="How did it look like the moment flame touched the textile?"
@@ -1200,7 +1236,7 @@ export function SubmissionFormPage() {
                   />
                 )}
 
-              {formData.restrictedCategory === "none" && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
+              {hasConfirmedProhibitedItems && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 3 && (
                   <BurnTestCheckboxPage
                     label="How did it look like while in flames?"
@@ -1215,7 +1251,7 @@ export function SubmissionFormPage() {
                   />
                 )}
 
-              {formData.restrictedCategory === "none" && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
+              {hasConfirmedProhibitedItems && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 4 && (
                   <BurnTestCheckboxPage
                     label="When there was no flame, what did you notice?"
@@ -1230,7 +1266,7 @@ export function SubmissionFormPage() {
                   />
                 )}
 
-              {formData.restrictedCategory === "none" && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
+              {hasConfirmedProhibitedItems && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 5 && (
                   <div className="space-y-6">
                     <QuestionBlock label="Almost there, how did it smell like?">
@@ -1278,7 +1314,7 @@ export function SubmissionFormPage() {
                   </div>
                 )}
 
-              {formData.restrictedCategory === "none" && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
+              {hasConfirmedProhibitedItems && !showBurnTestResult && formData.burnTestChoice === "Yes" &&
                 formData.burnTestPage === 6 && (
                   <BurnTestCheckboxPage
                     label="What were the characteristics of the ashes?"
